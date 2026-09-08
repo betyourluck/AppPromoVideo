@@ -25,6 +25,44 @@ pub fn package_dir_name(app_name: &str) -> String {
     format!("{slug}_Promo_Package")
 }
 
+/// run の識別子 (契約 `ExportPackage.run_isolation.run_id`、rev7)。
+///
+/// `YYYYMMDD-HHMMSS` (UTC)。同じ秒に複数走った時は `-2`, `-3` … を付す。
+/// **文字列比較がそのまま時系列順**になるので、一覧の並べ替えに日付解析が要らない。
+/// UTC に固定するのは、ローカル時刻だと夏時間の切り替わりで順序が壊れるため。
+pub fn run_id_from(unix_ms: i64, existing: &[String]) -> String {
+    let base = format_utc_compact(unix_ms);
+    if !existing.iter().any(|e| e == &base) {
+        return base;
+    }
+    for n in 2..1000 {
+        let cand = format!("{base}-{n}");
+        if !existing.iter().any(|e| e == &cand) {
+            return cand;
+        }
+    }
+    format!("{base}-{}", unix_ms)
+}
+
+/// unix ms → `YYYYMMDD-HHMMSS` (UTC、純粋)。暦は Howard Hinnant の civil_from_days。
+fn format_utc_compact(unix_ms: i64) -> String {
+    let secs = unix_ms.div_euclid(1000);
+    let days = secs.div_euclid(86_400);
+    let sod = secs.rem_euclid(86_400);
+    let (h, mi, sec) = (sod / 3600, (sod % 3600) / 60, sod % 60);
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    format!("{y:04}{m:02}{d:02}-{h:02}{mi:02}{sec:02}")
+}
+
 /// 参照画像の保存名 (契約: `scene_{NN}_ref_{MM}.png`)。
 pub fn reference_image_name(scene_id: u32, index: u32) -> String {
     format!("scene_{scene_id:02}_ref_{index:02}.png")
@@ -107,6 +145,23 @@ mod tests {
             }],
         };
         (summary, plan)
+    }
+
+    /// rev7: run を隔離しないと、同じアプリの 2 回目が 1 回目を上書きして消す。
+    #[test]
+    fn run_id_is_sortable_and_avoids_collisions_in_the_same_second() {
+        let a = run_id_from(1_757_000_000_000, &[]);
+        assert_eq!(a, "20250904-153320", "UTC 固定 (再現可能にするため): {a}");
+        // 同じ秒に 2 本目が来たら -2、3 本目は -3。
+        let b = run_id_from(1_757_000_000_000, &[a.clone()]);
+        assert_eq!(b, format!("{a}-2"));
+        let c = run_id_from(1_757_000_000_000, &[a.clone(), b.clone()]);
+        assert_eq!(c, format!("{a}-3"));
+        // 新しい方が文字列比較で必ず後ろに来る (一覧の並べ替えを日付解析に頼らない)。
+        let later = run_id_from(1_757_000_060_000, &[]);
+        assert!(later > a, "{later} > {a}");
+        // ファイル名に使えない文字を含まない。
+        assert!(a.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '-'));
     }
 
     #[test]

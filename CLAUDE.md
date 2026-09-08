@@ -22,6 +22,7 @@
 - **`crates/image_gen`**: Kataribe (`D:/Github/Kataribe/app/src-tauri/src/image_gen.rs`, specs 24-27) の移植。
   `ImageGenerator` trait + OpenAI Images / Gemini / ComfyUI。**`provider.rs` は写しで不触。**
 - **`crates/pipeline`**: IO と結線。RepoBrief の収集 / 2 タスクの実行 / 検査ループ / export / `promo` CLI。
+  **出力は run ごとに隔離** (`<pkg>/runs/<run_id>/`)。以前は上書きして過去の生成物を消していた (failures #12)。
 - **`app/`**: Tauri 2 + Vue 3。HTTP とプロセスは全部 backend。進捗は Tauri event で push。
   設定は「LLM (CLI 認証委任、キー欄なし)」と「画像生成 (キー必須。ComfyUI は無キー)」を別セクションに。
 
@@ -69,10 +70,14 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 ## 現状 (2026-09-08)
 
-- **spec 01 は Phase 0〜E 着地、rev6 まで反映済み。** crates 120 green / vitest 10 / backend 3 green・clippy clean。
-- コミットは Initial `a75c3bc` の上に 8 本。working tree clean、**未 push**。
+- **spec 01 は Phase 0〜E 着地、rev7 まで反映済み。** crates 122 green / vitest 10 / backend 7 green・clippy clean。
+- コミットは Initial `a75c3bc` の上に 10 本、`origin/main` に push 済み (private)。
 - 通し (解析 → 構成 → 参照画像 → 合成) は **3 リポジトリで live 成功** (Kataribe / Verificator / AppPromoVideo 自身)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
+
+**直近の追加 (rev7)**: run の履歴。実行ごとに `<pkg>/runs/<日時>/` へ隔離し、タイトルバーの時計アイコンから
+一覧・復元・**2 つの run の同じシーンを左右に並べて比較**・削除ができる。索引は `app_data/runs.json`
+(キャッシュ。正本は各 run の `promo.json`)。
 
 **開いている判断**
 

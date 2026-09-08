@@ -5,6 +5,7 @@
 //! 設定の非秘密は frontend の localStorage (+ settings.json ミラー)、画像 API キーは `app_data/.env`。
 
 mod env_store;
+mod runs_store;
 mod settings_store;
 
 use std::path::{Path, PathBuf};
@@ -13,7 +14,7 @@ use cli_runner::runner::CliEvent;
 use cli_runner::{CliKind, CliSpec};
 use image_gen::{HttpImageGenerator, ImageGenConfig, Provider};
 use pipeline::collect::{collect_brief, snapshot_meta};
-use pipeline::export::{write_atomic, write_package};
+use pipeline::export::{existing_run_ids, write_atomic, write_package};
 use pipeline::reference::{CaptionSpec, RefJob, generate_references, load_refs};
 use pipeline::task::CliTaskRunner;
 use pipeline::{analyze, plan_scenes};
@@ -390,7 +391,31 @@ async fn run_inner(app: &AppHandle, cancel: watch::Receiver<bool>, req: RunReque
         summary,
         plan,
     };
-    let dir = write_package(Path::new(&req.export_dir), &promo)?;
+    // rev7: run ごとに隔離する。以前は同じパッケージを上書きして過去の出力を消していた。
+    let export_dir = Path::new(&req.export_dir);
+    let now_ms = now_unix_ms();
+    let run_id = promo_core::export::run_id_from(now_ms, &existing_run_ids(export_dir, &promo.summary.app_name));
+    let dir = write_package(export_dir, &promo, &run_id)?;
+    let package_dir = dir.parent().and_then(|p| p.parent()).unwrap_or(&dir).to_path_buf();
+    record_run(
+        app,
+        runs_store::RunRecord {
+            id: run_id.clone(),
+            created_at: now_ms,
+            app_name: promo.summary.app_name.clone(),
+            project_path: req.project_path.clone(),
+            package_dir: package_dir.to_string_lossy().to_string(),
+            run_dir: dir.to_string_lossy().to_string(),
+            seconds: req.seconds,
+            aspect: format!("{:?}", req.aspect),
+            language: format!("{:?}", req.language),
+            plate_mode: format!("{:?}", req.plate_mode),
+            scene_count: promo.plan.scenes.len(),
+            cost_usd: r1.cost_usd + r2.cost_usd,
+            image_provider: None,
+            image_count: 0,
+        },
+    );
     emit(app, "done", format!("書き出し: {}", dir.display()));
     Ok(RunResult {
         promo,
@@ -507,14 +532,123 @@ async fn generate_images(app: AppHandle, req: ImagesRequest) -> Result<ImagesRes
     let json = serde_json::to_string_pretty(&promo).map_err(|e| e.to_string())?;
     write_atomic(&pkg_dir.join("promo.json"), json.as_bytes())?;
     write_atomic(&pkg_dir.join("scenes.md"), scenes_markdown(&promo.summary, &promo.plan).as_bytes())?;
-    let results = results
+    let results: Vec<SceneImageInfo> = results
         .into_iter()
         .map(|r| match r.result {
             Ok(p) => SceneImageInfo { scene_id: r.scene_id, ok: true, path: Some(p.to_string_lossy().to_string()), error: None },
             Err(e) => SceneImageInfo { scene_id: r.scene_id, ok: false, path: None, error: Some(e.to_string()) },
         })
         .collect();
+    update_run_images(&app, &req.package_dir, format!("{:?}", cfg.provider).to_lowercase(), &results);
     Ok(ImagesResult { promo, results, palette, anchor, truncated })
+}
+
+// ---------------------------------------------------------------------------
+// run の履歴 (契約 RunIndex / RunRecord、rev7)
+// ---------------------------------------------------------------------------
+
+fn now_unix_ms() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
+}
+
+/// 索引への書き込みは**失敗しても本流を止めない** (生成そのものは成功しているので、
+/// 索引が書けないことで結果を捨てない)。理由は進捗ログに出す。
+fn record_run(app: &AppHandle, rec: runs_store::RunRecord) {
+    let Ok(dir) = app_data(app) else {
+        emit(app, "done", "履歴を保存できません (app_data が取れません)");
+        return;
+    };
+    let path = runs_store::index_path(&dir);
+    let mut index = runs_store::load(&path);
+    runs_store::upsert(&mut index, rec);
+    if let Err(e) = runs_store::save(&path, &index) {
+        emit(app, "done", format!("履歴を保存できません: {e}"));
+    }
+}
+
+/// 画像を作った後に、同じ run の記録へ枚数とプロバイダを書き足す。
+fn update_run_images(app: &AppHandle, run_dir: &str, provider: String, results: &[SceneImageInfo]) {
+    let Ok(dir) = app_data(app) else { return };
+    let path = runs_store::index_path(&dir);
+    let mut index = runs_store::load(&path);
+    let Some(rec) = index.runs.iter_mut().find(|r| r.run_dir == run_dir) else { return };
+    rec.image_provider = Some(provider);
+    rec.image_count = results.iter().filter(|r| r.ok).count();
+    if let Err(e) = runs_store::save(&path, &index) {
+        emit(app, "images", format!("履歴を更新できません: {e}"));
+    }
+}
+
+#[derive(Serialize)]
+struct RunListItem {
+    #[serde(flatten)]
+    record: runs_store::RunRecord,
+    /// run_dir が実在するか。false でも索引からは消さない (移動しただけかもしれない)。
+    exists: bool,
+}
+
+/// 履歴の一覧 (新しい順)。**正本はフォルダ側**なので、実在するかを添えて返す。
+#[tauri::command]
+fn list_runs(app: AppHandle) -> Result<Vec<RunListItem>, String> {
+    let dir = app_data(&app)?;
+    let index = runs_store::load(&runs_store::index_path(&dir));
+    Ok(index
+        .runs
+        .into_iter()
+        .map(|r| {
+            let exists = Path::new(&r.run_dir).join("promo.json").is_file();
+            RunListItem { record: r, exists }
+        })
+        .collect())
+}
+
+#[derive(Serialize)]
+struct OpenedRun {
+    promo: PromoJson,
+    package_dir: String,
+    images: Vec<SceneImageInfo>,
+}
+
+/// 過去の run を読み戻す。**索引ではなく `run_dir/promo.json` から読む** (そちらが正本)。
+#[tauri::command]
+fn open_run(run_dir: String) -> Result<OpenedRun, String> {
+    let dir = PathBuf::from(&run_dir);
+    let text = std::fs::read_to_string(dir.join("promo.json"))
+        .map_err(|e| format!("この run を読めません {}: {e}", dir.display()))?;
+    let promo: PromoJson = serde_json::from_str(&text).map_err(|e| format!("promo.json の形が違います: {e}"))?;
+    let images = promo
+        .plan
+        .scenes
+        .iter()
+        .map(|s| {
+            let p = dir.join(promo_core::export::reference_image_name(s.scene_id, 1));
+            match p.is_file() {
+                true => SceneImageInfo { scene_id: s.scene_id, ok: true, path: Some(p.to_string_lossy().to_string()), error: None },
+                false => SceneImageInfo { scene_id: s.scene_id, ok: false, path: None, error: None },
+            }
+        })
+        .collect();
+    Ok(OpenedRun { promo, package_dir: run_dir, images })
+}
+
+/// 履歴から外す。`delete_files` が true の時だけフォルダも消す (既定は索引からだけ)。
+#[tauri::command]
+fn forget_run(app: AppHandle, run_dir: String, delete_files: bool) -> Result<bool, String> {
+    let dir = app_data(&app)?;
+    let path = runs_store::index_path(&dir);
+    let mut index = runs_store::load(&path);
+    let removed = runs_store::forget(&mut index, &run_dir);
+    runs_store::save(&path, &index)?;
+    if delete_files {
+        let target = PathBuf::from(&run_dir);
+        // 誤爆よけ: runs/<id> の形で promo.json を持つフォルダだけ消す。
+        let looks_like_run = target.parent().map(|p| p.ends_with("runs")).unwrap_or(false);
+        if !looks_like_run {
+            return Err(format!("run のフォルダに見えないので消しません: {run_dir}"));
+        }
+        std::fs::remove_dir_all(&target).map_err(|e| format!("フォルダを消せません {run_dir}: {e}"))?;
+    }
+    Ok(removed)
 }
 
 /// 表示用 data URL (CSP: img-src に data: あり。ローカルファイルを WebView に直接見せない)。
@@ -630,10 +764,24 @@ fn open_folder(path: String) -> Result<(), String> {
 #[tauri::command]
 fn copy_package(src_dir: String, dst_root: String) -> Result<String, String> {
     let src = PathBuf::from(&src_dir);
-    let name = src.file_name().ok_or("パッケージ名が取れません")?.to_owned();
+    let name = copy_target_name(&src).ok_or("パッケージ名が取れません")?;
     let dst = PathBuf::from(&dst_root).join(name);
     copy_dir(&src, &dst)?;
     Ok(dst.to_string_lossy().to_string())
+}
+
+/// コピー先のフォルダ名 (純粋)。rev7 で run が `<pkg>/runs/<id>/` に入ったので、
+/// そのまま `file_name()` を使うと日時だけの名前になってアプリ名が消える。
+/// run dir なら `<App>_Promo_Package_<run_id>` に組み直す。
+fn copy_target_name(src: &Path) -> Option<String> {
+    let leaf = src.file_name()?.to_string_lossy().to_string();
+    let parent = src.parent()?;
+    if parent.file_name().map(|n| n == "runs").unwrap_or(false)
+        && let Some(pkg) = parent.parent().and_then(|p| p.file_name())
+    {
+        return Some(format!("{}_{leaf}", pkg.to_string_lossy()));
+    }
+    Some(leaf)
 }
 
 fn copy_dir(src: &Path, dst: &Path) -> Result<(), String> {
@@ -674,7 +822,27 @@ pub fn run() {
             caption_preview,
             open_folder,
             copy_package,
+            list_runs,
+            open_run,
+            forget_run,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
+#[cfg(test)]
+mod copy_name_tests {
+    use super::copy_target_name;
+    use std::path::Path;
+
+    #[test]
+    fn run_dirs_keep_the_app_name_in_the_copy() {
+        // rev7: run は <pkg>/runs/<id>/ に入る。日時だけの名前でコピーしない。
+        let run = Path::new("D:/out/Task_Flow_Promo_Package/runs/20260908-143200");
+        assert_eq!(copy_target_name(run).as_deref(), Some("Task_Flow_Promo_Package_20260908-143200"));
+        // rev6 以前のパッケージ (runs を挟まない) はそのままの名前。
+        let legacy = Path::new("D:/out/Task_Flow_Promo_Package");
+        assert_eq!(copy_target_name(legacy).as_deref(), Some("Task_Flow_Promo_Package"));
+    }
+}
+

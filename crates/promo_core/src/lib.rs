@@ -14,7 +14,7 @@ pub mod style;
 pub use style::{apply_palette, extract_hex, style_anchor};
 
 pub use brief::{BriefInputs, RepoBrief, SnapshotMeta, compress};
-pub use export::{PromoJson, package_dir_name, reference_image_name, scenes_markdown};
+pub use export::{run_id_from, PromoJson, package_dir_name, reference_image_name, scenes_markdown};
 pub use prompts::{Language, analysis_prompt, describe_violation, repair_suffix, scene_prompt};
 
 pub use plan::{

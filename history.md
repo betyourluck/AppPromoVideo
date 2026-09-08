@@ -121,3 +121,22 @@ MiniMax 実測で「判別しにくい文字は作り変えられる」(ユー�
 
 Remotion の Agent Skills の構造 (2.5 KB のルーター → 11 KB の REFERENCE → 2〜5 KB の葉) を見て、
 毎ターン読まれる `CLAUDE.md` (13 KB、うち大半が履歴) を分離。履歴はこの file へ。
+
+### rev7 — run の履歴 (ユーザー指摘「再起動すると出力が揮発」)
+
+調べたら揮発ではなく**破壊**だった: `<app>_Promo_Package` に run の識別子が無く、2 回目が 1 回目を
+上書きしていた (failures #12)。`<pkg>/runs/<run_id>/` に隔離し、`app_data/runs.json` に索引を持たせ、
+GUI に一覧・復元・2 run の左右比較・削除を足した。crates 122 / backend 7 / vitest 10 green。
+
+気づかなかった理由: 開発中は毎回別のリポジトリで試しており、同じアプリに 2 回続けて回したのは
+perspective / frontal の対を作った時が初めて。その時は手で別フォルダにコピーしてから回していたので、
+**自分で回避策を打っていたことに気づいていなかった**。
+
+### public 化に備えて fixture を伏せた
+
+`crates/cli_runner/fixtures/*.jsonl` に home path (`C:/Users/...`) とセッション UUID が残っていたので
+`scripts/redact_stream.py` を拡張して潰した (`memory_paths` / `terminal_slash_commands` を落とし、
+入れ子のどこに現れるか分からない home path と UUID は行を JSON に直した後で正規表現で置換)。
+UUID は空にせず `<uuid>` に置き換える — `session_id` が空でないことを前提にしたテストがあるため。
+潰した後も workspace 122 green。API キー本体は元から入っていない (`apiKeySource` の名前だけ)。
+

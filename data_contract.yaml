@@ -237,18 +237,50 @@ ImageGenerator:                     # trait (依存性逆転)。実装 = OpenAiI
 # ---------------------------------------------------------------------------
 # 出力
 # ---------------------------------------------------------------------------
-ExportPackage:                      # export_dir/<app_name>_Promo_Package/
+ExportPackage:                      # export_dir/<app_name>_Promo_Package/runs/<run_id>/ (rev7)
   layout:
-    - "promo.json          — { project: PromoProject(パスのみ), summary: AnalyzedSummary, plan: ScenePlan }"
-    - "scenes.md           — シーン構成表 (Markdown 表 + 各シーンの video_prompt 全文)"
-    - "scene_NN_ref_MM.png — 参照画像"
-    - "snapshots/          — 入力スナップショットの写し"
+    - "<pkg>/runs/<run_id>/promo.json          — { project: PromoProject(パスのみ), summary: AnalyzedSummary, plan: ScenePlan }"
+    - "<pkg>/runs/<run_id>/scenes.md           — シーン構成表 (Markdown 表 + 各シーンの video_prompt 全文)"
+    - "<pkg>/runs/<run_id>/scene_NN_ref_MM.png — 参照画像"
+    - "<pkg>/runs/<run_id>/snapshots/          — 入力スナップショットの写し"
+  run_isolation:                    # rev7 (2026-09-08 ユーザー指摘「再起動すると出力が揮発」→ 調べたらディスク上で破壊されていた)
+    why: |
+      rev6 まで package_dir_name は `<app_name>_Promo_Package` だけで run の識別子を持たず、同じアプリに
+      2 回実行すると promo.json / scenes.md / scene_NN_ref_MM.png が**上書きされて過去の出力が消えていた**。
+      掃除もしないので、新しい run のシーン数が前回より少ないと前回の scene_07 等が残って混ざった。
+      画像・動画の生成は「新しいものを過去と比べて選ぶ」作業なので、過去が消えるのは機能の否定にあたる。
+    run_id: "YYYYMMDD-HHMMSS (ローカル時刻)。同一秒の衝突は `-2`, `-3` … を付す。ファイル名に使える文字だけ"
+    dir: "<export_dir>/<app_name>_Promo_Package/runs/<run_id>/ — run はここで自己完結する (promo.json だけで復元できる)"
+    stability: "`promo images <run_dir>/promo.json` は promo.json の親に書くので、入れ子でもそのまま動く"
+    legacy: "rev6 以前の <pkg>/promo.json は移動も削除もしない (放置。索引には載らない)"
   clipboard:                        # rev3: MiniMax (画像→動画) 限定 (ユーザー決定 2026-09-08「Veo とかだと指示に従わない」)
     target: "minimax | generic"     # CopyTarget
     minimax: "motion_prompt のみ (空なら video_prompt)。画像 (scene_NN_ref_01.png) は MiniMax Design に別途アップロード"
     generic: "text-to-video の保険: video_prompt + 改行 + '[aspect 16:9 | 5s]'"
     images: "ファイルパス (クリップボードに画像バイトを載せるのは v1 外)"
   scenes_md: "先頭に『各カット = 静止画 1 枚 → image-to-video (MiniMax)』の作法。表に kind (product (snapshot N) | mood)、各シーンに Image / Motion prompt / Video prompt (fallback) / Backdrop / Copy"
+
+RunIndex:                           # rev7。アプリが持つ run の索引 (app_data/runs.json)。**キャッシュであって正本ではない**
+  why: "run は run_dir で自己完結するが、アプリは複数のリポジトリ・複数の出力先を横断して一覧する必要がある。走査だけでは出力先を変えた過去の run を見失う"
+  authority: "正本は run_dir/promo.json。索引が指す run_dir が消えていたら missing として出し、消さない (ユーザーが動かしただけかもしれない)"
+  version: u32
+  runs: "Vec<RunRecord>。新しい順"
+
+RunRecord:
+  id: String                        # run_id (YYYYMMDD-HHMMSS[-N])
+  created_at: i64                   # unix ms
+  app_name: String                  # AnalyzedSummary.app_name (表示用)
+  project_path: String              # 対象リポジトリ
+  package_dir: String               # <export_dir>/<app>_Promo_Package
+  run_dir: String                   # package_dir/runs/<id>
+  seconds: u32
+  aspect: Aspect
+  language: Language
+  plate_mode: PlateMode
+  scene_count: usize
+  cost_usd: f64                     # analyze + plan の合計
+  image_provider: Option<String>    # 参照画像を作ったなら "gemini" 等
+  image_count: usize                # 生成できた枚数
 
 # ---------------------------------------------------------------------------
 # デスクトップ殻 (spec 01 Phase D、2026-09-08)

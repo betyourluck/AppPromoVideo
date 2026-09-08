@@ -6,7 +6,7 @@
 import { theme, toggleTheme } from "../theme";
 
 defineProps<{ busy?: boolean }>();
-const emit = defineEmits<{ (e: "open-settings"): void }>();
+const emit = defineEmits<{ (e: "open-settings"): void; (e: "open-runs"): void }>();
 
 async function win(method: "minimize" | "toggleMaximize" | "close") {
   try {
@@ -32,6 +32,13 @@ async function win(method: "minimize" | "toggleMaximize" | "close") {
       </svg>
       <svg v-else width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
         <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+      </svg>
+    </button>
+    <button class="tb-btn" title="履歴 (過去の実行)" @click="emit('open-runs')">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6">
+        <path d="M3 12a9 9 0 1 0 3-6.7" />
+        <path d="M3 4v5h5" />
+        <path d="M12 7v5l3 2" />
       </svg>
     </button>
     <button class="tb-btn" title="設定" @click="emit('open-settings')">

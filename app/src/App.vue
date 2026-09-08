@@ -6,6 +6,7 @@
 import { onMounted, ref } from "vue";
 import TitleBar from "./components/TitleBar.vue";
 import SettingsDialog from "./components/SettingsDialog.vue";
+import RunsDialog from "./components/RunsDialog.vue";
 import InputPane from "./components/InputPane.vue";
 import ScenePanel from "./components/ScenePanel.vue";
 import LogPanel from "./components/LogPanel.vue";
@@ -13,6 +14,7 @@ import { useStore } from "./store";
 
 const store = useStore();
 const settingsOpen = ref(false);
+const runsOpen = ref(false);
 
 onMounted(() => {
   store.listenProgress();
@@ -22,7 +24,7 @@ onMounted(() => {
 
 <template>
   <div class="shell">
-    <TitleBar :busy="store.running || store.imaging" @open-settings="settingsOpen = true" />
+    <TitleBar :busy="store.running || store.imaging" @open-settings="settingsOpen = true" @open-runs="runsOpen = true" />
     <div class="body">
       <aside class="left">
         <InputPane @open-settings="settingsOpen = true" />
@@ -35,6 +37,7 @@ onMounted(() => {
       </aside>
     </div>
     <SettingsDialog v-if="settingsOpen" @close="settingsOpen = false" />
+    <RunsDialog v-if="runsOpen" @close="runsOpen = false" />
     <div v-if="store.toast" class="toast">{{ store.toast }}</div>
   </div>
 </template>

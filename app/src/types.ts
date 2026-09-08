@@ -130,3 +130,30 @@ export interface CaptionSpec {
   size_ratio: number;
   position: "top" | "bottom";
 }
+
+/** 履歴の 1 行 (契約 RunRecord + 実在フラグ、rev7)。 */
+export interface RunListItem {
+  id: string;
+  created_at: number;
+  app_name: string;
+  project_path: string;
+  package_dir: string;
+  run_dir: string;
+  seconds: number;
+  aspect: string;
+  language: string;
+  plate_mode: string;
+  scene_count: number;
+  cost_usd: number;
+  image_provider: string | null;
+  image_count: number;
+  /** run_dir/promo.json が実在するか。false でも索引からは消さない。 */
+  exists: boolean;
+}
+
+export interface OpenedRun {
+  promo: PromoJson;
+  package_dir: string;
+  images: SceneImageInfo[];
+}
+

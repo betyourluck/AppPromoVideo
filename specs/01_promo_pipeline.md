@@ -204,6 +204,35 @@ scene 5 `three-quarter angle` → yaw +18 / pitch -12、正対の背景 (scene 4
 **等倍にした版での再テストはまだ**。傾けた面の遠い側は等倍より小さくなるので、tilt と可読性は依然として
 トレードオフの関係にある (角度と可読性の境目は未実測)。
 
+## rev7 (2026-09-08、ユーザー指摘「再起動すると出力が揮発」→ 調べたらディスク上で破壊されていた)
+
+**発見**: `package_dir_name` は `<app_name>_Promo_Package` だけで run の識別子を持たず、同じアプリに 2 回
+実行すると `promo.json` / `scenes.md` / `scene_NN_ref_MM.png` が上書きされ、**過去の出力が消えていた**。
+掃除もしないので、新しい run のシーン数が前回より少ないと前回の `scene_07` 等が残って混ざった。
+症状は「アプリを再起動すると揮発」だったが、真因はアプリの状態ではなくファイルの側。
+
+27. **run ごとに隔離する** (契約 `ExportPackage.run_isolation`)。`<export_dir>/<app>_Promo_Package/runs/<run_id>/`。
+    `run_id` = `YYYYMMDD-HHMMSS` (**UTC**。ローカル時刻だと夏時間の切り替わりで順序が壊れる)、同一秒は `-2`, `-3`。
+    **文字列比較がそのまま時系列順**になるので、一覧の並べ替えに日付解析が要らない。
+    `promo images <run_dir>/promo.json` は promo.json の親に書くので入れ子でもそのまま動く。
+    rev6 以前の `<pkg>/promo.json` は移動も削除もしない (放置)。
+28. **索引はキャッシュ、正本はフォルダ** (契約 `RunIndex` / `RunRecord`、`app_data/runs.json`)。
+    アプリは複数のリポジトリ・複数の出力先を横断して一覧する必要があるので走査だけでは足りない。
+    索引が指す `run_dir` が消えていたら `missing` として出すだけで**索引からは消さない** (移動しただけかもしれない)。
+    索引が壊れていても空で続行し、**file は残す** (人が直せる)。索引の書き込み失敗は本流を止めない
+    (生成は成功しているので結果を捨てない)。
+29. **比較が要件**。生成は「新しいものを過去と比べて選ぶ」作業なので、一覧・復元だけでなく
+    **2 つの run の同じ scene を左右に並べる**ところまで作る (ユーザー判断 2026-09-08)。
+    backend `list_runs` / `open_run` / `forget_run`、frontend は `RunsDialog`。
+30. **`forget_run` は既定でファイルを消さない**。索引から外すだけ。`delete_files` を立てた時のみ削除し、
+    そのときも `runs/<id>` の形でないフォルダは拒否する (誤爆よけ)。
+31. **`copy_package` の名前を組み直す**。run dir をそのままコピーすると日時だけのフォルダ名になり
+    アプリ名が消えるので、`<App>_Promo_Package_<run_id>` にする。
+
+**接地の限界**: 実 run での通しは未実施 (PoC は `write_package` の 2 回呼び出しと索引の単体まで)。
+rev6 以前の既存パッケージを履歴に取り込む移行は**やっていない** — 放置されるだけでファイルは無事だが、
+アプリの一覧には出ない。
+
 ## 検討した代案: Remotion (2026-09-08、採用しない)
 
 React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](https://github.com/remotion-dev/remotion))。

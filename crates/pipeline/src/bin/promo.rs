@@ -17,7 +17,7 @@ use cli_runner::runner::CliEvent;
 use cli_runner::{CliKind, CliSpec};
 use image_gen::{Detail, HttpImageGenerator, ImageGenConfig, Provider, Shape};
 use pipeline::collect::collect_brief;
-use pipeline::export::{write_atomic, write_package};
+use pipeline::export::{existing_run_ids, write_atomic, write_package};
 use pipeline::reference::{CaptionSpec, RefJob, generate_references, load_refs};
 use pipeline::task::CliTaskRunner;
 use pipeline::{analyze, plan_scenes};
@@ -392,7 +392,13 @@ async fn run(a: &Args) -> Result<(), String> {
         summary,
         plan,
     };
-    let dir = write_package(&a.out, &promo)?;
+    // rev7: run ごとに隔離する。既存の id を見てから採番 (同じ秒に 2 本走っても衝突しない)。
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    let run_id = promo_core::export::run_id_from(now_ms, &existing_run_ids(&a.out, &promo.summary.app_name));
+    let dir = write_package(&a.out, &promo, &run_id)?;
     if let Some(provider) = a.images {
         make_images(a, provider, &mut promo, &dir).await?;
     }

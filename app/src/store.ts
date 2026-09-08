@@ -5,7 +5,7 @@
 import { defineStore } from "pinia";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { BriefPreview, CliCheck, ImagesResult, Progress, RunResult, SnapshotMeta } from "./types";
+import type { BriefPreview, CliCheck, ImagesResult, OpenedRun, Progress, RunListItem, RunResult, SnapshotMeta } from "./types";
 import { mergePaths } from "./snapshots";
 import {
   KEYS,
@@ -48,6 +48,12 @@ export const useStore = defineStore("main", {
     brief: null as BriefPreview | null,
     cliCheck: null as CliCheck | null,
     unlisten: null as UnlistenFn | null,
+    /** 過去の run (新しい順)。rev7: 実行のたびに前回が消えていたのを直したうえで一覧する。 */
+    runs: [] as RunListItem[],
+    /** 比較に選んだ run_dir (最大 2 つ)。 */
+    compare: [] as string[],
+    /** 比較用に読んだ run の画像 URL: run_dir → (scene_id → data URL)。 */
+    compareUrls: {} as Record<string, Record<number, string>>,
   }),
   actions: {
     persist() {
@@ -170,6 +176,7 @@ export const useStore = defineStore("main", {
         this.result = res;
         this.showToast(`完了: ${res.plan.attempts} 回目で通過、${(res.analyze.cost_usd + res.plan.cost_usd).toFixed(3)} USD`);
         if (this.image.enabled) await this.makeImages();
+        await this.loadRuns();
       } catch (e) {
         this.error = String(e);
         this.push("error", String(e));
@@ -182,6 +189,82 @@ export const useStore = defineStore("main", {
         const ok = await invoke<boolean>("cancel_run");
         this.push("ui", ok ? "中断を要求しました" : "実行中の処理はありません");
       } catch (e) {
+        this.push("error", String(e));
+      }
+    },
+    async loadRuns() {
+      try {
+        this.runs = await invoke<RunListItem[]>("list_runs");
+      } catch (e) {
+        this.push("error", `履歴を読めません: ${e}`);
+      }
+    },
+    /** 過去の run を結果ペインに戻す。正本は run_dir/promo.json (索引ではない)。 */
+    async openRun(runDir: string) {
+      try {
+        const r = await invoke<OpenedRun>("open_run", { runDir });
+        this.result = {
+          promo: r.promo,
+          package_dir: r.package_dir,
+          analyze: { attempts: 0, cost_usd: 0, duration_ms: 0, violations: [] },
+          plan: { attempts: 0, cost_usd: 0, duration_ms: 0, violations: [] },
+          brief_chars: 0,
+        };
+        this.images = { promo: r.promo, results: r.images, palette: [], anchor: "", truncated: null };
+        this.imageUrls = {};
+        for (const im of r.images) {
+          if (im.ok && im.path) {
+            try {
+              this.imageUrls[im.scene_id] = await invoke<string>("image_data_url", { path: im.path });
+            } catch {
+              /* 1 枚読めなくても残りは出す */
+            }
+          }
+        }
+        this.showToast(`${r.promo.summary.app_name} の run を開きました`);
+      } catch (e) {
+        this.error = String(e);
+        this.push("error", String(e));
+      }
+    },
+    /** 比較の選択をトグルする (2 つまで。3 つ目を押したら古い方を落とす)。 */
+    async toggleCompare(runDir: string) {
+      const at = this.compare.indexOf(runDir);
+      if (at >= 0) {
+        this.compare.splice(at, 1);
+        return;
+      }
+      this.compare.push(runDir);
+      if (this.compare.length > 2) this.compare.shift();
+      if (!this.compareUrls[runDir]) await this.loadCompareUrls(runDir);
+    },
+    async loadCompareUrls(runDir: string) {
+      try {
+        const r = await invoke<OpenedRun>("open_run", { runDir });
+        const urls: Record<number, string> = {};
+        for (const im of r.images) {
+          if (im.ok && im.path) {
+            try {
+              urls[im.scene_id] = await invoke<string>("image_data_url", { path: im.path });
+            } catch {
+              /* 欠けは空欄で出す */
+            }
+          }
+        }
+        this.compareUrls[runDir] = urls;
+      } catch (e) {
+        this.push("error", `比較用に読めません: ${e}`);
+      }
+    },
+    async forgetRun(runDir: string, deleteFiles: boolean) {
+      try {
+        await invoke<boolean>("forget_run", { runDir, deleteFiles });
+        this.compare = this.compare.filter((d) => d !== runDir);
+        delete this.compareUrls[runDir];
+        await this.loadRuns();
+        this.showToast(deleteFiles ? "run を削除しました" : "履歴から外しました");
+      } catch (e) {
+        this.error = String(e);
         this.push("error", String(e));
       }
     },
