@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = ["crates/promo_core", "crates/cli_runner", "crates/pipeline", "crates/image_gen"]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+# data_contract meta.rust: 2024 edition は 1.85 から (構想文の 1.78 は矛盾)。
+rust-version = "1.85"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# LLM 向け JSON Schema の機械生成 (規格 = 実装の単一真実源。Kataribe と同版系)。
+schemars = "0.8"
+thiserror = "2"
+# image_gen: 画像プロバイダの HTTP (Kataribe と同版・同 TLS・multipart は OpenAI images/edits)。
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "multipart"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "time", "process", "io-util", "sync"] }
+promo_core = { path = "crates/promo_core" }

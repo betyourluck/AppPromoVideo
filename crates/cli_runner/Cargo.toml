@@ -1,0 +1,31 @@
+[package]
+name = "cli_runner"
+version = "0.1.0"
+description = "ローカル LLM CLI (claude / aider / custom) をサブプロセスで叩く。argv と stream-json 解析は純関数"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+promo_core.workspace = true
+
+# Phase A: 子孫ごと kill (契約 CliError.kill_semantics)。Windows = Job Object、Unix = process group。
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[[bin]]
+name = "fake_cli"
+path = "src/bin/fake_cli.rs"
+test = false

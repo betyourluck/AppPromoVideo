@@ -1,0 +1,26 @@
+[package]
+name = "pipeline"
+version = "0.1.0"
+description = "IO と結線 (spec 01 Phase B): RepoBrief の収集 / 解析 → シーン構成 / 検査ループ / export"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+promo_core.workspace = true
+cli_runner = { path = "../cli_runner" }
+image_gen = { path = "../image_gen" }
+# スナップショットの寸法だけ読む (ヘッダのみ・デコードしない)。画素の palette 算出は Phase C で image crate。
+imagesize = "0.15"
+
+[dev-dependencies]
+# reference.rs のテスト: 合成結果の画素を読む (本体は image_gen 側で持つ)。
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[[bin]]
+name = "promo"
+path = "src/bin/promo.rs"

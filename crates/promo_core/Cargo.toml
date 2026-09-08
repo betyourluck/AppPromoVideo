@@ -1,0 +1,13 @@
+[package]
+name = "promo_core"
+version = "0.1.0"
+description = "AppPromoVideo の純関数中核: data_contract の名詞・JSON Schema・検査・export"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+schemars.workspace = true
+thiserror.workspace = true

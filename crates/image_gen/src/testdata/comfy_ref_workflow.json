@@ -1,0 +1,184 @@
+{
+  "62": {
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "CLIP (Qwen3-VL, type=krea2)"
+    },
+    "inputs": {
+      "clip_name": "qwen3vl_4b_fp8_scaled.safetensors",
+      "type": "krea2",
+      "device": "default"
+    }
+  },
+  "63": {
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "VAE (Qwen Image)"
+    },
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    }
+  },
+  "66": {
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Krea 2 Turbo"
+    },
+    "inputs": {
+      "unet_name": "krea2_turbo_fp8_scaled.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "69": {
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "ModelSamplingAuraFlow"
+    },
+    "inputs": {
+      "shift": 3,
+      "model": [
+        "66",
+        0
+      ]
+    }
+  },
+  "71": {
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Negative (cfg=1 では実質無効)"
+    },
+    "inputs": {
+      "text": "%negative%",
+      "clip": [
+        "62",
+        0
+      ]
+    }
+  },
+  "68": {
+    "class_type": "EmptySD3LatentImage",
+    "_meta": {
+      "title": "Empty Latent"
+    },
+    "inputs": {
+      "width": "%width%",
+      "height": "%height%",
+      "batch_size": 1
+    }
+  },
+  "70": {
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    },
+    "inputs": {
+      "seed": "%seed%",
+      "steps": 8,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "69",
+        0
+      ],
+      "positive": [
+        "80",
+        0
+      ],
+      "negative": [
+        "71",
+        0
+      ],
+      "latent_image": [
+        "68",
+        0
+      ]
+    }
+  },
+  "65": {
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    },
+    "inputs": {
+      "samples": [
+        "70",
+        0
+      ],
+      "vae": [
+        "63",
+        0
+      ]
+    }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    },
+    "inputs": {
+      "filename_prefix": "kataribe",
+      "images": [
+        "65",
+        0
+      ]
+    }
+  },
+  "10": {
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "設定画集 1 (%ref_1%)"
+    },
+    "inputs": {
+      "image": "%ref_1%"
+    }
+  },
+  "11": {
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "設定画集 2 (%ref_2%)"
+    },
+    "inputs": {
+      "image": "%ref_2%"
+    }
+  },
+  "12": {
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "設定画集 3 (%ref_3%)"
+    },
+    "inputs": {
+      "image": "%ref_3%"
+    }
+  },
+  "80": {
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "Positive + 参照画像 (Qwen3-VL が見る + VAE 参照 latent)"
+    },
+    "inputs": {
+      "clip": [
+        "62",
+        0
+      ],
+      "vae": [
+        "63",
+        0
+      ],
+      "prompt": "%prompt%",
+      "image1": [
+        "10",
+        0
+      ],
+      "image2": [
+        "11",
+        0
+      ],
+      "image3": [
+        "12",
+        0
+      ]
+    }
+  }
+}
