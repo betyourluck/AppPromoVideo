@@ -311,6 +311,29 @@ function close() {
           <span class="muted" style="font-size: 11px; white-space: pre-wrap">{{ probeMsg }}</span>
         </div>
 
+        <h3 class="sub">製品カットの画面の貼り方</h3>
+        <p class="muted note">
+          製品カットは、背景だけをモデルに描かせ、実スクリーンショットの画素をアプリが貼ります。背景にアングル (俯瞰・ローアングル) が
+          付いたとき、貼る面をどう扱うかを選びます。
+        </p>
+        <label class="field">
+          <span>面の扱い</span>
+          <select v-model="store.image.plateMode" @change="store.persist()">
+            <option value="perspective">背景のパースに合わせて傾ける (既定)</option>
+            <option value="frontal">正面固定 — 背景も正対に保つ</option>
+          </select>
+        </label>
+        <p class="muted note">
+          <template v-if="store.image.plateMode === 'perspective'">
+            シーンごとに傾き (yaw / pitch、±35 度) を LLM が書き、アプリが射影変換で面を倒します。背景と噛み合いますが、
+            傾けた分だけ画面の文字は読みにくくなります。
+          </template>
+          <template v-else>
+            面は常に正対で貼り、背景の <span class="mono">low angle</span> / <span class="mono">top-down</span> といった
+            アングル指定は検査で弾いて再生成させます。不整合は原理的に出ませんが、絵の変化は乏しくなります。
+          </template>
+        </p>
+
         <h3 class="sub">見出し (copy) の焼き込み — 任意</h3>
         <p class="muted note">
           各カット画像に copy_text を焼き込みます。既定は OFF (動画側でテロップを載せる運用)。フォントはシステムにインストール済みのものと、

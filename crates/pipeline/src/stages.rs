@@ -5,7 +5,7 @@
 
 use cli_runner::runner::RunFailed;
 use promo_core::brief::SnapshotMeta;
-use promo_core::plan::{AnalyzedSummary, Aspect, PlanViolation, ScenePlan, schema_for_scene_plan, schema_for_summary, validate_scene_plan};
+use promo_core::plan::{AnalyzedSummary, Aspect, PlanViolation, PlateMode, ScenePlan, schema_for_scene_plan, schema_for_summary, validate_scene_plan};
 use promo_core::prompts::{Language, analysis_prompt, repair_suffix, scene_prompt};
 use serde_json::Value;
 
@@ -64,6 +64,7 @@ pub async fn analyze(
 }
 
 /// タスク 2: シーン構成 + 検査ループ。
+#[allow(clippy::too_many_arguments)] // 契約の入力をそのまま取る (要約 / 概念 / 尺 / 比率 / 言語 / スナップショット / 面の貼り方)
 pub async fn plan_scenes(
     runner: &dyn TaskRunner,
     summary: &AnalyzedSummary,
@@ -72,8 +73,9 @@ pub async fn plan_scenes(
     aspect: Aspect,
     language: Language,
     snapshots: &[SnapshotMeta],
+    plate_mode: PlateMode,
 ) -> Result<(ScenePlan, StageReport), PipelineError> {
-    let base = scene_prompt(summary, concept, total_seconds, aspect, language, snapshots);
+    let base = scene_prompt(summary, concept, total_seconds, aspect, language, snapshots, plate_mode);
     let schema = schema_for_scene_plan();
     let mut report = StageReport::default();
     let mut prompt = base.clone();
@@ -85,7 +87,7 @@ pub async fn plan_scenes(
         let v = structured_or_shape(&ok, "ScenePlan")?;
         let plan: ScenePlan = serde_json::from_value(v.clone())
             .map_err(|e| PipelineError::Shape { what: "ScenePlan", detail: e.to_string(), raw: head(&v.to_string()) })?;
-        let violations = validate_scene_plan(&plan, snapshots.len());
+        let violations = validate_scene_plan(&plan, snapshots.len(), plate_mode);
         report.violations_per_attempt.push(violations.clone());
         if violations.is_empty() {
             return Ok((plan, report));
@@ -151,6 +153,7 @@ mod tests {
             scene_id: id,
             cut_kind: promo_core::plan::CutKind::Mood,
             snapshot_index: None,
+            plate_tilt: None,
             motion_prompt: "Slow push-in.".into(),
             duration_seconds: 5,
             shot_type: "Wide".into(),
@@ -179,7 +182,7 @@ mod tests {
         let bad = plan(vec![scene(1, "Same as the screenshot"), scene(2, "ok"), scene(3, "ok")]);
         let good = plan(vec![scene(1, "A desk"), scene(2, "ok"), scene(3, "ok")]);
         let fake = Fake::new(vec![bad, good]);
-        let (p, r) = plan_scenes(&fake, &summary(), "concept", 15, Aspect::Landscape, Language::Ja, &[]).await.unwrap();
+        let (p, r) = plan_scenes(&fake, &summary(), "concept", 15, Aspect::Landscape, Language::Ja, &[], PlateMode::default()).await.unwrap();
         assert_eq!(p.scenes.len(), 3);
         assert_eq!(r.attempts, 2);
         assert_eq!(r.violations_per_attempt.len(), 2);
@@ -196,7 +199,7 @@ mod tests {
     async fn still_invalid_after_max_repairs_fails_loudly() {
         let bad = plan(vec![scene(1, "x"), scene(2, "x")]); // 2 scene = 件数違反
         let fake = Fake::new(vec![bad.clone(), bad.clone(), bad]);
-        let err = plan_scenes(&fake, &summary(), "c", 15, Aspect::Landscape, Language::En, &[]).await.unwrap_err();
+        let err = plan_scenes(&fake, &summary(), "c", 15, Aspect::Landscape, Language::En, &[], PlateMode::default()).await.unwrap_err();
         match err {
             PipelineError::StillInvalid { attempts, violations } => {
                 assert_eq!(attempts, 1 + MAX_REPAIRS);
@@ -210,7 +213,7 @@ mod tests {
     #[tokio::test]
     async fn wrong_shape_keeps_raw() {
         let fake = Fake::new(vec![serde_json::json!({"not": "a plan"})]);
-        let err = plan_scenes(&fake, &summary(), "c", 15, Aspect::Landscape, Language::En, &[]).await.unwrap_err();
+        let err = plan_scenes(&fake, &summary(), "c", 15, Aspect::Landscape, Language::En, &[], PlateMode::default()).await.unwrap_err();
         assert!(matches!(err, PipelineError::Shape { what: "ScenePlan", ref raw, .. } if raw.contains("not")));
     }
 }

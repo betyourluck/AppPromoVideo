@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! promo run <repo> --concept "..." [--out <dir>] [--snapshot <img>]... [--seconds 30] [--aspect 16:9]
-//!           [--lang ja|en] [--cli claude|aider|custom] [--exe <path>] [--model <m>] [--max-turns 12] [--timeout 600]
+//!           [--plate perspective|frontal] [--lang ja|en] [--cli claude|aider|custom] [--exe <path>] [--model <m>] [--max-turns 12] [--timeout 600]
 //!           [--images openai|gemini|comfy] [--image-base-url <url>] [--image-model <m>] [--workflow <api.json>]
 //!           [--image-scenes N] [--image-refs N] [--image-detail standard|high|highest]
 //! promo brief <repo> [--snapshot <img>]...      # RepoBrief.render() を出すだけ (LLM ゼロ)
@@ -23,7 +23,7 @@ use pipeline::task::CliTaskRunner;
 use pipeline::{analyze, plan_scenes};
 use promo_core::brief::compress;
 use promo_core::export::{PromoJson, scenes_markdown};
-use promo_core::plan::Aspect;
+use promo_core::plan::{Aspect, PlateMode};
 use promo_core::prompts::Language;
 use promo_core::style::{apply_palette, style_anchor};
 
@@ -52,6 +52,7 @@ struct Args {
     caption_index: u32,
     caption_size: f32,
     caption_pos: image_gen::CaptionPosition,
+    plate_mode: PlateMode,
 }
 
 fn parse() -> Result<Args, String> {
@@ -83,6 +84,7 @@ fn parse() -> Result<Args, String> {
         caption_index: 0,
         caption_size: 0.055,
         caption_pos: image_gen::CaptionPosition::Bottom,
+        plate_mode: PlateMode::default(),
     };
     while let Some(k) = it.next() {
         let mut val = || it.next().ok_or(format!("{k} に値が要ります"));
@@ -109,6 +111,13 @@ fn parse() -> Result<Args, String> {
                 }
             }
             "--exe" => a.exe = val()?,
+            "--plate" => {
+                a.plate_mode = match val()?.as_str() {
+                    "perspective" => PlateMode::Perspective,
+                    "frontal" => PlateMode::Frontal,
+                    o => return Err(format!("--plate は perspective|frontal ({o})")),
+                }
+            }
             "--model" => a.model = Some(val()?),
             "--max-turns" => a.max_turns = val()?.parse().map_err(|e| format!("--max-turns: {e}"))?,
             "--timeout" => a.timeout = val()?.parse().map_err(|e| format!("--timeout: {e}"))?,
@@ -253,6 +262,7 @@ async fn make_images(a: &Args, provider: Provider, promo: &mut PromoJson, pkg_di
         max_scenes: a.image_scenes,
         seed_base,
         requested_refs: a.image_refs,
+        plate_mode: a.plate_mode,
     };
     let results = generate_references(&generator, &job, &mut promo.plan, &refs, &mut |s| eprintln!("[img] {s}")).await;
     let ok = results.iter().filter(|r| r.result.is_ok()).count();
@@ -362,7 +372,9 @@ async fn run(a: &Args) -> Result<(), String> {
     let (summary, r1) = analyze(&runner, &brief_text, &a.concept, a.lang).await.map_err(|e| e.to_string())?;
     eprintln!("== analyze: {:.4} USD, {} ms ==", r1.cost_usd, r1.duration_ms);
     eprintln!("{}", serde_json::to_string_pretty(&summary).unwrap());
-    let (plan, r2) = plan_scenes(&runner, &summary, &a.concept, a.seconds, a.aspect, a.lang, &brief.snapshots).await.map_err(|e| e.to_string())?;
+    let (plan, r2) = plan_scenes(&runner, &summary, &a.concept, a.seconds, a.aspect, a.lang, &brief.snapshots, a.plate_mode)
+        .await
+        .map_err(|e| e.to_string())?;
     eprintln!("== plan: attempts {}, {:.4} USD, {} ms ==", r2.attempts, r2.cost_usd, r2.duration_ms);
     for (i, vs) in r2.violations_per_attempt.iter().enumerate() {
         if vs.is_empty() {

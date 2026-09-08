@@ -162,6 +162,22 @@ app/                Tauri 2 + Vue 3。HTTP とプロセスは全部 backend。�
 LLM を通した live 通し (analyze → plan → 参照画像) は本セッションでは未実施 — CLI の認証が
 Claude デスクトップの子セッションでは継承されないため (failures #4 / #7)、ユーザー端末での実行が要る。
 
+## rev5 (2026-09-08、Phase E の合成 live で背景と面のパースが噛み合わなかった)
+
+21. **面の向きを契約に載せる**。`Scene.plate_tilt: Option<{yaw_degrees, pitch_degrees}>` (各 ±35 度、product のみ)。
+    背景のアングルを書いた LLM が面の向きも書くので、両者が同じものを指す経路ができる。範囲外は
+    `PlateTiltOutOfRange` で再生成に回す。
+22. **貼り方を設定で選ぶ** (`PlateMode`、ユーザー判断 2026-09-08「1 でお願い。ただ 1,2 を両方、設定で切り替えられるのがいい」)。
+    - `perspective` (既定): `image_gen::compose` が面を 3D で yaw/pitch 回転 → ピンホール投影 → 4 点から
+      homography を解いて逆写像 + バイリニアで焼く。影も同じ quad で歪める。
+    - `frontal`: 面は正対のまま。代わりに `image_prompt` のアングル語を `ProductBackdropAngled` で弾き、背景も正対に保つ。
+    - **検査と本文がモードに依存する** = `validate_scene_plan` と `scene_prompt` が `PlateMode` を受け取る。
+    - **傾き 0 は従来の overlay 経路をそのまま通す** (画素等価を PoC で固定)。既存 4 本の PoC を壊さない。
+23. 経路は CLI (`--plate perspective|frontal`) と GUI 設定 (画像タブ「製品カットの画面の貼り方」) の両方から。
+
+**接地の限界**: 傾けた絵を MiniMax の i2v に通した検証はまだ無い。①傾ける と ②正面固定 のどちらが動画として
+良いかは未決で、だから両方を残した。傾けると画面内の文字は読みにくくなる — 許容範囲は未実測。
+
 ## 査読の反映 (2026-09-07、ユーザー査読 11 点)
 
 | # | 査読 | 裁定 | 根拠 |
@@ -228,7 +244,8 @@ Claude デスクトップの子セッションでは継承されないため (fa
 - [x] 見出しの焼き込み (opt-in、2026-09-08): `image_gen::fonts` (システム + app_data/fonts、TTC 対応、日本語グリフ判定) + `image_gen::caption` (ab_glyph、
       中央揃え・落ち影・自動縮小) + RefJob.caption + GUI 設定 (フォント一覧 / 高さ / 位置 / プレビュー / フォルダ) + `promo caption` / `promo fonts`。
       crates 107 green・vitest 10・backend check/clippy green。見本 1 枚 (BIZ UDゴシック B)。**既定 OFF、採否はユーザーのアンケート待ち**。
-- [ ] Phase E: 通しの定着 (別リポジトリ 1 本で再現) / v2 候補 (斜め置きの合成、mood カットのモチーフ一貫性、MiniMax 向け motion の粒度)
+- [x] Phase E: 別リポジトリで再現 (rev4 = tree の出所を git に) + live 2 本 (Verificator 一発通過 / AppPromoVideo で合成カット) + rev5 (面の傾きを設定で切替)
+- [ ] Phase F 候補: 傾けた絵を MiniMax i2v に通して perspective / frontal を実測 / mood カットのモチーフ一貫性 / motion の粒度
 - [ ] Phase E
 
 ## Notes

@@ -60,6 +60,7 @@ mod tests {
                     scene_id: 1,
                     cut_kind: promo_core::plan::CutKind::Mood,
                     snapshot_index: None,
+                    plate_tilt: None,
                     motion_prompt: "Slow push-in.".into(),
                     duration_seconds: 5,
                     shot_type: "Wide".into(),

@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use image_gen::provider::SizeMap;
 use image_gen::{
     Caption, CaptionPosition, ImageGenConfig, ImageGenError, ImageGenerator, Layout, RefImage, burn_caption,
-    compose_reference_prompt, composite_product_cut, select_refs, solid_backdrop,
+    Tilt, compose_reference_prompt, composite_product_cut, select_refs, solid_backdrop,
 };
 use serde::{Deserialize, Serialize};
 
@@ -31,7 +31,7 @@ fn default_size_ratio() -> f32 {
     0.055
 }
 use promo_core::export::reference_image_name;
-use promo_core::plan::{CutKind, ScenePlan};
+use promo_core::plan::{CutKind, PlateMode, ScenePlan};
 use promo_core::style::extract_hex;
 
 /// product カットの背景プロンプトに足す規律 (rev3): 画面・端末・文字を描かせず中央を空ける。
@@ -93,6 +93,8 @@ pub struct RefJob<'a> {
     pub seed_base: u64,
     /// 送る参照枚数の希望 (None なら既定)。
     pub requested_refs: Option<usize>,
+    /// 面の貼り方 (rev5)。Frontal なら scene.plate_tilt を無視して正対で貼る。
+    pub plate_mode: PlateMode,
 }
 
 /// シーンごとに参照画像を作り、`job.out_dir` に保存して `plan.scenes[i].reference_image` を埋める。
@@ -103,7 +105,7 @@ pub async fn generate_references(
     refs: &[RefImage],
     progress: &mut (dyn FnMut(String) + Send),
 ) -> Vec<SceneImage> {
-    let RefJob { cfg, api_key, out_dir, palette, caption, max_scenes, seed_base, requested_refs } = *job;
+    let RefJob { cfg, api_key, out_dir, palette, caption, max_scenes, seed_base, requested_refs, plate_mode } = *job;
     // フォントは 1 回だけ読む。読めなければ焼かずに進む (進捗に理由を出す)。
     let font_data: Option<(Vec<u8>, &CaptionSpec)> = match caption {
         Some(c) => match fs::read(&c.font_path) {
@@ -148,7 +150,12 @@ pub async fn generate_references(
                                 solid_backdrop(cw, ch, fallback_rgb(palette))
                             }
                         };
-                        composite_product_cut(&backdrop, &shot.bytes, &layout).map_err(ImageGenError::Config)
+                        // rev5: perspective なら面を背景のパースに合わせて傾ける。
+                        let l = match (plate_mode, scene.plate_tilt) {
+                            (PlateMode::Perspective, Some(t)) => layout.with_tilt(Tilt { yaw_degrees: t.yaw_degrees, pitch_degrees: t.pitch_degrees }),
+                            _ => layout,
+                        };
+                        composite_product_cut(&backdrop, &shot.bytes, &l).map_err(ImageGenError::Config)
                     }
                 }
             }
@@ -268,6 +275,7 @@ mod tests {
                     scene_id: i,
                     cut_kind: CutKind::Mood,
                     snapshot_index: None,
+                    plate_tilt: None,
                     motion_prompt: "Slow push-in.".into(),
                     duration_seconds: 5,
                     shot_type: "Wide".into(),
@@ -301,7 +309,7 @@ mod tests {
         let dir = out_dir();
         let mut log = Vec::new();
         let c = cfg(Provider::Gemini);
-        let job = RefJob { cfg: &c, api_key: "k", out_dir: &dir, palette: &[], caption: None, max_scenes: None, seed_base: 7, requested_refs: None };
+        let job = RefJob { cfg: &c, api_key: "k", out_dir: &dir, palette: &[], caption: None, max_scenes: None, seed_base: 7, requested_refs: None, plate_mode: PlateMode::default() };
         let out = generate_references(&fake, &job, &mut p, &refs(2), &mut |s| log.push(s)).await;
         assert_eq!(out.len(), 3);
         assert!(out.iter().all(|s| s.result.is_ok()));
@@ -321,7 +329,7 @@ mod tests {
         let mut log = Vec::new();
         let c = cfg(Provider::Openai);
         let dir = out_dir();
-        let job = RefJob { cfg: &c, api_key: "k", out_dir: &dir, palette: &[], caption: None, max_scenes: Some(1), seed_base: 0, requested_refs: None };
+        let job = RefJob { cfg: &c, api_key: "k", out_dir: &dir, palette: &[], caption: None, max_scenes: Some(1), seed_base: 0, requested_refs: None, plate_mode: PlateMode::default() };
         let out = generate_references(&fake, &job, &mut p, &refs(3), &mut |s| log.push(s)).await;
         assert_eq!(out.len(), 1, "max_scenes で先頭 1 シーンだけ");
         assert_eq!(fake.calls.lock().unwrap()[0].1, 1);
@@ -373,7 +381,7 @@ mod tests {
         let c = cfg(Provider::Gemini);
         let dir = out_dir();
         let palette = vec!["#112233".to_string()];
-        let job = RefJob { cfg: &c, api_key: "k", out_dir: &dir, palette: &palette, caption: None, max_scenes: None, seed_base: 0, requested_refs: None };
+        let job = RefJob { cfg: &c, api_key: "k", out_dir: &dir, palette: &palette, caption: None, max_scenes: None, seed_base: 0, requested_refs: None, plate_mode: PlateMode::default() };
         let out = generate_references(&Bg, &job, &mut p, &[shot], &mut |_| {}).await;
         assert!(out.iter().all(|r| r.result.is_ok()), "{:?}", out.iter().map(|r| r.result.as_ref().err().map(|e| e.to_string())).collect::<Vec<_>>());
         for (i, expected_bg) in [(1u32, [40u8, 40, 40]), (2, [0x11, 0x22, 0x33])] {
@@ -392,7 +400,7 @@ mod tests {
         let mut p = plan();
         let c = cfg(Provider::Comfy);
         let dir = out_dir();
-        let job = RefJob { cfg: &c, api_key: "", out_dir: &dir, palette: &[], caption: None, max_scenes: None, seed_base: 0, requested_refs: None };
+        let job = RefJob { cfg: &c, api_key: "", out_dir: &dir, palette: &[], caption: None, max_scenes: None, seed_base: 0, requested_refs: None, plate_mode: PlateMode::default() };
         let out = generate_references(&fake, &job, &mut p, &[], &mut |_| {}).await;
         assert!(out[0].result.is_ok());
         assert!(matches!(out[1].result, Err(ImageGenError::RateLimited { .. })));

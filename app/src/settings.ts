@@ -88,7 +88,15 @@ export interface ImageGenSettings {
   perProvider: Record<ImageProvider, ProviderSlot>;
   /** 見出し (copy) の焼き込み。既定 OFF (アプリで焼くか手で焼くかはユーザー判断待ち)。 */
   caption: CaptionSettings;
+  /**
+   * 製品カットで実スクショを貼るときの面の扱い (契約 PlateMode、rev5)。
+   * perspective = 背景のパースに合わせて射影変換で傾ける (既定)。
+   * frontal = 正面固定。背景側のアングル指定も検査で弾く。
+   */
+  plateMode: PlateMode;
 }
+
+export type PlateMode = "perspective" | "frontal";
 
 export interface CaptionSettings {
   enabled: boolean;
@@ -155,6 +163,7 @@ export function defaultImageGenSettings(): ImageGenSettings {
     requestedRefs: 0,
     perProvider: { openai: defaultSlot("openai"), gemini: defaultSlot("gemini"), comfy: defaultSlot("comfy") },
     caption: defaultCaptionSettings(),
+    plateMode: "perspective",
   };
 }
 
@@ -193,6 +202,7 @@ export function migrateImageGenSettings(raw: unknown): ImageGenSettings {
     const pp = r.perProvider as Record<string, unknown>;
     for (const p of PROVIDERS) out.perProvider[p] = p in pp ? sanitizeSlot(p, pp[p]) : defaultSlot(p);
   }
+  if (r.plateMode === "perspective" || r.plateMode === "frontal") out.plateMode = r.plateMode;
   if (r.caption && typeof r.caption === "object") {
     const c = r.caption as Partial<CaptionSettings>;
     out.caption = {

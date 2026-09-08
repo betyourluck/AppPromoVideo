@@ -177,7 +177,19 @@ Scene:                              # rev3 (2026-09-08、ユーザー FB「ス�
   copy_text: String                 # テロップ / ナレーション (language)
   image_prompt: String              # 静止画 1 枚のプロンプト。**product では背景のみ** (画面・端末・UI・文字の語は validate が弾く = 合成と二重にしない)。mood では絵の全部。参照そのものを指す語 (reference / screenshot / sheet) は書かない (Kataribe failures #85)
   video_prompt: String              # text-to-video の**保険** (rev3 で主役から降格)。Veo / Sora は指示に従わないのでコピー先から外した (ユーザー実測 2026-09-08)
+  plate_tilt: Option<{ yaw_degrees: f32, pitch_degrees: f32 }>   # rev5。product のみ。背景のパースに合わせてスクショ面を傾ける指定。
+                                    # yaw 負 = 左が奥 / 正 = 右が奥。pitch 負 = 上が奥 (俯瞰) / 正 = 下が奥 (ローアングル)。
+                                    # 各 -35〜35 度。範囲外は違反 (PlateTiltOutOfRange)。省略 = 正面。frontal モードでは無視される
   reference_image: Option<PathBuf>  # 生成後に埋まる
+
+PlateMode:                          # rev5 (2026-09-08 Phase E 実測: 背景のパースと貼った面のパースが噛み合わない)。設定で切り替え、既定 = perspective
+  perspective: "既定。scene.plate_tilt に従い、スクショ面を射影変換で傾けてから合成する。背景のアングルと整合する。tilt が 0 / 省略なら frontal と同じ経路 (画素等価)"
+  frontal: "正面固定。plate_tilt を無視し、さらに image_prompt のアングル語 (low angle / top-down / tilted / three-quarter / isometric / overhead 等) を検査で弾いて背景も正対に保つ。絵の変化は乏しくなるが不整合は原理的に出ない"
+  note: |
+    Phase E (AppPromoVideo 自身、2026-09-08) で表面化。scene 3 の image_prompt が `photographed at a low angle` で
+    背景も実際にローアングルなのに、貼られた UI は正対のままだった。product カットが 1 種類しか無かった
+    Fuseforks の 1 本では見えず、複数の product カットを別アングルで作った瞬間に出る。
+    検査はモードに依存する = validate_scene_plan は PlateMode を受け取る。
 
 # ---------------------------------------------------------------------------
 # 画像生成 (Kataribe image_gen.rs を移植。差分は本節に記す)
@@ -192,7 +204,7 @@ ImageGenConfig:                     # (Kataribe) provider / base_url / model / s
     palette: "dominant_colors(pixels, n): 4 bit/ch 量子化 → ヒストグラム → 頻度順に RGB 距離 60 未満を統合 → hex。palette_from_file は Nearest で 96px に縮小 (thumbnail の triangle 補間は 2 色画像から第 3 の混色を生んだ — PoC で判明)"
     style_anchor: "promo_core::style::style_anchor(VisualIdentity) = 『Color palette: #…, #…. Mood: …. UI style: …; …』。palette は extract_hex で #RRGGBB だけ拾う (LLM が説明を混ぜる実例あり)。apply_palette は測った色が空でなければ LLM の値を置き換える"
     reference: "pipeline::reference::generate_references(generator, RefJob{cfg, api_key, out_dir, palette, ...}, plan, refs, progress) → Vec<SceneImage>。シーン単位で失敗を返し他を続ける。保存名 scene_NN_ref_01.png、plan.scenes[i].reference_image を埋める。**product** = 参照を送らず背景だけ生成 (プロンプト末尾に BACKDROP_CLAUSE『no devices, no screens…』) → composite_product_cut で実スクショ (snapshot_index) を合成。背景生成が失敗したら palette 先頭色の単色背景で合成 (製品カットは provider の都合で落ちない)。**mood** = 従来どおり参照を送って生成"
-    compose: "image_gen::compose::composite_product_cut(background, screenshot, Layout{width, height, screen_ratio 0.78, corner_radius, shadow}) → PNG。背景は cover、スクショは等比縮小 (拡大しない)・角丸・落ち影 (blur 10)・中央。canvas は SizeMap::comfy_dims(shape) (16:9 = 1344×768)。PoC 4 本 (中央画素がスクショと一致 / 角丸 / 等倍維持 / 壊れ入力は Err)。日本語見出しの焼き込みは v1 外 (フォント同梱が要る)。目視 1 枚: Gemini 背景 + Kataribe UI (failures #8)"
+    compose: "image_gen::compose::composite_product_cut(background, screenshot, Layout{width, height, screen_ratio 0.78, corner_radius, shadow, tilt}) → PNG。背景は cover、スクショは等比縮小 (拡大しない)・角丸・落ち影 (blur 10)・中央。**tilt が非ゼロなら射影変換で傾けてから貼る** (rev5): 面を 3D で yaw/pitch 回転 → ピンホール投影 → 4 点から homography を解いて逆写像 + バイリニア。tilt = 0 は従来の overlay 経路をそのまま通る (画素等価を PoC で固定)。canvas は SizeMap::comfy_dims(shape) (16:9 = 1344×768)。PoC 7 本 (中央画素がスクショと一致 / 角丸 / 等倍維持 / 壊れ入力は Err / 傾き 0 は従来経路と画素等価 / yaw 正で右辺が縮む / pitch 負で上辺が縮む)。日本語見出しの焼き込みは v1 外 (フォント同梱が要る)。目視 1 枚: Gemini 背景 + Kataribe UI (failures #8)"
   differences_from_kataribe:
     - "参照画像 = UI スナップショット。送信順はユーザーの並び順"
     - "user_prefix の既定 = VisualIdentity から合成したスタイルアンカー (ユーザー編集可)"

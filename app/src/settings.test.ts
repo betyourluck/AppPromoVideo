@@ -67,6 +67,10 @@ describe("migrate", () => {
     expect(m.perProvider.comfy.model).toBe("");
     expect(m.perProvider.comfy.timeoutSecs).toBe(99);
     expect(m.perProvider.openai.baseUrl).toBe("https://api.openai.com/v1");
+    // rev5: 面の貼り方。既定は perspective、知らない値は既定に落ちる。
+    expect(migrateImageGenSettings(null).plateMode).toBe("perspective");
+    expect(migrateImageGenSettings({ plateMode: "frontal" }).plateMode).toBe("frontal");
+    expect(migrateImageGenSettings({ plateMode: "tilted" }).plateMode).toBe("perspective");
     expect(migrateImageGenSettings(null).provider).toBe("gemini");
     const p = migrateProjectSettings({ seconds: 45, aspect: "4:3", snapshots: ["a.png", 3], lang: "en" });
     expect(p.seconds).toBe(30);

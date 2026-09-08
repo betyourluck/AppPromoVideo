@@ -19,7 +19,7 @@ use pipeline::task::CliTaskRunner;
 use pipeline::{analyze, plan_scenes};
 use promo_core::brief::{SnapshotMeta, compress};
 use promo_core::export::{PromoJson, scenes_markdown};
-use promo_core::plan::Aspect;
+use promo_core::plan::{Aspect, PlateMode};
 use promo_core::prompts::Language;
 use promo_core::style::{apply_palette, style_anchor};
 use serde::{Deserialize, Serialize};
@@ -255,6 +255,9 @@ struct RunRequest {
     language: Language,
     export_dir: String,
     cli: CliSettings,
+    /// 面の貼り方 (rev5)。省略時は perspective。
+    #[serde(default)]
+    plate_mode: PlateMode,
 }
 
 #[derive(Serialize)]
@@ -357,7 +360,16 @@ async fn run_inner(app: &AppHandle, cancel: watch::Receiver<bool>, req: RunReque
     emit(app, "analyze", format!("解析 完了: {:.3} USD / {:.1} s", r1.cost_usd, r1.duration_ms as f64 / 1000.0));
 
     emit(app, "plan", "シーン構成中 (タスク 2/2)…");
-    let (plan, r2) = plan_scenes(&runner, &summary, &req.concept, req.seconds, req.aspect, req.language, &brief.snapshots)
+    let (plan, r2) = plan_scenes(
+        &runner,
+        &summary,
+        &req.concept,
+        req.seconds,
+        req.aspect,
+        req.language,
+        &brief.snapshots,
+        req.plate_mode,
+    )
         .await
         .map_err(|e| e.to_string())?;
     emit(
@@ -416,6 +428,9 @@ struct ImagesRequest {
     /// 見出しの焼き込み (None = 焼かない。既定 OFF)。
     #[serde(default)]
     caption: Option<CaptionSpec>,
+    /// 面の貼り方 (rev5)。省略時は perspective。
+    #[serde(default)]
+    plate_mode: PlateMode,
 }
 
 #[derive(Serialize)]
@@ -479,6 +494,7 @@ async fn generate_images(app: AppHandle, req: ImagesRequest) -> Result<ImagesRes
         out_dir: &pkg_dir,
         palette: &palette_for_fallback,
         caption: req.caption.as_ref(),
+        plate_mode: req.plate_mode,
         max_scenes: req.max_scenes,
         seed_base,
         requested_refs: req.requested_refs,

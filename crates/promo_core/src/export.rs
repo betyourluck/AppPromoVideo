@@ -96,6 +96,7 @@ mod tests {
                 scene_id: 1,
                 cut_kind: crate::plan::CutKind::Product,
                 snapshot_index: Some(0),
+                plate_tilt: None,
                 motion_prompt: "Slow push-in.".into(),
                 duration_seconds: 5,
                 shot_type: "Close-up".into(),

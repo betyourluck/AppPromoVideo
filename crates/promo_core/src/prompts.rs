@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::brief::SnapshotMeta;
-use crate::plan::{AnalyzedSummary, Aspect, PlanViolation};
+use crate::plan::{PlateMode, AnalyzedSummary, Aspect, PlanViolation};
 
 /// コピー・ナレーションの言語 (契約 `PromoProject.language`)。video_prompt / image_prompt は常に英語。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -54,6 +54,7 @@ pub fn scene_prompt(
     aspect: Aspect,
     language: Language,
     snapshots: &[SnapshotMeta],
+    plate_mode: PlateMode,
 ) -> String {
     let summary_json = serde_json::to_string_pretty(summary).unwrap_or_default();
     let snap_list = if snapshots.is_empty() {
@@ -65,6 +66,17 @@ pub fn scene_prompt(
             .map(|(i, s)| format!("- index {i}: {} ({}x{})", s.path.rsplit(['/', '\\']).next().unwrap_or(&s.path), s.width, s.height))
             .collect::<Vec<_>>()
             .join("\n")
+    };
+    // rev5: 面の貼り方で、背景に許すアングルと plate_tilt の要否が変わる (契約 `PlateMode`)。
+    let plate_rule = match plate_mode {
+        PlateMode::Perspective => "- The pasted screen can be TILTED to match your backdrop. Whenever `image_prompt` implies a \
+         viewing angle (looking down at the desk, a low angle, a three-quarter view), set `plate_tilt` so the screen sits on \
+         that surface: `yaw_degrees` negative tilts the left edge away, positive the right edge away; `pitch_degrees` negative \
+         for looking DOWN at it, positive for looking UP. Both within -35..35, and keep them modest (8 to 25). \
+         A straight-on backdrop takes `plate_tilt` null.\n",
+        PlateMode::Frontal => "- The pasted screen is always STRAIGHT-ON, so the backdrop must be straight-on too: describe \
+         the surface seen head-on, and never write `low angle`, `high angle`, `top-down`, `overhead`, `three-quarter`, \
+         `isometric`, `from above` or `from below`. Leave `plate_tilt` null.\n",
     };
     format!(
         "You are designing the cut list for a {total_seconds}-second promotional video ({ar}). The workflow is \
@@ -80,6 +92,7 @@ pub fn scene_prompt(
          `image_prompt` must describe ONLY the backdrop: surface, environment, lighting, with clear empty space in the \
          center, and NO devices, screens, monitors, phones, UI or text. Most cuts of a product promo should be `product`; \
          use `mood` only for the opening or a transition, and set `snapshot_index` to null for `mood`.\n\
+         {plate_rule}\
          - `image_prompt` is English. Never mention references, screenshots, sheets or attachments.\n\
          - `motion_prompt` is English, one or two sentences, for image-to-video: ONLY camera movement and motion \
          (push-in, parallax, light flicker, subtle drift). Do not restate the picture.\n\
@@ -122,6 +135,12 @@ pub fn describe_violation(v: &PlanViolation) -> String {
         ),
         PlanViolation::MotionPromptEmpty { scene_id } => format!("scene {scene_id}: `motion_prompt` is empty"),
         PlanViolation::MotionPromptNotEnglish { scene_id } => format!("scene {scene_id}: motion_prompt must be English"),
+        PlanViolation::PlateTiltOutOfRange { scene_id, yaw, pitch } => {
+            format!("scene {scene_id}: plate_tilt must be within -35..=35 degrees on both axes, got yaw {yaw}, pitch {pitch}")
+        }
+        PlanViolation::ProductBackdropAngled { scene_id, word } => format!(
+            "scene {scene_id}: the app pastes the screen straight-on, so the backdrop must be straight-on too; remove `{word}` from image_prompt"
+        ),
     }
 }
 
@@ -170,16 +189,20 @@ mod tests {
     #[test]
     fn scene_prompt_lists_snapshots_and_explains_product_cuts() {
         let snaps = vec![SnapshotMeta { path: "D:\\x\\dashboard.png".into(), width: 1920, height: 1080 }];
-        let p = scene_prompt(&summary(), "cinematic", 30, Aspect::Portrait, Language::En, &snaps);
+        let p = scene_prompt(&summary(), "cinematic", 30, Aspect::Portrait, Language::En, &snaps, PlateMode::Perspective);
         assert!(p.contains("30-second"));
         assert!(p.contains("9:16"));
         assert!(p.contains("Never include aspect flags"));
         assert!(p.contains("Never mention"));
         assert!(p.contains("\"app_name\": \"TaskFlow\""));
         assert!(p.contains("- index 0: dashboard.png (1920x1080)"));
+        assert!(p.contains("can be TILTED"), "perspective では傾けてよいと伝える");
+        let f = scene_prompt(&summary(), "cinematic", 30, Aspect::Portrait, Language::En, &snaps, PlateMode::Frontal);
+        assert!(f.contains("always STRAIGHT-ON") && f.contains("low angle"), "frontal ではアングル語を禁じる");
+        assert!(!f.contains("can be TILTED"));
         assert!(p.contains("composites the actual screenshot pixels"));
         assert!(p.contains("image-to-video"));
-        let none = scene_prompt(&summary(), "c", 15, Aspect::Landscape, Language::Ja, &[]);
+        let none = scene_prompt(&summary(), "c", 15, Aspect::Landscape, Language::Ja, &[], PlateMode::Perspective);
         assert!(none.contains("(none — use only `mood` cuts)"));
         assert!(none.contains("in Japanese"));
     }

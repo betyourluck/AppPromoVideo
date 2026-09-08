@@ -92,6 +92,12 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   合成カットはスナップショット待ち (兄弟リポジトリに実 UI 画像が無く、GUI も素の vite では描けない)。
   **反証: 「子セッションでは CLI の認証が継承されない」は現行 CLI では成立しない** — `claude -p` が通る
   (failures #4 / #7 の記述は 2.1.223 時点のもの)。
+- 2026-09-08 **rev5 (面の傾き)**: Phase E の合成 live で、背景がローアングルなのに貼った UI が正対のままだった
+  (failures #10)。`Scene.plate_tilt` (yaw/pitch ±35 度) を LLM が書き、`PlateMode` で貼り方を切り替える —
+  **perspective** (既定、射影変換で面を倒す) / **frontal** (正対固定 + 背景のアングル語を検査で弾く)。
+  検査と本文がモードに依存するので `validate_scene_plan` / `scene_prompt` が `PlateMode` を取る。
+  傾き 0 は従来の overlay 経路のまま (画素等価を PoC で固定)。CLI `--plate`、GUI は画像タブ。
+  crates 117 green / vitest 10 / backend green・clippy clean。**i2v での良し悪しは未実測**。
 - 罠台帳 `failures.md` (#1 RepoBrief の上限単位 / #2 #3 採取スクリプト / #4 401 の再試行ループと「採取できた」の誤読)。
   実測: claude 2.1.223 の stream-json 封筒 (system/init → assistant → result)。Claude デスクトップの
   子セッション内では OAuth が継承されず `authentication_failed` (fixture 化済み)。aider / gemini / codex / Flutter 無し。
@@ -104,7 +110,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 3. 開いている判断: 見出し焼き込みの既定 (ユーザーのアンケート待ち、機構は opt-in で入っている)。
 4. 次: **Phase E の live 通しをユーザー端末で** — 別リポジトリ (outcast / Verificator が候補) + UI スナップショット 1 枚。
    スナップショットは各リポジトリに無い (README の画像はロゴ・マスコットだった) ので**撮影が要る**。
-   その後の候補: 斜め置き合成 (射影変換) / mood カットの一貫性 / MiniMax 向け motion の粒度。
+   その後の候補: 傾けた絵を MiniMax i2v に通して perspective / frontal を実測 / mood カットの一貫性 / motion の粒度。
 5. GUI 起動は `cd app && RUSTC_WRAPPER= npm run tauri dev`。CLI の認証は設定「OAuth ログインを使う」ON が確実 (failures #7)。
 
 ## 台帳

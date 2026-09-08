@@ -164,6 +164,7 @@ export const useStore = defineStore("main", {
             language: this.project.lang,
             export_dir: this.project.exportDir || ".",
             cli: toBackendCli(this.cli),
+            plate_mode: this.image.plateMode,
           },
         });
         this.result = res;
@@ -199,6 +200,7 @@ export const useStore = defineStore("main", {
             max_scenes: this.image.maxScenes > 0 ? this.image.maxScenes : null,
             requested_refs: this.image.requestedRefs > 0 ? this.image.requestedRefs : null,
             caption: toBackendCaption(this.image.caption),
+            plate_mode: this.image.plateMode,
           },
         });
         this.images = res;
