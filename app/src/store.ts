@@ -5,13 +5,14 @@
 import { defineStore } from "pinia";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { BriefPreview, CliCheck, ImagesResult, OpenedRun, Progress, RunListItem, RunResult, SnapshotMeta } from "./types";
+import type { BriefPreview, CliCheck, FontEntry, ImagesResult, OpenedRun, Progress, RunListItem, RunResult, SnapshotMeta } from "./types";
 import { mergePaths } from "./snapshots";
 import {
   KEYS,
   loadCliSettings,
   loadImageGenSettings,
   loadProjectSettings,
+  pickCaptionFont,
   save,
   toBackendCaption,
   toBackendCli,
@@ -268,8 +269,32 @@ export const useStore = defineStore("main", {
         this.push("error", String(e));
       }
     },
+    /**
+     * 見出しが ON なのにフォント未選択なら、日本語グリフを持つものを自動で選ぶ。
+     * 既定 ON にした以上、「ON なのに何も焼かれない」を無言で起こさせない。
+     * 選べなければ理由をログに出して**焼かずに進む** (画像は出す)。
+     */
+    async ensureCaptionFont() {
+      const c = this.image.caption;
+      if (!c.enabled || c.fontPath.trim()) return;
+      try {
+        const fonts = await invoke<FontEntry[]>("list_fonts");
+        const pick = pickCaptionFont(fonts);
+        if (!pick) {
+          this.push("images", "日本語のフォントが見つからないので見出しは焼きません (設定 → 画像 で選べます)");
+          return;
+        }
+        c.fontPath = pick.path;
+        c.fontIndex = pick.index;
+        this.persist();
+        this.push("images", `見出しのフォントを自動選択: ${pick.family}`);
+      } catch (e) {
+        this.push("images", `フォント一覧を取れないので見出しは焼きません: ${e}`);
+      }
+    },
     async makeImages() {
       if (!this.result || this.imaging) return;
+      await this.ensureCaptionFont();
       this.imaging = true;
       this.error = "";
       this.persist();

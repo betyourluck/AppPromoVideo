@@ -215,7 +215,16 @@ ImageGenConfig:                     # (Kataribe) provider / base_url / model / s
     gemini: { api_max: 3, kataribe_live: 1, default_send: 3, note: "gemini-2.5-flash-image の公式上限 3。inlineData を前置" }
     comfy:  { api_max: 3, kataribe_live: 1, default_send: 3, note: "%ref_1..3%。ワークフローに差し込み口が無ければ沈黙する (Kataribe #83) → 設定タブで %ref_1% 不在を警告" }
     rule: "送る枚数 = min(ユーザー選択 or default_send, api_max, 手持ち枚数)。先頭から (ユーザーの並び順)。切り詰めたら Truncated{total, sent, limit_by} を UI に『N 枚のうち先頭 M 枚』と出す (沈黙させない)"
-  caption:                          # 見出し (copy_text) の焼き込み。**opt-in・既定 OFF** (アプリで焼くか手で焼くかはユーザー判断待ち、2026-09-08)
+  caption:                          # 見出し (copy_text) の焼き込み。**既定 ON** (rev8、2026-09-08 ユーザー判断で OFF → ON)
+    default_font: |
+      既定 ON にすると「ON なのにフォント未選択で何も焼かれない」が無言で起きるので、実行直前に
+      `pickCaptionFont` (frontend の純関数) が自動で選ぶ。規律は 4 つ:
+        ①日本語グリフ必須 (copy_text は日本語)
+        ②app_data/fonts に置いたもの (source=user) を最優先 — 意図して置いたものより機械の推測を上に置かない
+        ③**太めのゴシックを優先**。画像に焼くので、細い明朝・教科書体は写真の上で読めない
+        ④同点は family 名で決める (実行のたびに変わらない)
+      選べなければ**焼かずに進み**、理由を進捗に出す (画像は出す)。fontPath は空のまま保存され、
+      toBackendCaption が null を返すので backend には渡らない。
     fonts: "image_gen::fonts::list_fonts(app_data/fonts) = ユーザーが置いたフォント (User) + OS のフォントフォルダ (System: Windows %WINDIR%\\Fonts と %LOCALAPPDATA%\\Microsoft\\Windows\\Fonts / macOS /System/Library/Fonts, /Library/Fonts, ~/Library/Fonts / Linux /usr/share/fonts 等)。ttf/otf/ttc。TTC は face ごとに 1 件 (index)。ファミリー名は name テーブル (日本語 0x0411 → 英語 → 任意)。has_japanese = 『あ』のグリフ有無。並び = 日本語あり → ユーザー → 名前。実測: この機体で JP 118 / 他 368 面"
     burn: "image_gen::caption::burn_caption(png, Caption{text, font_data, font_index, size_ratio 0.055, color 白, position top|bottom, margin_ratio 0.06}) — 中央揃え・複数行・落ち影 (黒 190/255、~5% ずらし)・幅 90% に収まるまで縮小 (下限 2%)。ab_glyph でラスタライズ。純粋"
     wiring: "RefJob.caption: Option<CaptionSpec{font_path, font_index, size_ratio, position}> — 生成・合成の後に scene.copy_text を焼く。フォントが読めない / 焼けない時は焼かずに続行 (画像は残す、進捗に理由)。GUI: 設定 → 画像生成 → 『見出しの焼き込み — 任意』(チェック / フォント一覧 / 高さ比 / 位置 / プレビュー / フォントフォルダを開く)。command list_fonts / open_fonts_folder / caption_preview。CLI: --caption-font 等、`promo caption` / `promo fonts`"

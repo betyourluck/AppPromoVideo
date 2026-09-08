@@ -85,7 +85,8 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 1. **`PlateMode` の既定** — perspective (面を傾ける) と frontal (正対固定) を両方実装済み。
    等倍 1890×1080 の対を MiniMax i2v に通した結果待ち。
-2. **見出し焼き込みの既定** — 機構は opt-in・既定 OFF で入っている。ユーザーのアンケート待ち。
+2. ~~見出し焼き込みの既定~~ → **rev8 で既定 ON に決着** (2026-09-08)。フォントは実行直前に
+   `pickCaptionFont` が自動選択する (日本語グリフ / 太めのゴシック優先)。字幕ファイルは作らない。
 
 **次の候補**: 傾きと可読性の境目 (角度を上げるとどこで文字が壊れるか) / mood カットのモチーフ一貫性 /
 MiniMax 向け `motion_prompt` の粒度 / ComfyUI と OpenAI の live / Unix の `tree_kill` / `--add-dir` 外 Read の拒否確認。

@@ -241,6 +241,23 @@ scene 5 `three-quarter angle` → yaw +18 / pitch -12、正対の背景 (scene 4
 実測 2026-09-08: frontal 1.422 USD / perspective 0.919・0.944 USD (約 1.5 倍) — 原因は
 `ProductBackdropAngled` による再生成だと**推測しているが確認できていない**。
 
+## rev8 (2026-09-08、見出しの焼き込みを既定 ON へ)
+
+**開いている判断 2 に答えが出た** (ユーザー「既定 ON にして、日本語フォントの自動選択も入れて」)。
+字幕ファイル (SRT / WebVTT) は**作らない** — 「そんな本格的なものはいらない、画像に文字を入れるくらい」。
+
+32. **`defaultCaptionSettings().enabled = true`**。機構は rev3 期から入っていて、既定だけが OFF だった。
+33. **フォントの自動選択** (`pickCaptionFont`、contract `caption.default_font`)。既定 ON にすると
+    「ON なのにフォント未選択で何も焼かれない」が**無言で**起きるので、実行直前に解決する。
+    優先順は ①日本語グリフ必須 ②`app_data/fonts` のもの (source=user) を最優先 ③**太めのゴシック**
+    (画像に焼くので細い明朝・教科書体は写真の上で読めない) ④同点は family 名。
+    選べなければ焼かずに進み、理由を進捗に出す。
+34. 解決の場所は `store.ensureCaptionFont()` = `makeImages()` の先頭。設定画面を一度も開かなくても効く。
+
+**接地の限界**: 既定 ON にした状態での live は未実施。自動選択が実機でどの family を引くかも未確認
+(手元の Windows 11 には Noto Sans JP / Yu Gothic / Meiryo / BIZ UDGothic / MS Gothic があるので
+Noto Sans JP が来るはずだが、`has_japanese` の判定を通った実際の一覧では確認していない)。
+
 ## 検討した代案: Remotion (2026-09-08、採用しない)
 
 React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](https://github.com/remotion-dev/remotion))。

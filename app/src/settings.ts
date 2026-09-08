@@ -6,7 +6,7 @@
  *   API キーは backend の app_data/.env に置き、ここには持たない。
  * - `project`: 直近の入力 (リポジトリ / スナップショット / 世界観 / 尺 / 比率 / 言語 / 出力先)。
  */
-import type { Aspect, Language } from "./types";
+import type { Aspect, FontEntry, Language } from "./types";
 
 // --- LLM CLI ---------------------------------------------------------------
 
@@ -108,7 +108,8 @@ export interface CaptionSettings {
 }
 
 export function defaultCaptionSettings(): CaptionSettings {
-  return { enabled: false, fontPath: "", fontIndex: 0, sizeRatio: 0.055, position: "bottom" };
+  // 既定 ON (ユーザー判断 2026-09-08)。fontPath は空のまま — 実行直前に pickCaptionFont で埋める。
+  return { enabled: true, fontPath: "", fontIndex: 0, sizeRatio: 0.055, position: "bottom" };
 }
 
 /** backend へ渡す形 (enabled かつフォント指定ありのときだけ)。 */
@@ -339,3 +340,32 @@ export function save(key: string, value: unknown): void {
     /* storage が塞がれた環境 */
   }
 }
+
+/**
+ * 見出しを焼くフォントを自動で選ぶ (純粋)。既定 ON にしたので、フォント未選択のまま
+ * 「ON なのに何も焼かれない」を起こさないための解決役。
+ *
+ * 規律: ①日本語グリフ必須 (copy_text は日本語) ②ユーザーが app_data/fonts に置いたものを最優先
+ * (意図して置いたものより機械の推測を上に置かない) ③**画像に焼くので太めのゴシック**を優先する —
+ * 細い明朝や教科書体は写真の上で読めない ④同点は family 名で決める (実行のたびに変わらない)。
+ */
+export function pickCaptionFont(fonts: FontEntry[]): FontEntry | null {
+  // 左ほど強い。実機 (Windows 11) にあった顔ぶれから選んだ。
+  const PREFER = ["noto sans jp", "yu gothic", "meiryo", "biz udgothic", "ms gothic", "gothic", "sans"];
+  const AVOID = ["mincho", "明朝", "serif", "kyokasho", "教科書", "brush", "script"];
+
+  const score = (e: FontEntry): number => {
+    const n = e.family.toLowerCase();
+    let s = e.source === "user" ? 1000 : 0;
+    const hit = PREFER.findIndex((k) => n.includes(k));
+    if (hit >= 0) s += 100 - hit * 10;
+    if (AVOID.some((k) => n.includes(k))) s -= 50;
+    if (n.includes("bold") || n.includes("b ")) s += 5; // 焼き込みは太い方が読める
+    return s;
+  };
+
+  const cands = fonts.filter((e) => e.has_japanese);
+  if (!cands.length) return null;
+  return cands.slice().sort((a, b) => score(b) - score(a) || a.family.localeCompare(b.family))[0];
+}
+

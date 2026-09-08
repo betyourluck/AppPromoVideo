@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   defaultImageGenSettings,
   migrateImageGenSettings,
+  pickCaptionFont,
   toBackendCaption,
   migrateProjectSettings,
   splitArgs,
@@ -78,8 +79,11 @@ describe("migrate", () => {
     expect(p.snapshots).toEqual(["a.png"]);
     expect(p.lang).toBe("en");
   });
-  it("見出しは enabled かつフォント指定のときだけ backend へ (既定 OFF)", () => {
-    expect(defaultImageGenSettings().caption.enabled).toBe(false);
+  it("見出しは enabled かつフォント指定のときだけ backend へ (既定 ON、フォントは実行時に解決)", () => {
+    // 2026-09-08 に既定 ON へ (ユーザー判断)。fontPath は空のままなので、
+    // 未解決のうちは backend へ渡さない = 「ON なのに焼けない」ではなく「焼かずに進む」。
+    expect(defaultImageGenSettings().caption.enabled).toBe(true);
+    expect(defaultImageGenSettings().caption.fontPath).toBe("");
     expect(toBackendCaption({ enabled: false, fontPath: "C:/f.ttc", fontIndex: 0, sizeRatio: 0.05, position: "bottom" })).toBeNull();
     expect(toBackendCaption({ enabled: true, fontPath: "", fontIndex: 0, sizeRatio: 0.05, position: "bottom" })).toBeNull();
     expect(toBackendCaption({ enabled: true, fontPath: "C:/f.ttc", fontIndex: 2, sizeRatio: 0.9, position: "top" })).toEqual({ font_path: "C:/f.ttc", font_index: 2, size_ratio: 0.2, position: "top" });
@@ -91,3 +95,46 @@ describe("migrate", () => {
     expect(workflowAcceptsRefs("{}")).toBe(false);
   });
 });
+
+describe("pickCaptionFont (見出しの自動選択)", () => {
+  const f = (family: string, has_japanese = true, source: "system" | "user" = "system") => ({
+    path: `C:/Windows/Fonts/${family}.ttc`,
+    index: 0,
+    family,
+    source,
+    has_japanese,
+  });
+
+  it("日本語グリフを持たないフォントは選ばない", () => {
+    expect(pickCaptionFont([f("Arial", false), f("Segoe UI", false)])).toBeNull();
+    expect(pickCaptionFont([])).toBeNull();
+  });
+
+  it("画像に焼くので明朝より太めのゴシックを選ぶ", () => {
+    // 実機にあった顔ぶれ。明朝・教科書体が先に並んでいても拾わない。
+    const found = pickCaptionFont([
+      f("BIZ UDMincho Medium"),
+      f("UD Digi Kyokasho N-R"),
+      f("Yu Mincho"),
+      f("Yu Gothic Bold"),
+      f("MS Gothic"),
+    ]);
+    expect(found?.family).toBe("Yu Gothic Bold");
+  });
+
+  it("明朝しか無ければ諦めずにそれを返す (焼けないより焼ける方がよい)", () => {
+    expect(pickCaptionFont([f("Yu Mincho")])?.family).toBe("Yu Mincho");
+  });
+
+  it("ユーザーが app_data/fonts に置いたものを最優先する", () => {
+    const found = pickCaptionFont([f("Yu Gothic Bold"), f("SomeBrandFont", true, "user")]);
+    expect(found?.family).toBe("SomeBrandFont");
+  });
+
+  it("同点なら family 名で決める (実行のたびに変わらない)", () => {
+    const a = pickCaptionFont([f("Zeta Gothic"), f("Alpha Gothic")]);
+    const b = pickCaptionFont([f("Alpha Gothic"), f("Zeta Gothic")]);
+    expect(a?.family).toBe(b?.family);
+  });
+});
+
