@@ -182,3 +182,11 @@ frontal は `ProductBackdropAngled` の検査が増えるので再生成が発�
 `store.ensureCaptionFont()` を `makeImages()` の先頭に置いたので、設定画面を開かなくても効く。
 選べなければ焼かずに進み理由を出す = 「ON なのに何も起きない」を無言にしない。vitest 10→15 green。
 
+### rev8 の穴: 既定 ON は保存済み設定に負ける
+
+GUI 確認の直前に気づいた。`migrateImageGenSettings` が `enabled: c.enabled === true` だったので、
+①保存済みの `false` (旧既定が書かれたもの) が勝つ ②`enabled` キーが**無い**保存も `false` になる
+(`undefined === true`)。②は既定へ落とすべきなのでバグ。`typeof c.enabled === "boolean" ? c.enabled : 既定`
+に直した (Red 1 本)。①は仕様どおり — 明示された false はユーザーの意思かもしれないので上書きしない。
+既存ユーザー (= マスター) は GUI で 1 度チェックを入れる必要がある。vitest 15→17 green。
+

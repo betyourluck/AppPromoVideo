@@ -96,6 +96,19 @@ describe("migrate", () => {
   });
 });
 
+describe("caption の migrate", () => {
+  it("キーが無いときは既定に落ちる (false 固定にしない)", () => {
+    // rev8 で既定が ON になったので、`enabled` を持たない古い / 部分的な保存は既定に従うべき。
+    const m = migrateImageGenSettings({ caption: { fontPath: "x.ttf" } });
+    expect(m.caption.enabled).toBe(true);
+    expect(m.caption.fontPath).toBe("x.ttf");
+  });
+
+  it("明示された false は尊重する (ユーザーが切ったものを勝手に戻さない)", () => {
+    expect(migrateImageGenSettings({ caption: { enabled: false } }).caption.enabled).toBe(false);
+  });
+});
+
 describe("pickCaptionFont (見出しの自動選択)", () => {
   const f = (family: string, has_japanese = true, source: "system" | "user" = "system") => ({
     path: `C:/Windows/Fonts/${family}.ttc`,

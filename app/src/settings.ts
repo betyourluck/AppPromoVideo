@@ -207,7 +207,8 @@ export function migrateImageGenSettings(raw: unknown): ImageGenSettings {
   if (r.caption && typeof r.caption === "object") {
     const c = r.caption as Partial<CaptionSettings>;
     out.caption = {
-      enabled: c.enabled === true,
+      // キーが無い保存は既定へ落とす (false 固定にしない)。明示された false は尊重する。
+      enabled: typeof c.enabled === "boolean" ? c.enabled : defaultCaptionSettings().enabled,
       fontPath: typeof c.fontPath === "string" ? c.fontPath : "",
       fontIndex: typeof c.fontIndex === "number" && c.fontIndex >= 0 ? Math.floor(c.fontIndex) : 0,
       sizeRatio: typeof c.sizeRatio === "number" && c.sizeRatio > 0 ? c.sizeRatio : 0.055,
