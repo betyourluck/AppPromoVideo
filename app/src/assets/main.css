@@ -1,0 +1,186 @@
+/* AppPromoVideo — 配色は CSS 変数 (RGB チャンネル)、data-theme で入れ替える。Tailwind は使わない。 */
+:root,
+[data-theme="dark"] {
+  --bg: 18 16 24;
+  --panel: 28 25 38;
+  --line: 58 52 78;
+  --text: 232 226 240;
+  --muted: 160 152 180;
+  --accent: 217 138 74;
+  --accent2: 140 110 230;
+  --warn: 226 96 90;
+  --ok: 92 186 120;
+}
+[data-theme="light"] {
+  --bg: 246 243 238;
+  --panel: 255 255 255;
+  --line: 214 206 196;
+  --text: 40 34 48;
+  --muted: 110 100 120;
+  --accent: 181 92 38;
+  --accent2: 98 70 190;
+  --warn: 188 62 46;
+  --ok: 40 140 80;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: rgb(var(--bg));
+  color: rgb(var(--text));
+  font-family: "Segoe UI", "Noto Sans JP", system-ui, sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+}
+* {
+  box-sizing: border-box;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+input,
+select,
+textarea {
+  background: rgb(var(--bg));
+  border: 1px solid rgb(var(--line));
+  border-radius: 6px;
+  padding: 6px 8px;
+  width: 100%;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid rgb(var(--accent2) / 0.6);
+  outline-offset: 0;
+}
+textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+label.field {
+  display: block;
+  margin: 8px 0;
+}
+label.field > span {
+  display: block;
+  font-size: 11px;
+  color: rgb(var(--muted));
+  margin-bottom: 3px;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.btn {
+  background: rgb(var(--panel));
+  border: 1px solid rgb(var(--line));
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover {
+  border-color: rgb(var(--accent2));
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.btn.primary {
+  background: rgb(var(--accent));
+  border-color: transparent;
+  color: #fff;
+  font-weight: 600;
+}
+.btn.danger {
+  border-color: rgb(var(--warn) / 0.6);
+  color: rgb(var(--warn));
+}
+.btn.small {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+.panel {
+  background: rgb(var(--panel));
+  border: 1px solid rgb(var(--line));
+  border-radius: 10px;
+  padding: 12px;
+}
+.panel h2 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(var(--muted));
+}
+.muted {
+  color: rgb(var(--muted));
+}
+.warn {
+  color: rgb(var(--warn));
+}
+.ok {
+  color: rgb(var(--ok));
+}
+.mono {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+}
+.chip {
+  display: inline-block;
+  border: 1px solid rgb(var(--line));
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  color: rgb(var(--muted));
+}
+.chip.accent {
+  border-color: rgb(var(--accent));
+  color: rgb(var(--accent));
+}
+.chip.warn {
+  border-color: rgb(var(--warn));
+  color: rgb(var(--warn));
+}
+.chip.ok {
+  border-color: rgb(var(--ok));
+  color: rgb(var(--ok));
+}
+pre.block {
+  background: rgb(var(--bg));
+  border: 1px solid rgb(var(--line));
+  border-radius: 6px;
+  padding: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 4px 0;
+}
+.toast {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgb(var(--panel));
+  border: 1px solid rgb(var(--accent));
+  border-radius: 8px;
+  padding: 8px 14px;
+  z-index: 50;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.35);
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--line));
+  border-radius: 4px;
+}

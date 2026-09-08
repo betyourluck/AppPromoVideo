@@ -1,0 +1,31 @@
+[package]
+name = "apppromo-desktop"
+version = "0.1.0"
+description = "AppPromoVideo — 既存アプリから動画生成用プロンプトと参照画像を出すデスクトップ殻"
+edition = "2024"
+rust-version = "1.85"
+
+# 親 workspace (crates/*) に属さない独立 project として扱わせる。重い tauri 依存を
+# `cargo test --workspace` のループから隔離する (Kataribe app/src-tauri と同じ流儀)。
+[workspace]
+
+[lib]
+# Windows でビルド衝突を避けるため _lib サフィックス (Tauri 慣習)。
+name = "apppromo_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["sync", "rt-multi-thread", "macros", "process", "time"] }
+dotenvy = "0.15"
+# フォルダ / ファイル選択の OS ネイティブダイアログ。plugin を足さず custom command で完結 (追加権限ゼロ)。
+rfd = "0.17"
+promo_core = { path = "../../crates/promo_core" }
+cli_runner = { path = "../../crates/cli_runner" }
+pipeline = { path = "../../crates/pipeline" }
+image_gen = { path = "../../crates/image_gen" }
