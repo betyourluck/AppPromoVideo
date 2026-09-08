@@ -52,6 +52,7 @@ struct Args {
     caption_index: u32,
     caption_size: f32,
     caption_pos: image_gen::CaptionPosition,
+    caption_color: Option<String>,
     plate_mode: PlateMode,
 }
 
@@ -84,6 +85,7 @@ fn parse() -> Result<Args, String> {
         caption_index: 0,
         caption_size: 0.055,
         caption_pos: image_gen::CaptionPosition::Bottom,
+        caption_color: None,
         plate_mode: PlateMode::default(),
     };
     while let Some(k) = it.next() {
@@ -111,6 +113,7 @@ fn parse() -> Result<Args, String> {
                 }
             }
             "--exe" => a.exe = val()?,
+            "--caption-color" => a.caption_color = Some(val()?),
             "--plate" => {
                 a.plate_mode = match val()?.as_str() {
                     "perspective" => PlateMode::Perspective,
@@ -252,6 +255,7 @@ async fn make_images(a: &Args, provider: Provider, promo: &mut PromoJson, pkg_di
         font_index: a.caption_index,
         size_ratio: a.caption_size,
         position: a.caption_pos,
+        color: a.caption_color.clone(),
     });
     let job = RefJob {
         cfg: &cfg,
@@ -263,6 +267,7 @@ async fn make_images(a: &Args, provider: Provider, promo: &mut PromoJson, pkg_di
         seed_base,
         requested_refs: a.image_refs,
         plate_mode: a.plate_mode,
+        caption_overrides: &promo.caption_overrides,
     };
     let results = generate_references(&generator, &job, &mut promo.plan, &refs, &mut |s| eprintln!("[img] {s}")).await;
     let ok = results.iter().filter(|r| r.result.is_ok()).count();
@@ -391,6 +396,7 @@ async fn run(a: &Args) -> Result<(), String> {
         video_concept: a.concept.clone(),
         summary,
         plan,
+        caption_overrides: Default::default(),
     };
     // rev7: run ごとに隔離する。既存の id を見てから採番 (同じ秒に 2 本走っても衝突しない)。
     let now_ms = std::time::SystemTime::now()

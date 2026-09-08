@@ -8,6 +8,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../store";
 import type { Scene } from "../types";
 import Lightbox from "./Lightbox.vue";
+import CaptionEditor from "./CaptionEditor.vue";
 
 const store = useStore();
 type Target = "minimax" | "generic";
@@ -150,6 +151,7 @@ function openRef(sceneId: number) {
               </template>
               <template v-else>参照画像なし</template>
             </div>
+            <CaptionEditor v-if="store.imageUrls[s.scene_id]" :scene-id="s.scene_id" :has-text="!!s.copy_text.trim()" />
             <details class="muted" style="font-size: 11px">
               <summary>{{ s.cut_kind === 'product' ? 'backdrop prompt' : 'image prompt' }}</summary>
               <pre class="block mono">{{ s.image_prompt }}</pre>

@@ -105,21 +105,24 @@ export interface CaptionSettings {
   /** 文字の高さ / canvas の高さ。 */
   sizeRatio: number;
   position: "top" | "bottom";
+  /** 文字色 `#RRGGBB` (rev9)。空で白。 */
+  color: string;
 }
 
 export function defaultCaptionSettings(): CaptionSettings {
   // 既定 ON (ユーザー判断 2026-09-08)。fontPath は空のまま — 実行直前に pickCaptionFont で埋める。
-  return { enabled: true, fontPath: "", fontIndex: 0, sizeRatio: 0.055, position: "bottom" };
+  return { enabled: true, fontPath: "", fontIndex: 0, sizeRatio: 0.055, position: "bottom", color: "#FFFFFF" };
 }
 
 /** backend へ渡す形 (enabled かつフォント指定ありのときだけ)。 */
-export function toBackendCaption(c: CaptionSettings): { font_path: string; font_index: number; size_ratio: number; position: "top" | "bottom" } | null {
+export function toBackendCaption(c: CaptionSettings): { font_path: string; font_index: number; size_ratio: number; position: "top" | "bottom"; color: string } | null {
   if (!c.enabled || !c.fontPath.trim()) return null;
   return {
     font_path: c.fontPath,
     font_index: Math.max(0, Math.floor(c.fontIndex) || 0),
     size_ratio: Math.min(0.2, Math.max(0.02, c.sizeRatio || 0.055)),
     position: c.position === "top" ? "top" : "bottom",
+    color: /^#[0-9a-fA-F]{6}$/.test(c.color) ? c.color : "#FFFFFF",
   };
 }
 
@@ -213,6 +216,7 @@ export function migrateImageGenSettings(raw: unknown): ImageGenSettings {
       fontIndex: typeof c.fontIndex === "number" && c.fontIndex >= 0 ? Math.floor(c.fontIndex) : 0,
       sizeRatio: typeof c.sizeRatio === "number" && c.sizeRatio > 0 ? c.sizeRatio : 0.055,
       position: c.position === "top" ? "top" : "bottom",
+      color: /^#[0-9a-fA-F]{6}$/.test(String(c.color ?? "")) ? String(c.color) : "#FFFFFF",
     };
   }
   return out;

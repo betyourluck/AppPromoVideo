@@ -336,7 +336,8 @@ function close() {
 
         <h3 class="sub">見出し (copy) の焼き込み — 任意</h3>
         <p class="muted note">
-          各カット画像に copy_text を焼き込みます。既定は OFF (動画側でテロップを載せる運用)。フォントはシステムにインストール済みのものと、
+ここは**全シーンの既定**です。1 枚ごとの位置・フォント・色・大きさは、結果ペインの各シーンにある
+          「見出し」から変えられます (焼き直しは生成をやり直しません)。各カット画像に copy_text を焼き込みます。既定は OFF (動画側でテロップを載せる運用)。フォントはシステムにインストール済みのものと、
           <span class="mono">app_data/fonts</span> に置いたファイルから選べます。
         </p>
         <label class="field row" style="gap: 8px">
@@ -360,6 +361,10 @@ function close() {
           <label class="field" style="flex: 1">
             <span>文字の高さ (canvas 比)</span>
             <input v-model.number="store.image.caption.sizeRatio" type="number" min="0.02" max="0.2" step="0.005" @change="store.persist()" />
+          </label>
+          <label class="field" style="flex: 1">
+            <span>色 (既定)</span>
+            <input v-model="store.image.caption.color" type="color" @change="store.persist()" />
           </label>
           <label class="field" style="flex: 1">
             <span>位置</span>

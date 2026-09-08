@@ -84,11 +84,11 @@ describe("migrate", () => {
     // 未解決のうちは backend へ渡さない = 「ON なのに焼けない」ではなく「焼かずに進む」。
     expect(defaultImageGenSettings().caption.enabled).toBe(true);
     expect(defaultImageGenSettings().caption.fontPath).toBe("");
-    expect(toBackendCaption({ enabled: false, fontPath: "C:/f.ttc", fontIndex: 0, sizeRatio: 0.05, position: "bottom" })).toBeNull();
-    expect(toBackendCaption({ enabled: true, fontPath: "", fontIndex: 0, sizeRatio: 0.05, position: "bottom" })).toBeNull();
-    expect(toBackendCaption({ enabled: true, fontPath: "C:/f.ttc", fontIndex: 2, sizeRatio: 0.9, position: "top" })).toEqual({ font_path: "C:/f.ttc", font_index: 2, size_ratio: 0.2, position: "top" });
+    expect(toBackendCaption({ enabled: false, fontPath: "C:/f.ttc", fontIndex: 0, sizeRatio: 0.05, position: "bottom", color: "#FFFFFF" })).toBeNull();
+    expect(toBackendCaption({ enabled: true, fontPath: "", fontIndex: 0, sizeRatio: 0.05, position: "bottom", color: "#FFFFFF" })).toBeNull();
+    expect(toBackendCaption({ enabled: true, fontPath: "C:/f.ttc", fontIndex: 2, sizeRatio: 0.9, position: "top", color: "#FFFFFF" })).toEqual({ font_path: "C:/f.ttc", font_index: 2, size_ratio: 0.2, position: "top", color: "#FFFFFF" });
     const m = migrateImageGenSettings({ caption: { enabled: true, fontPath: "x.ttf", sizeRatio: -1, position: "middle" } });
-    expect(m.caption).toEqual({ enabled: true, fontPath: "x.ttf", fontIndex: 0, sizeRatio: 0.055, position: "bottom" });
+    expect(m.caption).toEqual({ enabled: true, fontPath: "x.ttf", fontIndex: 0, sizeRatio: 0.055, position: "bottom", color: "#FFFFFF" });
   });
   it("workflow の差し込み口検査", () => {
     expect(workflowAcceptsRefs('{"a":"%ref_1%"}')).toBe(true);

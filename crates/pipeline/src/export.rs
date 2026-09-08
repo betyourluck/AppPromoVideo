@@ -58,6 +58,7 @@ mod tests {
             project_path: "D:/proj".into(),
             snapshot_paths: vec![shot.to_string_lossy().to_string()],
             video_concept: "calm".into(),
+            caption_overrides: Default::default(),
             summary: AnalyzedSummary {
                 app_name: "Task Flow".into(),
                 one_liner: "o".into(),

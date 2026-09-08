@@ -216,6 +216,15 @@ ImageGenConfig:                     # (Kataribe) provider / base_url / model / s
     comfy:  { api_max: 3, kataribe_live: 1, default_send: 3, note: "%ref_1..3%。ワークフローに差し込み口が無ければ沈黙する (Kataribe #83) → 設定タブで %ref_1% 不在を警告" }
     rule: "送る枚数 = min(ユーザー選択 or default_send, api_max, 手持ち枚数)。先頭から (ユーザーの並び順)。切り詰めたら Truncated{total, sent, limit_by} を UI に『N 枚のうち先頭 M 枚』と出す (沈黙させない)"
   caption:                          # 見出し (copy_text) の焼き込み。**既定 ON** (rev8、2026-09-08 ユーザー判断で OFF → ON)
+    spec: "CaptionSpec { font_path, font_index, size_ratio 0.055, position top|bottom, color '#RRGGBB' (rev9、省略で白) }"
+    per_scene:                      # rev9 (2026-09-08 ユーザー要望「1 枚ごとに位置を決めたい」)
+      why: |
+        見出しは**生成時に焼き込まれ、焼いた後の 1 枚しか残らなかった**ので、あとから位置や色を
+        変えるには背景から作り直すしかなかった (お金がかかり、絵まで変わる)。
+        焼く前の合成を `base/` に残し、そこから**何度でも焼き直せる**ようにする。劣化しない。
+      overrides: "PromoJson.caption_overrides: Map<scene_id, CaptionOverride>。**LLM のスキーマ (Scene) には足さない** — 埋めるのは人であって LLM ではない"
+      resolution: "scene の上書き → 無ければ設定 (既定) → それも無ければ焼かない。フィールド単位で落ちる (位置だけ上書き、他は既定 が成り立つ)"
+      reburn: "command reburn_caption(run_dir, scene_id, spec) — base/ を読んで焼き、直下の完成品を置き換え、promo.json の overrides を更新して data URL を返す。**生成 API は呼ばない**"
     default_font: |
       既定 ON にすると「ON なのにフォント未選択で何も焼かれない」が無言で起きるので、実行直前に
       `pickCaptionFont` (frontend の純関数) が自動で選ぶ。規律は 4 つ:
@@ -253,7 +262,8 @@ ExportPackage:                      # export_dir/<app_name>_Promo_Package/runs/<
   layout:
     - "<pkg>/runs/<run_id>/promo.json          — { project: PromoProject(パスのみ), summary: AnalyzedSummary, plan: ScenePlan }"
     - "<pkg>/runs/<run_id>/scenes.md           — シーン構成表 (Markdown 表 + 各シーンの video_prompt 全文)"
-    - "<pkg>/runs/<run_id>/scene_NN_ref_MM.png — 参照画像"
+    - "<pkg>/runs/<run_id>/scene_NN_ref_MM.png — 参照画像 (**見出しを焼いた完成品**。MiniMax へ渡すのはこれ)"
+    - "<pkg>/runs/<run_id>/base/scene_NN_ref_MM.png — 見出しを焼く**前**の合成 (rev9、再焼き用)"
     - "<pkg>/runs/<run_id>/snapshots/          — 入力スナップショットの写し"
   run_isolation:                    # rev7 (2026-09-08 ユーザー指摘「再起動すると出力が揮発」→ 調べたらディスク上で破壊されていた)
     why: |

@@ -125,6 +125,7 @@ export interface FontEntry {
 
 /** backend `CaptionSpec` (snake_case)。 */
 export interface CaptionSpec {
+  color?: string | null;
   font_path: string;
   font_index: number;
   size_ratio: number;

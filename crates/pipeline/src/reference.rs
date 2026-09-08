@@ -26,12 +26,38 @@ pub struct CaptionSpec {
     pub size_ratio: f32,
     #[serde(default)]
     pub position: CaptionPosition,
+    /// 文字色 `#RRGGBB` (rev9)。読めない / 省略で白。
+    #[serde(default)]
+    pub color: Option<String>,
+}
+
+impl CaptionSpec {
+    /// scene ごとの上書きを重ねた spec を返す (純粋、契約 `caption.per_scene.resolution`)。
+    /// **省略されたフィールドは自分の値のまま** — 「位置だけ変えて他は既定」が成り立つ。
+    pub fn with_override(&self, o: &CaptionOverride) -> CaptionSpec {
+        CaptionSpec {
+            font_path: o.font_path.clone().unwrap_or_else(|| self.font_path.clone()),
+            font_index: o.font_index.unwrap_or(self.font_index),
+            size_ratio: o.size_ratio.unwrap_or(self.size_ratio),
+            position: match o.position.as_deref() {
+                Some("top") => CaptionPosition::Top,
+                Some("bottom") => CaptionPosition::Bottom,
+                _ => self.position,
+            },
+            color: o.color.clone().or_else(|| self.color.clone()),
+        }
+    }
+
+    /// 焼くときの色 (読めない指定は白に落ちる)。
+    pub fn rgba(&self) -> [u8; 4] {
+        self.color.as_deref().and_then(promo_core::export::parse_hex_rgba).unwrap_or([255, 255, 255, 255])
+    }
 }
 
 fn default_size_ratio() -> f32 {
     0.055
 }
-use promo_core::export::reference_image_name;
+use promo_core::export::{CaptionOverride, reference_image_name};
 use promo_core::plan::{CutKind, PlateMode, ScenePlan};
 use promo_core::style::extract_hex;
 
@@ -96,6 +122,27 @@ pub struct RefJob<'a> {
     pub requested_refs: Option<usize>,
     /// 面の貼り方 (rev5)。Frontal なら scene.plate_tilt を無視して正対で貼る。
     pub plate_mode: PlateMode,
+    /// scene ごとの見出しの上書き (rev9)。無ければ `caption` がそのまま既定として効く。
+    pub caption_overrides: &'a std::collections::BTreeMap<u32, CaptionOverride>,
+}
+
+/// その scene に効く見出し指定 (純粋)。既定に上書きを重ねる。既定が無ければ焼かない。
+fn spec_for_scene(
+    base: Option<&CaptionSpec>,
+    overrides: &std::collections::BTreeMap<u32, CaptionOverride>,
+    scene_id: u32,
+) -> Option<CaptionSpec> {
+    let base = base?;
+    Some(match overrides.get(&scene_id) {
+        Some(o) => base.with_override(o),
+        None => base.clone(),
+    })
+}
+
+/// 見出しを焼く**前**の合成の置き場 (契約 `ExportPackage.layout`、rev9)。
+/// `<run>/base/<同じ名前>`。ここから何度でも焼き直せるので、位置や色を変えるのに背景を作り直さずに済む。
+pub fn base_image_path(run_dir: &Path, name: &str) -> PathBuf {
+    run_dir.join("base").join(name)
 }
 
 /// シーンごとに参照画像を作り、`job.out_dir` に保存して `plan.scenes[i].reference_image` を埋める。
@@ -106,7 +153,18 @@ pub async fn generate_references(
     refs: &[RefImage],
     progress: &mut (dyn FnMut(String) + Send),
 ) -> Vec<SceneImage> {
-    let RefJob { cfg, api_key, out_dir, palette, caption, max_scenes, seed_base, requested_refs, plate_mode } = *job;
+    let RefJob {
+        cfg,
+        api_key,
+        out_dir,
+        palette,
+        caption,
+        max_scenes,
+        seed_base,
+        requested_refs,
+        plate_mode,
+        caption_overrides: overrides,
+    } = *job;
     // フォントは 1 回だけ読む。読めなければ焼かずに進む (進捗に理由を出す)。
     let font_data: Option<(Vec<u8>, &CaptionSpec)> = match caption {
         Some(c) => match fs::read(&c.font_path) {
@@ -195,12 +253,25 @@ pub async fn generate_references(
                 })
             }
         };
+        // rev9: 焼く**前**を base/ に残す。見出しの位置や色をあとから変えるのに背景を作り直さないため。
+        // 保存に失敗しても本流は止めない (画像そのものは出す)。焼き直せなくなるだけなので理由は出す。
+        let name = reference_image_name(scene.scene_id, 1);
+        if let Ok(png) = &bytes {
+            let bp = base_image_path(out_dir, &name);
+            let saved = fs::create_dir_all(bp.parent().unwrap_or(out_dir)).and_then(|_| fs::write(&bp, png));
+            if let Err(e) = saved {
+                progress(format!("scene {}: 焼く前の画像を残せません ({e}) → あとから見出しだけ変えられません", scene.scene_id));
+            }
+        }
         // 見出し (opt-in): 生成・合成の後に copy_text を焼く。失敗は焼かずに続行 (画像は残す)。
+        let spec = spec_for_scene(caption, overrides, scene.scene_id);
         let bytes = match (&bytes, &font_data) {
-            (Ok(png), Some((font, spec))) if !scene.copy_text.trim().is_empty() => {
+            (Ok(png), Some((font, _))) if !scene.copy_text.trim().is_empty() => {
+                let spec = spec.as_ref().expect("font_data があるなら spec もある");
                 let mut cap = Caption::new(&scene.copy_text, font, spec.font_index);
                 cap.size_ratio = spec.size_ratio;
                 cap.position = spec.position;
+                cap.color = spec.rgba();
                 match burn_caption(png, &cap) {
                     Ok(b) => Ok(b),
                     Err(e) => {
@@ -340,7 +411,7 @@ mod tests {
         let dir = out_dir();
         let mut log = Vec::new();
         let c = cfg(Provider::Gemini);
-        let job = RefJob { cfg: &c, api_key: "k", out_dir: &dir, palette: &[], caption: None, max_scenes: None, seed_base: 7, requested_refs: None, plate_mode: PlateMode::default() };
+        let job = RefJob { cfg: &c, api_key: "k", out_dir: &dir, palette: &[], caption: None, max_scenes: None, seed_base: 7, requested_refs: None, plate_mode: PlateMode::default(), caption_overrides: &Default::default() };
         let out = generate_references(&fake, &job, &mut p, &refs(2), &mut |s| log.push(s)).await;
         assert_eq!(out.len(), 3);
         assert!(out.iter().all(|s| s.result.is_ok()));
@@ -362,7 +433,7 @@ mod tests {
         let mut log = Vec::new();
         let c = cfg(Provider::Openai);
         let dir = out_dir();
-        let job = RefJob { cfg: &c, api_key: "k", out_dir: &dir, palette: &[], caption: None, max_scenes: Some(1), seed_base: 0, requested_refs: None, plate_mode: PlateMode::default() };
+        let job = RefJob { cfg: &c, api_key: "k", out_dir: &dir, palette: &[], caption: None, max_scenes: Some(1), seed_base: 0, requested_refs: None, plate_mode: PlateMode::default(), caption_overrides: &Default::default() };
         let out = generate_references(&fake, &job, &mut p, &refs(3), &mut |s| log.push(s)).await;
         assert_eq!(out.len(), 1, "max_scenes で先頭 1 シーンだけ");
         assert_eq!(fake.calls.lock().unwrap()[0].1, 1);
@@ -374,6 +445,40 @@ mod tests {
 
     /// rev3: product カットは参照を送らず背景だけ生成し、実スクショの画素を中央に貼る。
     /// 背景生成が失敗しても単色背景で合成する (製品カットは provider の都合で落ちない)。
+    /// rev9: 見出しを焼く**前**を base/ に残す。あとから位置や色を変えるのに背景を作り直さないため。
+    #[test]
+    fn base_path_sits_under_the_run_and_keeps_the_same_name() {
+        let run = Path::new("D:/out/App_Promo_Package/runs/20260908-120000");
+        let p = base_image_path(run, "scene_02_ref_01.png");
+        assert!(p.ends_with("base/scene_02_ref_01.png"), "{}", p.display());
+        assert_eq!(p.parent().unwrap().parent().unwrap(), run, "run 直下の base/");
+    }
+
+    /// 上書きは**フィールド単位で**既定に落ちる (位置だけ変えて他は既定、が成り立つ)。
+    #[test]
+    fn overrides_fall_back_field_by_field() {
+        let base = CaptionSpec {
+            font_path: "D:/f.ttc".into(),
+            font_index: 1,
+            size_ratio: 0.055,
+            position: CaptionPosition::Bottom,
+            color: Some("#FFFFFF".into()),
+        };
+        let only_pos = base.with_override(&CaptionOverride { position: Some("top".into()), ..Default::default() });
+        assert_eq!(only_pos.position, CaptionPosition::Top);
+        assert_eq!(only_pos.font_path, "D:/f.ttc", "触っていないものは既定のまま");
+        assert_eq!(only_pos.size_ratio, 0.055);
+        assert_eq!(only_pos.rgba(), [255, 255, 255, 255]);
+
+        let colored = base.with_override(&CaptionOverride { color: Some("#FFCC00".into()), ..Default::default() });
+        assert_eq!(colored.rgba(), [255, 204, 0, 255]);
+        assert_eq!(colored.position, CaptionPosition::Bottom);
+
+        // 読めない色は白に落ちる (焼けないより焼ける方がよい)。
+        let bad = base.with_override(&CaptionOverride { color: Some("not-a-color".into()), ..Default::default() });
+        assert_eq!(bad.rgba(), [255, 255, 255, 255]);
+    }
+
     #[tokio::test]
     async fn product_cut_composites_real_screenshot_and_survives_backdrop_failure() {
         // fake は 1 回目 (scene 1 の背景) に有効な PNG、2 回目 (scene 2) で失敗。
@@ -414,7 +519,7 @@ mod tests {
         let c = cfg(Provider::Gemini);
         let dir = out_dir();
         let palette = vec!["#112233".to_string()];
-        let job = RefJob { cfg: &c, api_key: "k", out_dir: &dir, palette: &palette, caption: None, max_scenes: None, seed_base: 0, requested_refs: None, plate_mode: PlateMode::default() };
+        let job = RefJob { cfg: &c, api_key: "k", out_dir: &dir, palette: &palette, caption: None, max_scenes: None, seed_base: 0, requested_refs: None, plate_mode: PlateMode::default(), caption_overrides: &Default::default() };
         let out = generate_references(&Bg, &job, &mut p, &[shot], &mut |_| {}).await;
         assert!(out.iter().all(|r| r.result.is_ok()), "{:?}", out.iter().map(|r| r.result.as_ref().err().map(|e| e.to_string())).collect::<Vec<_>>());
         // rev6: 1920x1080 のスクショを 0.78 で等倍に置ける canvas まで拡がる (1344x768 では 0.711 倍に縮んでいた)。
@@ -436,7 +541,7 @@ mod tests {
         let mut p = plan();
         let c = cfg(Provider::Comfy);
         let dir = out_dir();
-        let job = RefJob { cfg: &c, api_key: "", out_dir: &dir, palette: &[], caption: None, max_scenes: None, seed_base: 0, requested_refs: None, plate_mode: PlateMode::default() };
+        let job = RefJob { cfg: &c, api_key: "", out_dir: &dir, palette: &[], caption: None, max_scenes: None, seed_base: 0, requested_refs: None, plate_mode: PlateMode::default(), caption_overrides: &Default::default() };
         let out = generate_references(&fake, &job, &mut p, &[], &mut |_| {}).await;
         assert!(out[0].result.is_ok());
         assert!(matches!(out[1].result, Err(ImageGenError::RateLimited { .. })));

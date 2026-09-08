@@ -12,6 +12,37 @@ pub struct PromoJson {
     pub video_concept: String,
     pub summary: AnalyzedSummary,
     pub plan: ScenePlan,
+    /// scene_id → 見出しの上書き (rev9)。**LLM の schema には足さない** — 埋めるのは人。
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub caption_overrides: std::collections::BTreeMap<u32, CaptionOverride>,
+}
+
+/// 1 シーンぶんの見出しの上書き (契約 `caption.per_scene`)。**省略したフィールドは既定に落ちる。**
+/// 「位置だけ変えて他は設定のまま」が成り立つように、全フィールドが `Option`。
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct CaptionOverride {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_index: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_ratio: Option<f32>,
+    /// "top" | "bottom"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position: Option<String>,
+    /// "#RRGGBB"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+}
+
+/// `#RRGGBB` → RGBA (純粋)。読めなければ `None` — 呼び出し側が既定 (白) に落とす。
+pub fn parse_hex_rgba(hex: &str) -> Option<[u8; 4]> {
+    let h = hex.trim().trim_start_matches('#');
+    if h.len() != 6 || !h.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    let v = u32::from_str_radix(h, 16).ok()?;
+    Some([(v >> 16) as u8, (v >> 8) as u8, v as u8, 255])
 }
 
 /// export フォルダ名 (`<app_name>_Promo_Package`)。パス要素禁止 — 英数と `-_` 以外は `_`。
@@ -115,6 +146,25 @@ fn cell(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn promo_with_overrides() -> PromoJson {
+        PromoJson {
+            project_path: "D:/p".into(),
+            snapshot_paths: vec![],
+            video_concept: "c".into(),
+            summary: AnalyzedSummary {
+                app_name: "T".into(),
+                one_liner: "x".into(),
+                core_value: "y".into(),
+                target_audience: "z".into(),
+                differentiators: vec![],
+                hook_copy: "h".into(),
+                visual_identity: VisualIdentity { palette: vec![], mood: String::new(), ui_traits: vec![] },
+            },
+            plan: ScenePlan { total_seconds: 15, aspect: Aspect::Square, scenes: vec![] },
+            caption_overrides: Default::default(),
+        }
+    }
     use crate::plan::{Aspect, Scene, VisualIdentity};
 
     fn fixture() -> (AnalyzedSummary, ScenePlan) {
@@ -162,6 +212,33 @@ mod tests {
         assert!(later > a, "{later} > {a}");
         // ファイル名に使えない文字を含まない。
         assert!(a.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '-'));
+    }
+
+    #[test]
+    fn hex_color_parses_or_falls_back() {
+        assert_eq!(parse_hex_rgba("#FFCC00"), Some([255, 204, 0, 255]));
+        assert_eq!(parse_hex_rgba("ffcc00"), Some([255, 204, 0, 255]));
+        assert_eq!(parse_hex_rgba(" #000000 "), Some([0, 0, 0, 255]));
+        // 読めないものは None にして、呼び出し側が既定 (白) に落とす。
+        for bad in ["#FFF", "#GGGGGG", "", "rgb(1,2,3)", "#1234567"] {
+            assert_eq!(parse_hex_rgba(bad), None, "{bad}");
+        }
+    }
+
+    /// rev9: 上書きは**フィールド単位で**既定に落ちる (位置だけ変えて他は既定、が成り立つ)。
+    #[test]
+    fn overrides_round_trip_and_omit_empty_fields() {
+        let mut p = promo_with_overrides();
+        let json = serde_json::to_string(&p).unwrap();
+        assert!(!json.contains("caption_overrides"), "空なら書き出さない (既存の promo.json を汚さない)");
+
+        p.caption_overrides.insert(2, CaptionOverride { position: Some("top".into()), ..Default::default() });
+        let json = serde_json::to_string(&p).unwrap();
+        assert!(json.contains("caption_overrides"));
+        assert!(!json.contains("font_path"), "省略したフィールドは書かない: {json}");
+        let back: PromoJson = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.caption_overrides[&2].position.as_deref(), Some("top"));
+        assert_eq!(back.caption_overrides[&2].size_ratio, None);
     }
 
     #[test]

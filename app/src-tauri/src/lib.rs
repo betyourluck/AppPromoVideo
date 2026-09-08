@@ -390,6 +390,7 @@ async fn run_inner(app: &AppHandle, cancel: watch::Receiver<bool>, req: RunReque
         video_concept: req.concept.clone(),
         summary,
         plan,
+        caption_overrides: Default::default(),
     };
     // rev7: run ごとに隔離する。以前は同じパッケージを上書きして過去の出力を消していた。
     let export_dir = Path::new(&req.export_dir);
@@ -520,6 +521,7 @@ async fn generate_images(app: AppHandle, req: ImagesRequest) -> Result<ImagesRes
         palette: &palette_for_fallback,
         caption: req.caption.as_ref(),
         plate_mode: req.plate_mode,
+        caption_overrides: &promo.caption_overrides,
         max_scenes: req.max_scenes,
         seed_base,
         requested_refs: req.requested_refs,
@@ -659,6 +661,69 @@ fn forget_run(app: AppHandle, run_dir: String, delete_files: bool) -> Result<boo
         std::fs::remove_dir_all(&target).map_err(|e| format!("フォルダを消せません {run_dir}: {e}"))?;
     }
     Ok(removed)
+}
+
+/// 見出しだけ焼き直す (rev9、契約 `caption.per_scene.reburn`)。
+///
+/// **生成 API は呼ばない。** `base/` に残した焼く前の合成を読んで焼き、直下の完成品を置き換える。
+/// 何度やっても劣化しない (毎回 base から焼くので、焼いた上に焼くことがない)。
+#[tauri::command]
+fn reburn_caption(run_dir: String, scene_id: u32, spec: Option<CaptionSpec>) -> Result<String, String> {
+    let dir = PathBuf::from(&run_dir);
+    let text = std::fs::read_to_string(dir.join("promo.json")).map_err(|e| format!("promo.json を読めません: {e}"))?;
+    let mut promo: PromoJson = serde_json::from_str(&text).map_err(|e| format!("promo.json の形が違います: {e}"))?;
+    let scene = promo
+        .plan
+        .scenes
+        .iter()
+        .find(|s| s.scene_id == scene_id)
+        .ok_or_else(|| format!("scene {scene_id} がありません"))?;
+    let copy_text = scene.copy_text.clone();
+
+    let name = promo_core::export::reference_image_name(scene_id, 1);
+    let base = pipeline::reference::base_image_path(&dir, &name);
+    let png = std::fs::read(&base).map_err(|e| {
+        format!("焼く前の画像がありません ({}): {e}。rev9 より前に作った run は焼き直せません", base.display())
+    })?;
+
+    let out = match &spec {
+        // spec なし = 見出しを消す。base をそのまま戻す。
+        None => png,
+        Some(sp) => {
+            let font = std::fs::read(&sp.font_path).map_err(|e| format!("フォントを読めません {}: {e}", sp.font_path))?;
+            let mut cap = image_gen::Caption::new(&copy_text, &font, sp.font_index);
+            cap.size_ratio = sp.size_ratio;
+            cap.position = sp.position;
+            cap.color = sp.rgba();
+            image_gen::burn_caption(&png, &cap)?
+        }
+    };
+    std::fs::write(dir.join(&name), &out).map_err(|e| format!("書けません {name}: {e}"))?;
+
+    // 上書きを promo.json に残す (run を開き直しても効くように)。
+    match &spec {
+        None => {
+            promo.caption_overrides.remove(&scene_id);
+        }
+        Some(sp) => {
+            promo.caption_overrides.insert(
+                scene_id,
+                promo_core::export::CaptionOverride {
+                    font_path: Some(sp.font_path.clone()),
+                    font_index: Some(sp.font_index),
+                    size_ratio: Some(sp.size_ratio),
+                    position: Some(match sp.position {
+                        image_gen::CaptionPosition::Top => "top".into(),
+                        image_gen::CaptionPosition::Bottom => "bottom".into(),
+                    }),
+                    color: sp.color.clone(),
+                },
+            );
+        }
+    }
+    let json = serde_json::to_string_pretty(&promo).map_err(|e| e.to_string())?;
+    write_atomic(&dir.join("promo.json"), json.as_bytes())?;
+    Ok(image_gen::provider::data_url("image/png", &out))
 }
 
 /// 表示用 data URL (CSP: img-src に data: あり。ローカルファイルを WebView に直接見せない)。
@@ -835,6 +900,7 @@ pub fn run() {
             list_runs,
             open_run,
             forget_run,
+            reburn_caption,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
