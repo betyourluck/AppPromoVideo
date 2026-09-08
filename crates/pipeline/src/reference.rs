@@ -10,7 +10,8 @@ use std::path::{Path, PathBuf};
 use image_gen::provider::SizeMap;
 use image_gen::{
     Caption, CaptionPosition, ImageGenConfig, ImageGenError, ImageGenerator, Layout, RefImage, burn_caption,
-    Tilt, compose_reference_prompt, composite_product_cut, select_refs, solid_backdrop,
+    CANVAS_MAX_LONG_EDGE, Tilt, canvas_for_snapshot, compose_reference_prompt, composite_product_cut, fit_to_canvas,
+    plate_scale, select_refs, solid_backdrop,
 };
 use serde::{Deserialize, Serialize};
 
@@ -121,7 +122,26 @@ pub async fn generate_references(
     if let Some(t) = &truncated {
         progress(format!("参照 {} 枚のうち先頭 {} 枚を送ります ({})", t.total, t.sent, t.limit_by));
     }
-    let (cw, ch) = SizeMap::comfy_dims(cfg.shape);
+    // rev6: canvas は「スクショを縮めない」大きさにする。縮めると i2v が読めない文字を作り変える
+    // (ユーザー実測 2026-09-08、MiniMax)。背景は柔らかいので拡大が効く。パッケージ内は全カット同寸。
+    let base = SizeMap::comfy_dims(cfg.shape);
+    let ratio = if caption.is_some() { 0.68 } else { 0.78 };
+    let biggest = refs.iter().filter_map(|r| imagesize::blob_size(&r.bytes).ok()).fold((0u32, 0u32), |a, d| {
+        (a.0.max(d.width as u32), a.1.max(d.height as u32))
+    });
+    let (cw, ch) = if biggest.0 > 0 { canvas_for_snapshot(base, biggest, ratio, CANVAS_MAX_LONG_EDGE) } else { base };
+    if (cw, ch) != base {
+        progress(format!("canvas を {}x{} → {cw}x{ch} に拡げます (スクショ {}x{} を等倍で置くため)", base.0, base.1, biggest.0, biggest.1));
+    }
+    if biggest.0 > 0 {
+        let sc = plate_scale((cw, ch), biggest, ratio);
+        if sc < 0.999 {
+            progress(format!(
+                "警告: スクショを {:.0}% に縮めます (canvas 上限 {CANVAS_MAX_LONG_EDGE}px)。小さい文字は動画化で作り変えられます",
+                sc * 100.0
+            ));
+        }
+    }
     let layout = match caption {
         Some(c) => Layout::for_canvas(cw, ch).with_caption_band(c.position == CaptionPosition::Top),
         None => Layout::for_canvas(cw, ch),
@@ -162,7 +182,17 @@ pub async fn generate_references(
             CutKind::Mood => {
                 let prompt = compose_reference_prompt(&cfg.user_prefix, &scene.image_prompt, !sent.is_empty());
                 progress(format!("scene {}: 生成中 ({})", scene.scene_id, prompt.chars().take(60).collect::<String>()));
-                generator.generate(cfg, api_key, &prompt, seed, &sent, progress).await.map(|g| g.bytes)
+                // rev6: プロバイダの出力は寸法も形式もまちまち (Gemini は JPEG 1376x768) なので canvas に揃える。
+                generator.generate(cfg, api_key, &prompt, seed, &sent, progress).await.map(|g| {
+                    // 揃えられない時は素のまま通す (生成には金がかかっている)。ただし黙らない。
+                    match fit_to_canvas(&g.bytes, cw, ch) {
+                        Ok(b) => b,
+                        Err(e) => {
+                            progress(format!("scene {}: 生成画像を canvas に揃えられません ({e}) → そのまま保存", scene.scene_id));
+                            g.bytes
+                        }
+                    }
+                })
             }
         };
         // 見出し (opt-in): 生成・合成の後に copy_text を焼く。失敗は焼かずに続行 (画像は残す)。
@@ -235,7 +265,8 @@ mod tests {
                 if Some(n) == self.fail_on {
                     Err(ImageGenError::RateLimited { detail: "quota".into() })
                 } else {
-                    Ok(Generated { mime: "image/png".into(), bytes: format!("png{n}").into_bytes() })
+                    // 実物の PNG を返す (rev6 の canvas 正規化を経路ごとテストするため)。
+                    Ok(Generated { mime: "image/png".into(), bytes: image_gen::solid_backdrop(64, 48, [n as u8, 20, 30]) })
                 }
             })
         }
@@ -314,7 +345,9 @@ mod tests {
         assert_eq!(out.len(), 3);
         assert!(out.iter().all(|s| s.result.is_ok()));
         assert_eq!(p.scenes[0].reference_image.as_deref(), Some("scene_01_ref_01.png"));
-        assert_eq!(fs::read(dir.join("scene_02_ref_01.png")).unwrap(), b"png2");
+        // rev6: mood もプロバイダの寸法・形式でなく canvas に揃う。
+        let m = image::open(dir.join("scene_02_ref_01.png")).unwrap().to_rgba8();
+        assert_eq!(m.dimensions(), (1344, 768), "スナップショットが無い run では base のまま");
         let calls = fake.calls.lock().unwrap();
         assert!(calls[0].0.starts_with("Color palette: #111111. Mood: calm. A desk number 1."));
         assert!(calls[0].0.ends_with(image_gen::SINGLE_FRAME_CLAUSE));
@@ -384,10 +417,13 @@ mod tests {
         let job = RefJob { cfg: &c, api_key: "k", out_dir: &dir, palette: &palette, caption: None, max_scenes: None, seed_base: 0, requested_refs: None, plate_mode: PlateMode::default() };
         let out = generate_references(&Bg, &job, &mut p, &[shot], &mut |_| {}).await;
         assert!(out.iter().all(|r| r.result.is_ok()), "{:?}", out.iter().map(|r| r.result.as_ref().err().map(|e| e.to_string())).collect::<Vec<_>>());
+        // rev6: 1920x1080 のスクショを 0.78 で等倍に置ける canvas まで拡がる (1344x768 では 0.711 倍に縮んでいた)。
+        let (cw, ch) = image_gen::canvas_for_snapshot((1344, 768), (1920, 1080), 0.78, image_gen::CANVAS_MAX_LONG_EDGE);
+        assert!(image_gen::plate_scale((cw, ch), (1920, 1080), 0.78) >= 0.999, "縮小しない canvas: {cw}x{ch}");
         for (i, expected_bg) in [(1u32, [40u8, 40, 40]), (2, [0x11, 0x22, 0x33])] {
             let img = image::open(dir.join(format!("scene_0{i}_ref_01.png"))).unwrap().to_rgba8();
-            assert_eq!(img.dimensions(), (1344, 768));
-            let c = img.get_pixel(672, 384);
+            assert_eq!(img.dimensions(), (cw, ch));
+            let c = img.get_pixel(cw / 2, ch / 2);
             assert_eq!([c[0], c[1], c[2]], [0, 200, 255], "中央は実スクショの画素");
             let e = img.get_pixel(10, 10);
             assert_eq!([e[0], e[1], e[2]], expected_bg, "scene {i} の背景 (2 は fallback の palette 色)");

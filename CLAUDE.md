@@ -98,6 +98,14 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   検査と本文がモードに依存するので `validate_scene_plan` / `scene_prompt` が `PlateMode` を取る。
   傾き 0 は従来の overlay 経路のまま (画素等価を PoC で固定)。CLI `--plate`、GUI は画像タブ。
   crates 117 green / vitest 10 / backend green・clippy clean。**i2v での良し悪しは未実測**。
+- 2026-09-08 **rev6 (出力解像度)**: MiniMax 実測で「判別しにくい文字は作り変えられる」→ canvas 1344×768 が
+  窓 1282×842 より低く、**構造的に必ず 0.711 倍に縮んでいた** (failures #11)。`canvas_for_snapshot` で
+  比率を保ったまま等倍に収まる大きさへ拡げる (実測 1890×1080、縮小率 1.000、長辺上限 3840px)。
+  上限で縮小が残る時は進捗に警告。`fit_to_canvas` で mood カットの JPEG 1376×768 も同寸 PNG に揃える。
+  crates 120 green。**等倍版の i2v 再テストは未実施**。
+- 2026-09-08 **Remotion は採用しない** (ユーザー判断): 北極星「動画そのものは作らない」を守る。
+  検討の記録は `specs/01` の「検討した代案」に (公式 MCP は非推奨・Agent Skills 推奨、ライセンス条件、
+  上流の ScenePlan は貼り先を問わず使える、という事実を含む)。
 - 罠台帳 `failures.md` (#1 RepoBrief の上限単位 / #2 #3 採取スクリプト / #4 401 の再試行ループと「採取できた」の誤読)。
   実測: claude 2.1.223 の stream-json 封筒 (system/init → assistant → result)。Claude デスクトップの
   子セッション内では OAuth が継承されず `authentication_failed` (fixture 化済み)。aider / gemini / codex / Flutter 無し。

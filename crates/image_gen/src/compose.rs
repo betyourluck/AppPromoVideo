@@ -109,6 +109,52 @@ fn round_corners(img: &mut RgbaImage, r: u32) {
     }
 }
 
+/// canvas の上限 (長辺、契約 `compose.canvas_max_long_edge`)。
+pub const CANVAS_MAX_LONG_EDGE: u32 = 3840;
+
+/// スクショを縮小せずに置ける canvas を返す (純粋、契約 `compose.canvas_for_snapshot`、rev6)。
+///
+/// 背景はモデルが描いた柔らかい絵なので拡大しても見えないが、スクショは唯一の硬い情報で、
+/// 縮めると i2v が読めない文字を作り変える (ユーザー実測 2026-09-08、MiniMax)。
+/// だから**縮めるのは背景側でなく canvas を拡げる**。比率は `base` のまま、長辺は上限で止める。
+pub fn canvas_for_snapshot(base: (u32, u32), shot: (u32, u32), screen_ratio: f32, max_long_edge: u32) -> (u32, u32) {
+    let (bw, bh) = (base.0 as f32, base.1 as f32);
+    let (sw, sh) = (shot.0 as f32, shot.1 as f32);
+    if screen_ratio <= 0.0 || bw <= 0.0 || bh <= 0.0 {
+        return base;
+    }
+    // 窓を収めるのに必要な倍率 (1 未満なら拡げない)。
+    let k = ((sw / screen_ratio) / bw).max((sh / screen_ratio) / bh).max(1.0);
+    // 長辺の上限で頭打ちにする。
+    let cap = (max_long_edge as f32 / bw.max(bh)).max(1.0);
+    let k = k.min(cap);
+    // 切り上げ + 偶数化 (動画側のエンコーダは奇数辺を嫌う)。切り捨てると 1px 足りずに縮小が復活する。
+    let up = |v: f32| -> u32 {
+        let n = (v.ceil() as u32).max(1);
+        n + (n & 1)
+    };
+    (up(bw * k), up(bh * k))
+}
+
+/// 実際に適用される縮小率 (1.0 = 等倍。1 未満なら文字が小さくなり i2v が作り変えうる)。
+pub fn plate_scale(canvas: (u32, u32), shot: (u32, u32), screen_ratio: f32) -> f32 {
+    let max_w = canvas.0 as f32 * screen_ratio;
+    let max_h = canvas.1 as f32 * screen_ratio;
+    (max_w / shot.0 as f32).min(max_h / shot.1 as f32).min(1.0)
+}
+
+/// 生成画像を canvas の寸法・PNG に揃える (契約 `compose.fit_to_canvas`、rev6)。
+///
+/// mood カットはプロバイダの出力をそのまま保存していたので、寸法 (Gemini は 1376x768) も形式
+/// (JPEG なのに拡張子は .png) も product カットと食い違っていた。動画は全フレームが同じ寸法でないと困る。
+pub fn fit_to_canvas(bytes: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String> {
+    let img = load(bytes, "生成画像")?;
+    if img.dimensions() == (width, height) && bytes.starts_with(&[0x89, b'P', b'N', b'G']) {
+        return Ok(bytes.to_vec());
+    }
+    Ok(encode_png(&img.resize_to_fill(width, height, FilterType::Lanczos3).to_rgba8()))
+}
+
 /// 単色の背景 (モデルが背景を作れなかった時の fallback。palette の 1 色)。
 pub fn solid_backdrop(width: u32, height: u32, rgb: [u8; 3]) -> Vec<u8> {
     let img = RgbaImage::from_pixel(width, height, Rgba([rgb[0], rgb[1], rgb[2], 255]));
@@ -407,6 +453,34 @@ mod tests {
             })
             .count();
         assert!(shadow_px > 2000, "傾けても影が残る (影の画素 {shadow_px})");
+    }
+
+    #[test]
+    fn fit_to_canvas_normalises_size_and_format() {
+        let jpegish = png(1376, 768, [10, 20, 30]); // 中身は PNG だが寸法が違う
+        let out = fit_to_canvas(&jpegish, 1890, 1080).unwrap();
+        assert_eq!(decode(&out).dimensions(), (1890, 1080));
+        assert!(out.starts_with(&[0x89, b'P', b'N', b'G']), "PNG で返る");
+        // 既に一致していればバイトはそのまま (無駄な再エンコードをしない)。
+        let same = png(100, 100, [1, 2, 3]);
+        assert_eq!(fit_to_canvas(&same, 100, 100).unwrap(), same);
+    }
+
+    /// rev6: canvas が窓より小さいとスクショが必ず縮み、i2v が読めない文字を作り変える
+    /// (ユーザー実測 2026-09-08、MiniMax)。canvas 側を拡げて等倍を守る。
+    #[test]
+    fn canvas_grows_until_the_screenshot_needs_no_downscale() {
+        // 実測の組み合わせ: 1282x842 の窓を 1344x768 の canvas に 0.78 で置くと 0.711 倍だった。
+        let (w, h) = canvas_for_snapshot((1344, 768), (1282, 842), 0.78, 3840);
+        assert!(h as f32 * 0.78 >= 842.0, "縦が窓を収める: {h}");
+        assert!(w as f32 * 0.78 >= 1282.0, "横も収める: {w}");
+        let ar = |(a, b): (u32, u32)| a as f32 / b as f32;
+        assert!((ar((w, h)) - ar((1344, 768))).abs() < 0.01, "比率は保つ: {w}x{h}");
+        // 小さい窓なら拡げない。
+        assert_eq!(canvas_for_snapshot((1344, 768), (640, 400), 0.78, 3840), (1344, 768));
+        // 上限を超える窓は上限で止める (縮小は避けられないが、暴走もしない)。
+        let (bw, bh) = canvas_for_snapshot((1344, 768), (7680, 4320), 0.78, 3840);
+        assert!(bw <= 3840 && bh <= 3840, "上限で止まる: {bw}x{bh}");
     }
 
     #[test]
