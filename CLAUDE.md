@@ -24,6 +24,8 @@
 - **`crates/pipeline`**: IO と結線。RepoBrief の収集 / 2 タスクの実行 / 検査ループ / export / `promo` CLI。
   **出力は run ごとに隔離** (`<pkg>/runs/<run_id>/`)。以前は上書きして過去の生成物を消していた (failures #12)。
 - **`app/`**: Tauri 2 + Vue 3。HTTP とプロセスは全部 backend。進捗は Tauri event で push。
+  identifier は `jp.outcasts.apppromovideo` — **app_data と WebView プロファイルの場所を決めるので、
+  公開後は変えられない** (契約 `AppIdentity`)。localStorage の接頭辞 `apppromo.` はこれとは別物。
   設定は「LLM (CLI 認証委任、キー欄なし)」と「画像生成 (キー必須。ComfyUI は無キー)」を別セクションに。
 
 ## 掟（Mandate）

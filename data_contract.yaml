@@ -260,6 +260,19 @@ ExportPackage:                      # export_dir/<app_name>_Promo_Package/runs/<
     images: "ファイルパス (クリップボードに画像バイトを載せるのは v1 外)"
   scenes_md: "先頭に『各カット = 静止画 1 枚 → image-to-video (MiniMax)』の作法。表に kind (product (snapshot N) | mood)、各シーンに Image / Motion prompt / Video prompt (fallback) / Backdrop / Copy"
 
+AppIdentity:                        # bundle identifier。**app_data の場所と WebView プロファイルを決める**
+  identifier: "jp.outcasts.apppromovideo"   # 兄弟アプリ (jp.outcasts.concordia / .fuseforks) と同じ「末尾 = 製品名」の流儀
+  product_name: "AppPromoVideo"
+  app_data: "%APPDATA%/<identifier>/ — .env (画像 API キー) / settings.json / runs.json / fonts/ / snapshots/"
+  webview_profile: "%LOCALAPPDATA%/<identifier>/EBWebView/ — localStorage の実体"
+  changing_it: |
+    identifier を変えると app_data と WebView プロファイルが**別フォルダ扱いになり、既存の状態が孤児化する**。
+    配布後の変更は使う人の設定・キー・履歴を黙って消すので、**公開前にしか変えられない**。
+    2026-09-08 に jp.outcasts.apppromo → .apppromovideo へ変更 (public 化の直前、ユーザー判断)。移行は Roaming の
+    フォルダ名変更で済ませた。WebView プロファイルは作り直させ、設定は settings.json ミラーから復元させる
+    (ミラーはこの事故のために作った機構 — Kataribe 2026-08-28 実機)。
+  localstorage_prefix: "apppromo. — identifier とは**別物**。今回は揃えていない (揃えると既存キーの移行が要る)"
+
 RunIndex:                           # rev7。アプリが持つ run の索引 (app_data/runs.json)。**キャッシュであって正本ではない**
   why: "run は run_dir で自己完結するが、アプリは複数のリポジトリ・複数の出力先を横断して一覧する必要がある。走査だけでは出力先を変えた過去の run を見失う"
   authority: "正本は run_dir/promo.json。索引が指す run_dir が消えていたら missing として出し、消さない (ユーザーが動かしただけかもしれない)"

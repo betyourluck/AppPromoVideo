@@ -148,3 +148,14 @@ UUID は空にせず `<uuid>` に置き換える — `session_id` が空でな�
 `format!("{:?}")` ではなく **契約の表記** (`16:9` / `ja` / `perspective`) を入れる。
 既存の 2 行は表示専用なのでそのまま残す。比較画像に `max-height: 46vh` を入れてダイアログ内に収めた。
 
+### bundle identifier を jp.outcasts.apppromovideo へ (public 化の直前、ユーザー判断)
+
+`jp.outcasts.apppromo` だった。兄弟アプリ (`jp.outcasts.concordia` / `.fuseforks`) は末尾が製品名なので、
+ここだけ略称になっていた。identifier は **app_data (`%APPDATA%/<id>/`: .env / settings.json / runs.json /
+fonts/ / snapshots/) と WebView プロファイル (`%LOCALAPPDATA%/<id>/EBWebView/`) の場所を決める**ため、
+配布後に変えると使う人の設定・キー・履歴が黙って消える。**公開前にしか変えられない**ので今やった。
+
+移行は Roaming のフォルダ名変更で済ませ、WebView プロファイルは作り直させた
+(設定は settings.json ミラーから復元される — ミラーはこの事故のために作った機構、Kataribe 2026-08-28 実機)。
+localStorage の接頭辞 `apppromo.` は identifier とは別物なので揃えていない (揃えると既存キーの移行が要る)。
+
