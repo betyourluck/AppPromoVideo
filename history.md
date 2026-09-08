@@ -159,3 +159,15 @@ fonts/ / snapshots/) と WebView プロファイル (`%LOCALAPPDATA%/<id>/EBWebV
 (設定は settings.json ミラーから復元される — ミラーはこの事故のために作った機構、Kataribe 2026-08-28 実機)。
 localStorage の接頭辞 `apppromo.` は identifier とは別物なので揃えていない (揃えると既存キーの移行が要る)。
 
+### identifier 移行の live 確認 (ユーザー実機)
+
+新 identifier で起動し、**履歴 3 行が読め、設定も復元された**。WebView プロファイルを移していないので
+localStorage は空から始まったが、リポジトリパス・スナップショット・世界観テキストが戻っている =
+`settings.json` ミラー (Kataribe 2026-08-28 の実機事故を受けて作った機構) が**初めて本番で機能した**。
+同じ画面で rev7 の左右比較 (perspective 19:40 / frontal 21:52、scene 4) も動作。
+
+**観察 (仮説つき)**: frontal の run だけ 1.422 USD で、perspective の 0.919 / 0.944 の約 1.5 倍。
+frontal は `ProductBackdropAngled` の検査が増えるので再生成が発火した可能性が高いが、
+**attempts も違反種別も永続化していないので確認できない**。測るには `RunRecord` に attempts と
+違反種別を持たせる必要がある (未実施)。
+
