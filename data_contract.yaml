@@ -1,0 +1,269 @@
+# data_contract.yaml — AppPromoVideo の名詞台帳 (コードより先に凍結する)
+#
+# 規律: ここに無い名詞はコードに現れない。フィールドを撤去したら、その名前で
+# CLAUDE.md / specs/*.md / doc comment を grep して追従漏れを回収してから完了とする。
+# 移植元: Kataribe (D:/Github/Kataribe) の image_gen.rs / specs 24-27。移植した契約には (Kataribe) と記す。
+
+meta:
+  project: AppPromoVideo
+  frozen: 2026-09-07
+  rev: "rev2 (2026-09-07 ユーザー査読 11 点を反映。specs/01 の『査読の反映』節が対応表)"
+  gui: "Tauri 2 + Vue 3 (2026-09-07 ユーザー決定。構想文の Flutter + flutter_rust_bridge は不採用 — Kataribe の image_gen / 設定 UI がそのまま移植でき、この機体に Flutter が無い)"
+  rust: "edition 2024 / rust-version 1.85 (構想文の Edition 2024 / 1.78 は矛盾。2024 edition は 1.85+)"
+  scope_out:
+    - "動画ファイルのレンダリング・動画生成サービス (Veo / Sora / Runway) との直接連携。成果物は動画生成用プロンプトと参照画像のみ"
+    - "LLM の HTTP API 直接呼び出し (禁止。ローカル CLI のサブプロセスのみ)。画像生成の HTTP (OpenAI Images / Gemini / ComfyUI) は許可 — LLM ではない"
+
+# ---------------------------------------------------------------------------
+# 入力
+# ---------------------------------------------------------------------------
+PromoProject:                       # 1 案件 = 1 リポジトリ。GUI の入力ペインと export の manifest が同じ形を持つ
+  project_path: PathBuf             # 解析対象リポジトリの root (存在必須・ディレクトリ必須)
+  snapshot_paths: Vec<PathBuf>      # UI スナップショット。png/jpg/jpeg/webp のみ (拡張子は大文字小文字を区別しない)。0 枚可
+  video_concept: String             # 動画イメージ / 世界観の指示 (ユーザー編集のシステムプロンプト素材)
+  language: "ja | en"               # コピー・ナレーションの言語。video_prompt は常に英語 (動画生成モデル向け)
+  cli: CliSpec
+  image: ImageGenConfig             # (Kataribe) 非秘密のみ。API キーは app_data/.env
+  export_dir: PathBuf
+
+# ---------------------------------------------------------------------------
+# LLM CLI (サブプロセス)
+# ---------------------------------------------------------------------------
+CliSpec:
+  kind: "claude | aider | custom"
+  executable: String                # 絶対パス or PATH 上の名前。起動前に存在検査 (which 同等) — 無ければ CliError::NotFound
+  extra_args: Vec<String>           # ユーザー追加引数 (例 --dangerously-skip-permissions)。kind 既定引数の後ろに付く
+  timeout_secs: u64                 # 既定 600。最小 30 (それ未満は 30 に切り上げ)
+  model: Option<String>             # claude: --model へ。aider: --model へ。custom: 無視
+
+CliInvocation:                      # build_invocation の戻り。純粋 (プロセスを起動しない) — PoC で固定
+  program: String
+  args: Vec<String>
+  prompt: String                    # 指示本文 (RepoBrief.render() + 指示)。全 kind で引数に載せない (OS の引数長制限とログ漏れ。rev2 査読 1 で aider の例外を撤去)
+  transport: "stdin | message_file" # stdin = claude / custom。message_file = aider (runner が一時ファイルに書き `--message-file <path>` を argv 末尾に足す。aider 公式 -f)
+  cwd: PathBuf                      # app 所有の作業ディレクトリ (app_data/work)。**project_path にしない** — `-p` は cwd の .claude/settings.json の hook と .mcp.json を信頼ダイアログなしで実行する (公式 headless 文書)。解析対象は他人のリポジトリになり得る
+  structured: "json_schema | fenced_json | none"
+  kind: CliKind                     # runner が畳み方 (claude = stream-json / 他 = 生 stdout) を選ぶために持つ
+  env_scrub:                        # 2026-09-08 GUI 実測 (failures #7) 起点。cli_runner::env_scrub
+    always_removed: "CLAUDE_CODE_* / CLAUDE_PREVIEW_* / CLAUDECODE / CLAUDE_PID / CLAUDE_EFFORT / CLAUDE_AGENT_SDK_VERSION — Claude Code がホストとして子に注入する変数。本アプリの子 CLI は独立プロセスなので渡さない (ホストのメッセージングソケットに認証更新を頼む経路を断つ)。ANTHROPIC_* は残す"
+    oauth_only: "CliSpec.oauth_only (GUI 設定『OAuth ログインを使う』) が true なら ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN も外し、claude auth login の OAuth を使わせる。端末の鍵が古い・無効なときの回避 (RunOptions.env_remove)"
+    diagnostics: "check_cli が AuthView {api_key_present, api_key_len, api_key_fingerprint (FNV 12 桁、値は出さない), auth_token_present, base_url, oauth_logged_in, oauth_method, scrubbed[]} を返し、設定 → LLM タブに表示。run 開始時にも同じ 1 行を進捗ログへ"
+    poc: "tests/runner.rs host_coupling_env_is_scrubbed_but_user_config_passes (fake_cli env モード: CLAUDE_CODE_MESSAGING_SOCKET / CLAUDECODE が absent、ANTHROPIC_* 相当が present、env_remove 指定で absent)"
+  invariants:                       # 純関数のテストで固定 (rev2 査読 3)
+    - "allowedTools に Read が入る時は必ず --add-dir <project_path> が付く"
+    - "cwd != project_path (全 kind)"
+    - "本文は argv に現れない (全 kind × schema 有無)"
+    - "--dangerously-skip-permissions / --bare は既定で付けない (--bare は OAuth を使わず ANTHROPIC_API_KEY が要る = 『LLM のキー管理不要』と衝突。ユーザーが extra_args に書いた時だけ)"
+  # kind 別の既定引数 (凍結):
+  #   claude : -p --output-format stream-json --verbose --max-turns N [--model M]
+  #            [--json-schema <schema>] (構造化タスクのみ) --add-dir <project_path>
+  #            --allowedTools Read Glob Grep (リポジトリ走査は CLI に委任 — 2026-09-07 ユーザー決定。Write/Edit/Bash は許可しない)
+  #   aider  : --no-git --yes-always --no-auto-commits [--model M] + (runner が) --message-file <tmp>。`--yes` は存在しない (公式は --yes-always)。未導入のため実機未確認
+  #   custom : 既定引数なし。stdin に本文
+  # 構造化出力: claude = json_schema (result.structured_output — 公式文書で確認済み、stream-json での実データは fixture 採取待ち) + fenced_json フォールバック / aider・custom = fenced_json
+  # fenced_json の規則 (rev2 査読 4): ①最後の ```json フェンスの中身 ②無ければ括弧バランスの取れた最上位 {…} の最後のもの (文字列内の括弧は数えない)
+  #   ③「最初の { から最後の }」は採らない (2 オブジェクトを跨いで拾う — Red で再現済み)。Kataribe failures #29 の no-tools と同型
+  # 走査の深さの差 (rev2 査読 3): RepoBrief は全 kind で同一バイト列 = 最低保証。claude の Read/Glob/Grep による深掘りは**上乗せ**であって別経路ではない。aider は --read <file> で追加ファイルを渡す口を持つが v1 では使わない (RepoBrief が本文に入っている)
+  # 隔離 (rev2): cwd を app_data/work にすることで対象リポジトリの hook / MCP / CLAUDE.md を拾わない。Read の到達範囲は cwd + --add-dir (Claude Code の permission 境界)。この境界の実効性は Phase B live で「--add-dir 外の既知ファイルを読ませて拒否されるか」で確認する
+
+CliEvent:                           # 実行中に Rust から GUI へ push するストリーム (Tauri event "cli-progress")。runner::run の on_event
+  Started { pid: u32 }
+  Stdout { text: String }           # 人が読む断片。claude なら assistant text、他は生の行
+  Stderr { text: String }
+  Progress { text: String }         # 結果に影響しない進捗 (api_retry の retry_notice 等)
+  Structured { json: Value }        # 構造化出力が取れたとき 1 回
+  # Finished は runner::run の戻り値 (Result<RunOk, RunFailed>) で表し、Tauri 層が event に写す
+
+runner:                             # Phase A (2026-09-08 実装・PoC 9 本 + 判定検算 1 本)
+  api: "runner::run(&CliInvocation, RunOptions{timeout, cancel: watch::Receiver<bool>}, on_event) -> Result<RunOk, RunFailed>"
+  transport: "Stdin = 本文を書き切って shutdown (EOF を届ける) / MessageFile = cwd に prompt_<pid>_<nanos>.txt を書き `--message-file <path>` を argv 末尾に足し、終了後に削除 (Drop)"
+  streams: "stdout / stderr を行単位で select! 読み。stderr は末尾 4 KB を保持 (RunFailed.stderr_tail)。claude は parse_line で Text → Stdout / ApiRetry → Progress、他 kind は生行 → Stdout"
+  stop: "timeout / cancel / early_abort (終端 assistant.error) の 3 経路すべて tree_kill で木ごと止めてから wait"
+  fold: "claude = stream::fold_lines (structured は result.structured_output → 無ければ result 文字列の fenced) / aider・custom = 終了コード検査 → 生 stdout 連結 → fenced_json なら救済"
+  not_found: "spawn の io::ErrorKind::NotFound を CliError::NotFound へ (事前の PATH 検索はしない — spawn が唯一の真実)"
+
+CliOutcome:
+  Ok { text: String, structured: Option<Value>, cost_usd: Option<f64>, duration_ms: u64 }
+  Failed { error: CliError, stderr_tail: String }
+
+CliError:                           # 契約 errors。UI はこの列挙で文言を出す (沈黙させない)
+  NotFound { executable: String }   # spawn 前の存在検査 or ENOENT
+  Timeout { secs: u64 }             # kill 済み
+  Cancelled                         # ユーザー中断 (kill 済み)
+  kill_semantics:                   # rev2 査読 8: tokio の child.kill() は Windows で TerminateProcess = 子孫が孤児化する。実装 = tree_kill.rs
+    windows: "Job Object (CreateJobObjectW + KILL_ON_JOB_CLOSE、spawn 直後に AssignProcessToJobObject、止める時は TerminateJobObject)。**2026-09-08 実機 Green** (孫 = fake_cli hang 120 が timeout 後に消える)。限界: spawn〜アタッチの数 µs に生まれた孫は Job 外 (tokio は CREATE_SUSPENDED を出さない)"
+    unix: "process_group(0) で spawn → killpg(SIGTERM) (claude は SIGTERM で実行中 Bash のプロセス木を止めて exit 143 する — 公式) → 猶予 5s → killpg(SIGKILL)。**この機体 (Windows) では未コンパイル・未検証**"
+    poc: "tests/runner.rs timeout_kills_the_whole_tree_including_grandchild (fake_cli grandchild が孫 pid を stdout に出す → timeout 2s → process_alive(pid) == false)。process_alive 自体は自分=true / 終了済み=false で検算 (常に false の実装で通ってしまうのを防ぐ)"
+  ExitStatus { code: Option<i32>, stderr_tail: String }
+  Auth { message: String }          # claude stream-json: assistant.error == "authentication_failed" or result.is_error + 本文 (fixtures/claude_auth_failed.jsonl = 2026-09-07 実測)
+  Shape { detail: String, raw: String }   # stream-json / JSON が読めない。raw 保持 (再生成の燃料)
+
+ClaudeStreamLine:                   # claude -p --output-format stream-json の 1 行 (NDJSON)。既知の type だけ読み、未知は Stdout へ流す (捨てない)
+  system: { subtype: "init | api_retry | hook_started | hook_response | ...", session_id }
+  api_retry: { attempt, max_retries, retry_delay_ms, error_status: Option<u16>, error: "authentication_failed | oauth_org_not_allowed | billing_error | rate_limit | overloaded | invalid_request | model_not_found | server_error | max_output_tokens | unknown" }
+  # 2026-09-08 実測 (fixtures/claude_auth_retry_loop.jsonl、ユーザー端末): 401 は attempt 1..10 (遅延 0.5s→38s、合計約 2.5 分) を回してから assistant(error) + result(is_error) に落ちる
+  early_abort: "runner は行を読むたびに stream::early_abort を評価するが、**api_retry では止めない**。初案『authentication_failed の初回再試行で打ち切る』は同日の成功 fixture (401 × 7 回の再試行の後に成功) で反証された。止めるのは終端の assistant.error (authentication_failed) だけ。再試行は stream::retry_notice で『再試行 n/max (種別, HTTP) — 待ち秒』として進捗ログに出し、待つか中断するかはユーザーが決める"
+  assistant: { message: { content: [ {type: text, text} | ... ], model }, error: Option<String>, is_api_error_message: Option<bool> }
+  result: { is_error: bool, result: String, total_cost_usd: f64, duration_ms: u64, num_turns, terminal_reason: "..." }
+  # --json-schema 使用時の構造化出力は **result.structured_output で確定** (2026-09-08 実測 fixtures/claude_json_schema_ok.jsonl)。`result` 文字列にも同じ JSON が入る。機序: assistant が `StructuredOutput` という tool_use を出し、user 行に tool_result が返り、result 行に載る。--allowedTools に StructuredOutput を書かなくても動いた。無ければ result 本文の fenced_json へ落ちる
+  other_types: "user (tool_result の往復) / rate_limit_event / stream_event (--include-partial-messages 時) は未知 type として Other で素通し (捨てない)。成功 run にも api_retry が混じる (同 fixture: 401 authentication_failed × 7 の後に成功。OAuth 期限切れ + ANTHROPIC_API_KEY ありの環境)"
+  fixture_procedure: "ユーザーの通常端末で `pwsh scripts/capture_claude_fixture.ps1` → scripts/redact_stream.py が cwd/tools/hook 行を伏せて crates/cli_runner/fixtures/claude_json_schema_ok.jsonl に書く → stream::tests に include_str! で焼く。Neo のセッション内では OAuth が継承されず採取不可 (live.claude_stream_20260907)"
+
+# ---------------------------------------------------------------------------
+# パイプライン (LLM が書く物。schemars で JSON Schema を機械生成し --json-schema に渡す = 規格と実装の単一真実源)
+# ---------------------------------------------------------------------------
+RepoBrief:                          # Rust が本文に載せる圧縮マニフェスト (CLI の深掘りの起点。走査本体は CLI が Read/Glob/Grep で行う)
+  purity: "promo_core::brief = 刈り込みと整形だけ (純粋、BriefInputs -> RepoBrief -> render())。FS を読む収集は crates/pipeline (Phase B)。rev2 査読 6"
+  root_name: String
+  tree: String                      # 深さ 3。除外: .git node_modules target dist build .venv __pycache__ *.lock。1 行 100 字超は … で切る
+  tree_truncated: bool
+  readme: Option<String>            # README*.md 先頭
+  readme_truncated: bool
+  manifests: Vec<{ path, head, truncated }>   # Cargo.toml / package.json / pyproject.toml / pubspec.yaml / go.mod / *.csproj の順
+  snapshots: Vec<{ path, width, height }>     # 画像メタ (image crate)。バイトは送らない (v1: CLI は画像を見ない)
+  limits:                           # 全 kind 共通 = 最低保証サイズ (rev2 査読 3)。テストで固定
+    tree_max_lines: 400
+    tree_line_max_chars: 100
+    readme_max_chars: 8000
+    manifest_max_files: 5
+    manifest_max_chars: 2000
+    render_max_chars: 64000         # 最悪 ≈ 59.5k 字。UTF-8 で最大 192 KB、claude の stdin 上限 10 MB の 2 桁下
+    note: "初案 (総量 32 KB) は部分の和 (最悪 36 KB+) より小さく最悪ケースの PoC で落ちた (2026-09-07 Red)。上限は同じ単位 (文字数) で揃え、tree の 1 行にも上限を置いた"
+
+AnalyzedSummary:                    # タスク 1 の出力 (schemars 派生)
+  app_name: String
+  one_liner: String                 # 30 字以内
+  core_value: String
+  target_audience: String
+  differentiators: Vec<String>      # 3〜5
+  hook_copy: String                 # キャッチコピー 1 本
+  visual_identity: VisualIdentity   # スナップショットの記述 (CLI は画像を見ないので v1 は README/テーマ設定からの推定 + ユーザー編集)
+
+VisualIdentity:                     # スタイルアンカー (画像プロンプトの接頭辞素材)
+  palette: Vec<String>              # hex 3〜5。**既定はスナップショットの画素から Rust が算出** (image crate、k-means/ヒストグラム。LLM 不要・純関数) → ユーザー編集。LLM の推定は使わない (rev2 査読 11: README にテーマ色は書かれていない)
+  mood: String                      # 例 "calm, minimal, warm light" (LLM 推定 + ユーザー編集)
+  ui_traits: Vec<String>            # 例 "dark sidebar", "rounded cards" (LLM 推定 + ユーザー編集)
+  ui: "設定ペインで palette は必須欄 (3 色以上)。スナップショット 0 枚なら手入力必須。自動算出は Phase C"
+
+ScenePlan:                          # タスク 2 の出力 (schemars 派生)
+  total_seconds: u32                # 15 / 30 / 60 のいずれか (UI 選択)
+  aspect: "16:9 | 9:16 | 1:1"
+  scenes: Vec<Scene>                # 3〜8
+
+Scene:                              # rev3 (2026-09-08、ユーザー FB「スクショに全く従わない」+ 参考: 画像ファースト → i2v): 画像が主役、動画は画像を動かすだけ
+  cut_kind: "product | mood"        # product = 実スクショの画素を Rust が合成 (モデルは背景だけ描く) / mood = 情景 (モデルが全部描く)。スナップショットがあるなら product が 1 つ以上必須 (validate)
+  snapshot_index: Option<u32>       # product が使うスナップショット (0 始まり、scene_prompt が一覧を示す)。範囲外は違反
+  motion_prompt: String             # 英語 1〜2 文。image-to-video 用に**動きとカメラだけ** (絵の内容は画像が持つ)。空・非英語は違反
+  scene_id: u32                     # 1 始まり連番
+  duration_seconds: u32             # 3〜10
+  shot_type: String                 # Close-up / Medium / Wide / Screen recording 等 (自由文)
+  video_prompt: String              # 英語。動画生成モデル向け。`--ar` を含まない (Midjourney 記法。Veo/Sora の文法ではない — rev2 査読 5)。aspect は ScenePlan が持つ
+  copy_text: String                 # テロップ / ナレーション (language)
+  image_prompt: String              # 静止画 1 枚のプロンプト。**product では背景のみ** (画面・端末・UI・文字の語は validate が弾く = 合成と二重にしない)。mood では絵の全部。参照そのものを指す語 (reference / screenshot / sheet) は書かない (Kataribe failures #85)
+  video_prompt: String              # text-to-video の**保険** (rev3 で主役から降格)。Veo / Sora は指示に従わないのでコピー先から外した (ユーザー実測 2026-09-08)
+  reference_image: Option<PathBuf>  # 生成後に埋まる
+
+# ---------------------------------------------------------------------------
+# 画像生成 (Kataribe image_gen.rs を移植。差分は本節に記す)
+# ---------------------------------------------------------------------------
+ImageGenConfig:                     # (Kataribe) provider / base_url / model / shape / detail / style / user_prefix / negative / workflow_json / timeout_secs / lock_seed / seed
+  provider: "openai | gemini | comfy"
+  shape: "square | landscape | portrait"   # 既定は ScenePlan.aspect から写す (16:9 は landscape)
+  detail: "standard | high | highest"
+  port_plan: "Kataribe の image_gen.rs は Tauri 非依存 (use は std / serde / serde_json のみ、tauri 語 0 件。#[tauri::command] は lib.rs 側) — 2026-09-07 grep 実測。ファイル単位で crates/image_gen/src/provider.rs へ写し、同梱の PoC (#[test] 10 + live 5 = ignored) を**そのまま**持ち込んで green を確認した (2026-09-08) = encode/decode 純関数の入出力同型の証明。**provider.rs は以後も触らない** (Kataribe との diff を追える状態を保つ)。契約差分は generator.rs (trait + ComfyUI の自前待機ループ) / refs.rs / comfy_wait.rs / palette.rs に載せた。provider.rs の image_file_name は未使用 (保存名は promo_core::reference_image_name)。Tauri command は app 側で新規に書く"
+  modules:
+    generator: "ImageGenerator trait { generate(cfg, api_key, prompt, seed, refs, progress) / probe }。HttpImageGenerator = OpenAI/Gemini は provider::generate に委譲、ComfyUI だけ /queue 併読の自前ループ。compose_reference_prompt(prefix, image_prompt, has_refs) = アンカー + 本文 (+ 参照ありなら SINGLE_FRAME_CLAUSE)"
+    palette: "dominant_colors(pixels, n): 4 bit/ch 量子化 → ヒストグラム → 頻度順に RGB 距離 60 未満を統合 → hex。palette_from_file は Nearest で 96px に縮小 (thumbnail の triangle 補間は 2 色画像から第 3 の混色を生んだ — PoC で判明)"
+    style_anchor: "promo_core::style::style_anchor(VisualIdentity) = 『Color palette: #…, #…. Mood: …. UI style: …; …』。palette は extract_hex で #RRGGBB だけ拾う (LLM が説明を混ぜる実例あり)。apply_palette は測った色が空でなければ LLM の値を置き換える"
+    reference: "pipeline::reference::generate_references(generator, RefJob{cfg, api_key, out_dir, palette, ...}, plan, refs, progress) → Vec<SceneImage>。シーン単位で失敗を返し他を続ける。保存名 scene_NN_ref_01.png、plan.scenes[i].reference_image を埋める。**product** = 参照を送らず背景だけ生成 (プロンプト末尾に BACKDROP_CLAUSE『no devices, no screens…』) → composite_product_cut で実スクショ (snapshot_index) を合成。背景生成が失敗したら palette 先頭色の単色背景で合成 (製品カットは provider の都合で落ちない)。**mood** = 従来どおり参照を送って生成"
+    compose: "image_gen::compose::composite_product_cut(background, screenshot, Layout{width, height, screen_ratio 0.78, corner_radius, shadow}) → PNG。背景は cover、スクショは等比縮小 (拡大しない)・角丸・落ち影 (blur 10)・中央。canvas は SizeMap::comfy_dims(shape) (16:9 = 1344×768)。PoC 4 本 (中央画素がスクショと一致 / 角丸 / 等倍維持 / 壊れ入力は Err)。日本語見出しの焼き込みは v1 外 (フォント同梱が要る)。目視 1 枚: Gemini 背景 + Kataribe UI (failures #8)"
+  differences_from_kataribe:
+    - "参照画像 = UI スナップショット。送信順はユーザーの並び順"
+    - "user_prefix の既定 = VisualIdentity から合成したスタイルアンカー (ユーザー編集可)"
+    - "保存名 = scene_{NN}_ref_{MM}.png (export_dir 直下、MM = 同一シーン内の生成通番。rev2 査読 9: 1 シーン複数枚で衝突しない)。Kataribe の {stamp}_{slug}_T{turn} は採らない"
+  reference_limits:                 # rev2 査読 9。上限 (provider::max_refs = Kataribe の凍結値) と既定送信枚数は別の列。実装 = image_gen::refs::select_refs
+    openai: { api_max: 3, kataribe_live: 1, default_send: 1, note: "Kataribe の max_refs は 3。OpenAI 公式の『image[] 最大 16』は本 workspace で未検証なので採らない (rev2 の 16 は誤り — 2026-09-08 移植時のテストで判明)。2 枚以上は Phase C live まで既定にしない" }
+    gemini: { api_max: 3, kataribe_live: 1, default_send: 3, note: "gemini-2.5-flash-image の公式上限 3。inlineData を前置" }
+    comfy:  { api_max: 3, kataribe_live: 1, default_send: 3, note: "%ref_1..3%。ワークフローに差し込み口が無ければ沈黙する (Kataribe #83) → 設定タブで %ref_1% 不在を警告" }
+    rule: "送る枚数 = min(ユーザー選択 or default_send, api_max, 手持ち枚数)。先頭から (ユーザーの並び順)。切り詰めたら Truncated{total, sent, limit_by} を UI に『N 枚のうち先頭 M 枚』と出す (沈黙させない)"
+  caption:                          # 見出し (copy_text) の焼き込み。**opt-in・既定 OFF** (アプリで焼くか手で焼くかはユーザー判断待ち、2026-09-08)
+    fonts: "image_gen::fonts::list_fonts(app_data/fonts) = ユーザーが置いたフォント (User) + OS のフォントフォルダ (System: Windows %WINDIR%\\Fonts と %LOCALAPPDATA%\\Microsoft\\Windows\\Fonts / macOS /System/Library/Fonts, /Library/Fonts, ~/Library/Fonts / Linux /usr/share/fonts 等)。ttf/otf/ttc。TTC は face ごとに 1 件 (index)。ファミリー名は name テーブル (日本語 0x0411 → 英語 → 任意)。has_japanese = 『あ』のグリフ有無。並び = 日本語あり → ユーザー → 名前。実測: この機体で JP 118 / 他 368 面"
+    burn: "image_gen::caption::burn_caption(png, Caption{text, font_data, font_index, size_ratio 0.055, color 白, position top|bottom, margin_ratio 0.06}) — 中央揃え・複数行・落ち影 (黒 190/255、~5% ずらし)・幅 90% に収まるまで縮小 (下限 2%)。ab_glyph でラスタライズ。純粋"
+    wiring: "RefJob.caption: Option<CaptionSpec{font_path, font_index, size_ratio, position}> — 生成・合成の後に scene.copy_text を焼く。フォントが読めない / 焼けない時は焼かずに続行 (画像は残す、進捗に理由)。GUI: 設定 → 画像生成 → 『見出しの焼き込み — 任意』(チェック / フォント一覧 / 高さ比 / 位置 / プレビュー / フォントフォルダを開く)。command list_fonts / open_fonts_folder / caption_preview。CLI: --caption-font 等、`promo caption` / `promo fonts`"
+    poc: "caption 3 本 (空文字は同一 / 壊れフォントは Err / 実フォントで下部帯に文字・上部無傷・200 字でも端を突き抜けない) + fonts 2 本 + settings.test toBackendCaption。目視 1 枚 (BIZ UDゴシック B、demo_product_cut_caption.png)"
+  http: "全て backend (reqwest)。CSP connect-src は localhost のみ。表示は data URL"
+  keys: "**2 層構造を UI で明示** (rev2 査読 2): LLM = CLI 認証委任 (キー欄なし) / 画像 = OpenAI・Gemini はキー必須、ComfyUI は無キー。設定ペインは『LLM (CLI)』と『画像生成 (API キー)』を別セクションにし、『完全無キー』と読める文言を置かない"
+  comfy: "HTTP ポーリング (POST /prompt → GET /history/{id} → GET /view)。WebSocket は v1 外。%prompt% %negative% %seed% %width% %height% %ref_n% の型保持置換 + 未充足 %ref_n% ノードの剪定 (Kataribe #83)"
+  comfy_wait:                       # rev2 査読 7: /history 404 の期間が『実行待ち』か『失敗』か区別できない
+    poll: "1s → 2s → 4s → 上限 5s の指数バックオフ"
+    queue_check: "history 未着の間は GET /queue を併読し、prompt_id が queue_running / queue_pending のどちらにも無く history にも無ければ『消失』として即失敗 (timeout を待たない)。どちらかに在れば『待機中 (前に N 件)』を進捗に出す"
+    timeout: "600s は『queue に居る状態』にも適用 (無限待ちはしない)"
+
+ImageGenError:                      # (Kataribe) Unauthorized / RateLimited{detail} / Blocked{reason} / Timeout{provider} / ComfyNodeError / Api / Network / Shape / Config
+
+ImageGenerator:                     # trait (依存性逆転)。実装 = OpenAiImages / GeminiImages / ComfyUi / テスト用 Fake
+  generate: "(cfg, api_key, prompt, seed, refs) -> Result<Generated, ImageGenError>"
+  probe: "(cfg, api_key) -> Result<String, ImageGenError>"
+
+# ---------------------------------------------------------------------------
+# 出力
+# ---------------------------------------------------------------------------
+ExportPackage:                      # export_dir/<app_name>_Promo_Package/
+  layout:
+    - "promo.json          — { project: PromoProject(パスのみ), summary: AnalyzedSummary, plan: ScenePlan }"
+    - "scenes.md           — シーン構成表 (Markdown 表 + 各シーンの video_prompt 全文)"
+    - "scene_NN_ref_MM.png — 参照画像"
+    - "snapshots/          — 入力スナップショットの写し"
+  clipboard:                        # rev3: MiniMax (画像→動画) 限定 (ユーザー決定 2026-09-08「Veo とかだと指示に従わない」)
+    target: "minimax | generic"     # CopyTarget
+    minimax: "motion_prompt のみ (空なら video_prompt)。画像 (scene_NN_ref_01.png) は MiniMax Design に別途アップロード"
+    generic: "text-to-video の保険: video_prompt + 改行 + '[aspect 16:9 | 5s]'"
+    images: "ファイルパス (クリップボードに画像バイトを載せるのは v1 外)"
+  scenes_md: "先頭に『各カット = 静止画 1 枚 → image-to-video (MiniMax)』の作法。表に kind (product (snapshot N) | mood)、各シーンに Image / Motion prompt / Video prompt (fallback) / Backdrop / Copy"
+
+# ---------------------------------------------------------------------------
+# デスクトップ殻 (spec 01 Phase D、2026-09-08)
+# ---------------------------------------------------------------------------
+DesktopUi:                          # app/ = Tauri 2 + Vue 3 + Pinia。Tailwind は使わず CSS 変数 (data-theme dark/light)
+  layout: "3 ペイン: 左 InputPane (リポジトリ / スナップショット / 世界観 / 尺・比率・言語 / 出力先 / 実行・中断) / 中 ScenePanel (要約・シーン表・参照画像・コピー・export) / 右 LogPanel (event promo-progress)。TitleBar は decorations:false のカスタム (Kataribe 縮約)"
+  commands:                         # app/src-tauri/src/lib.rs。HTTP とプロセスは全部 backend
+    load_ui_settings / save_ui_settings: "settings.json ミラー (接頭辞 apppromo.)"
+    pick_directory / pick_images: "rfd (plugin 不使用、追加権限ゼロ)"
+    brief_preview / validate_snapshot: "LLM ゼロ。RepoBrief の字数・行数、画像ヘッダ検証"
+    check_cli: "<exe> --version を 20 s で。NotFound を実行前に見せる (P3)"
+    run_pipeline / cancel_run: "RunRequest → RunResult{promo, package_dir, analyze, plan, brief_chars}。cancel は watch::Sender (同時 1 run)。cwd = app_data/work (決定 4)"
+    generate_images: "ImagesRequest{promo, package_dir, image: ImageGenConfig, snapshot_paths, max_scenes, requested_refs} → ImagesResult{promo, results, palette, anchor, truncated}。user_prefix 空なら style_anchor を合成"
+    image_data_url: "表示は data URL (CSP img-src data:)。ローカルファイルを WebView に直接見せない"
+    get_image_api_keys / set_image_api_key / probe_image: "キーは app_data/.env、画面には有無 (bool) だけ"
+    open_folder / copy_package: "export 補助"
+  event: "promo-progress {stage: brief|analyze|plan|cli|cli-stderr|images|done|error, text}"
+  snapshots_ux:                     # 2026-09-08 ユーザー FB: ドロップ / 貼り付け / 横並び + 拡大
+    drop: "tauri.conf dragDropEnabled: true → getCurrentWebview().onDragDropEvent の drop.paths (OS のパスが取れる。HTML5 drop はパスを持たないので使わない)。enter/over で帯を強調"
+    paste: "window の paste event → clipboardData.items の image/* File → FileReader.readAsDataURL → base64 を command save_clipboard_image(base64, mime) へ → app_data/snapshots/clip_<ms>.<ext> に保存し snapshot_meta で検証 (壊れていれば消す) → 他のスナップショットと同じパスとして一覧へ"
+    strip: "SnapshotStrip.vue: 横スクロールのサムネイル (data URL)、× で外す、クリックで Lightbox (← → Esc、『この画像を外す』)。参照画像も同じ Lightbox で拡大"
+    pure: "snapshots.ts (mergePaths 重複と非画像の除外 / stripDataUrl / imageFilesFrom / baseName) は vitest 3 本"
+  settings_two_sections: "決定 10 の実装。設定ダイアログは『LLM (CLI)』(キー欄なし、CLI 認証委任の説明) と『画像生成 (API キー)』(OpenAI/Gemini はキー必須・ComfyUI は無キー) の 2 タブ"
+  frontend_settings: "localStorage apppromo.cli / apppromo.image (perProvider スロット = Kataribe spec 26 の写し、toBackendConfig で他プロバイダの値を送らない) / apppromo.project / apppromo.theme。vitest 6 本"
+  clipboard: "navigator.clipboard.writeText (plugin 不使用)。CopyTarget veo|sora|generic は ScenePanel で選ぶ"
+  send_bounds: "Tauri の async command は future 全体に Send を要求 → TaskRunner / ImageGenerator trait を Send + Sync、progress を dyn FnMut + Send、tree_kill unix の Cell を Mutex に (Phase D で判明)"
+  verification: "vue-tsc + vite build green / vitest 6 / src-tauri cargo check・clippy clean・test 3 / GUI の目視はユーザー"
+
+# ---------------------------------------------------------------------------
+# 設定の置き場
+# ---------------------------------------------------------------------------
+config_sources:
+  localStorage: "非秘密 (CliSpec / ImageGenConfig のプロバイダ別スロット (Kataribe spec 26) / 直近の project)"
+  env_file: "app_data/.env — IMAGE_API_KEY_OPENAI / IMAGE_API_KEY_GEMINI (Kataribe と同名)。LLM のキーは持たない (CLI 側の認証に委ねる)"
+  settings_mirror: "app_data/settings.json — localStorage の耐久コピー (Kataribe settings_store と同型。identifier 変更で設定が消える事故の予防)"
+
+# ---------------------------------------------------------------------------
+# 実測ログ (live)
+# ---------------------------------------------------------------------------
+live:
+  claude_stream_20260907: "claude 2.1.223 / -p --output-format stream-json --verbose --json-schema。Claude デスクトップの子セッション内では OAuth が継承されず authentication_failed (fixtures/claude_auth_failed.jsonl)。封筒 = system(init) → assistant → result の 3 段を確認。成功時の構造化出力の置き場は未確認"
+  claude_stream_20260908: "ユーザー端末で scripts/capture_claude_fixture.ps1 を実行 → 401 authentication_failed を 10 回再試行 (約 2.5 分) して is_error (fixtures/claude_auth_retry_loop.jsonl)。親チェーンは WindowsTerminal → explorer で、デスクトップ内端末説は棄却。`claude auth status --text` = Login: Expired (OAuth 期限切れ、ユーザーも対話で承認要求を確認)"
+  claude_stream_20260908_ok: "同日、ユーザーレベル環境変数 ANTHROPIC_API_KEY (Windows の User スコープに設定済み) をプロセスに適用して再実行 → 成功 (fixtures/claude_json_schema_ok.jsonl、13 行、haiku、cost 0.034 USD、78.5 s)。**ただし成功の前に 401 authentication_failed の api_retry が 7 回**ある (期限切れ OAuth で試行 → 途中から API キーに切り替わったと推定、機序は未確認)。-p は OAuth 期限切れでも ANTHROPIC_API_KEY があれば最終的に動くが、再試行の待ち時間 (約 70 s) を払う。ユーザーの端末で 401 のまま落ちた理由 (User スコープの変数が載っていない端末だった可能性) は未分離"
+  pipeline_live_20260908: "promo run D:/Github/Kataribe (README + images/lorekeel_ui.png、--model sonnet --max-turns 12、User スコープ ANTHROPIC_API_KEY 適用、cwd = %TEMP%/apppromo_work、repo は --add-dir)。brief 12,993 字 / tree 188 行。analyze 0.390 USD / 62 s。plan **attempts 2** (初回に違反 1 件 → repair_suffix で再生成 → 通過。種別は当時の CLI が出力しておらず不明、以後は describe_violation を出す) 0.596 USD / 183 s。合計 0.99 USD / 4 分 22 秒。出力 = 7 シーン・尺合計 30 = total_seconds・video_prompt 全英語・copy 日本語・--ar なし。palette は『#15110E (ink, 焦げ茶の黒/背景)』のように hex + 説明の混在 (契約は hex 想定 — Phase C で画素算出に置き換わるので検査は緩いまま)。scene 3 の image_prompt が『upper half / lower half』の分割構図 (LLM の演出意図であり入力参照ではない。#85 の分割とは別物だが、参照画像生成時に分割が出やすい素地として記録)"
+  images_live_20260908: "promo images <Kataribe の promo.json> --images gemini --image-scenes 2 --snapshot lorekeel_ui.png (GEMINI_API_KEY を User スコープから適用、モデル既定 gemini-3.1-flash-lite-image)。17 秒で 2/2 成功、各 450〜550 KB、16:9、1 場面 (分割なし)。palette from pixels = #181808 #483828 #987858 #989898 #F8F8F8 (UI スクショの暗色基調 + 白)。目視: 暖色の暗色基調はアンカーに寄った。**製品 UI そのものは 1 枚にも映らない** (7 シーン全部が情景 → scene_prompt に『UI が映るシーンを最低 1 つ』を追加)。**mood / ui_traits が日本語のまま画像モデルへ渡った** → analysis_prompt で visual_identity を英語に固定。Gemini 参照 1 枚 (max 3 のうちスナップショット 1 枚)。ComfyUI / OpenAI の live は未実施"
+  auth_preflight: "claude auth status --json → { loggedIn: bool, authMethod: none|…, apiProvider } (2026-09-08 実測)。ただし OAuth の状態しか見ない (API キー経路で動く時も loggedIn=false)。runner の起動前検査には『loggedIn=false かつ ANTHROPIC_API_KEY 未設定』の組み合わせだけを『認証なし』として使う"
+  toolchain_20260907: "Rust 1.95 / Node 24.15 / tauri-cli 2.11.3 / claude 2.1.223。aider・gemini・codex・Flutter 無し。ComfyUI 未起動"

@@ -1,0 +1,10 @@
+target/
+app/node_modules/
+app/dist/
+app/src-tauri/target/
+.env
+
+# Tauri が build 時に再生成する (公式テンプレートに準拠)
+app/src-tauri/gen/schemas/
+# サブエージェントの作業メモ置き場 (成果物ではない)
+blackboard/
