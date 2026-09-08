@@ -2,6 +2,7 @@
 #
 # 規律: ここに無い名詞はコードに現れない。フィールドを撤去したら、その名前で
 # CLAUDE.md / specs/*.md / doc comment を grep して追従漏れを回収してから完了とする。
+# `history.md` は追記専用の記録なので回収の対象外 (過去のエントリはその時点の事実として残す)。
 # 移植元: Kataribe (D:/Github/Kataribe) の image_gen.rs / specs 24-27。移植した契約には (Kataribe) と記す。
 
 meta:

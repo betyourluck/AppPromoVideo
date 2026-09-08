@@ -1,12 +1,12 @@
 # CLAUDE — AppPromoVideo
 
-既存アプリのリポジトリと UI スナップショットから、**動画生成 AI (Veo / Sora) に貼れるプロンプト一式と
-参照画像**を出すデスクトップツール。LLM はローカル CLI (claude -p 等) をサブプロセスで叩く。
+既存アプリのリポジトリと UI スナップショットから、**動画生成 AI に貼れるプロンプト一式と参照画像**を出す
+デスクトップツール。LLM はローカル CLI (`claude -p` 等) をサブプロセスで叩く。
 
 ## 北極星
 
 **「貼れば動く出力」。** 訴求文の巧さでなく、動画生成 UI にそのまま貼れる粒度と、スナップショットに
-寄った参照画像の一貫性が売り。動画そのものは作らない (スコープ外を守る)。
+寄った参照画像の一貫性が売り。**動画そのものは作らない (スコープ外を守る)。**
 
 ## アーキテクチャ
 
@@ -15,112 +15,76 @@
 - **`crates/promo_core`** (純関数): data_contract の名詞 / schemars で JSON Schema を機械生成
   (`--json-schema` に渡す。手書き禁止) / RepoBrief の組み立て / プロンプト本文 / export。
 - **`crates/cli_runner`** (tokio::process): argv 組み立てと stream-json 解析は純粋関数で PoC。
-  spawn / 本文の運搬 (stdin か一時ファイル。**argv には載せない**) / stdout・stderr 行ストリーム / timeout /
+  spawn / 本文の運搬 (stdin か一時ファイル。**argv には載せない**) / 行ストリーム / timeout /
   cancel (**子孫ごと kill**: Windows Job Object・Unix pgid)。**LLM の HTTP は禁止。**
   許可ツールは Read / Glob / Grep のみで `--add-dir <repo>` とセット。**cwd は app の作業ディレクトリ**であって
   対象リポジトリではない (`-p` は cwd の hook / MCP を無確認で実行する)。
-- **`crates/image_gen`**: Kataribe (`D:/Github/Kataribe/app/src-tauri/src/image_gen.rs`, specs 24-27) の移植 (Tauri 非依存を確認済み)。
-  `ImageGenerator` trait + OpenAI Images / Gemini / ComfyUI (HTTP ポーリング + `/queue` 併読)。参照画像 = スナップショット。
-- **`crates/pipeline`** (Phase B): IO と結線。RepoBrief の収集 (FS) / 2 タスクの実行 / 検査ループ / export。
+- **`crates/image_gen`**: Kataribe (`D:/Github/Kataribe/app/src-tauri/src/image_gen.rs`, specs 24-27) の移植。
+  `ImageGenerator` trait + OpenAI Images / Gemini / ComfyUI。**`provider.rs` は写しで不触。**
+- **`crates/pipeline`**: IO と結線。RepoBrief の収集 / 2 タスクの実行 / 検査ループ / export / `promo` CLI。
 - **`app/`**: Tauri 2 + Vue 3。HTTP とプロセスは全部 backend。進捗は Tauri event で push。
-  設定は「LLM (CLI 認証委任、キー欄なし)」と「画像生成 (OpenAI / Gemini はキー必須、ComfyUI は無キー)」を別セクションに。
+  設定は「LLM (CLI 認証委任、キー欄なし)」と「画像生成 (キー必須。ComfyUI は無キー)」を別セクションに。
 
 ## 掟（Mandate）
 
 - **データ・ファースト**: コードの前に `data_contract.yaml`（名詞）を凍結する。
 - **PoC 必須**: バグ修正・新機能は Red→Green をテストで実証してから完了。推測修正は不可。
+  **Red を観測していない時はそう申告する。**
 - **リサーチ先行**: 実装前に三点測量（既存コード grep / 仕様 / 記憶）。移植元は Kataribe を先に読む。
-- **撤去したら grep**: 機構・enum 値・フィールドを撤去したら、その名前で全台帳（`CLAUDE.md` / `specs/*.md` /
-  `data_contract.yaml` / doc comment）を grep し追従漏れを回収してから完了。機能の着地時は「どの台帳へ書いたか」を数える。
+- **撤去したら grep**: 機構・enum 値・フィールドを撤去したら、その名前で**全台帳**（下の一覧）を grep し
+  追従漏れを回収してから完了。機能の着地時は「どの台帳へ書いたか」を数える。
+  `history.md` だけは**追記専用**で回収の対象外 — 過去のエントリはその時点の事実として書き換えない。
+- **ユーザーの変更を上書きしない**: 会話の外でコードや設定が変わっていることがある。驚くような差分を
+  見つけたら意図的だと考え、上書きせず確認する。
 - **失敗時に謝罪しない**: 観察 → 仮説棄却 → 次の検証ステップの三段で進む。
 - **層分け**: 仕様・契約はこの file 台帳に書く。Memoria (session `AppPromoVideo`) には蒸留した教訓・判断だけ。
-- **入力を指す語を画像プロンプトに書かない**: 「スクリーンショットに従え」「参照画像のように」は被写体として描かれる (Kataribe #85)。
+- **入力を指す語を画像プロンプトに書かない**: 「スクリーンショットに従え」「参照画像のように」は
+  被写体として描かれる (Kataribe #85)。
+- **`cargo fmt --all` を打たない**: `rustfmt.toml` が無く、既定の 100 桁でリポジトリ全体が整形し直される
+  (実測 2026-09-08、`provider.rs` まで書き換わった)。整形するならファイル単位で。
+
+## 台帳 (どこに何が書いてあるか)
+
+| file | 中身 | 見るとき |
+|---|---|---|
+| `data_contract.yaml` | **名詞と契約**。型・上限・enum・不変条件 | 実装の前。ここが正本 |
+| `specs/NN_*.md` | **決定と Phase**。rev ごとの判断と理由、接地の限界 | なぜそうなっているかを知りたいとき |
+| `failures.md` | **罠台帳**。症状 → 真因 → 処方 → 一般化 | 同じ形の問題に当たったとき |
+| `history.md` | **作業ログ**。いつ何が起きて何が分かったか | 経緯をたどるとき。**読まなくても現状は分かる** |
+| `CLAUDE.md` | この file。北極星 / アーキテクチャ / 掟 / 現状 / 台帳の地図 | 毎回 |
 
 ## 主要コマンド
 
 ```bash
 cargo test --workspace                    # PoC (promo_core + cli_runner + pipeline + image_gen)
-cargo run -q -p pipeline --bin promo -- images <pkg>/promo.json --images gemini --snapshot <png> --image-scenes 2  # 参照画像だけ
 cargo clippy --workspace --all-targets    # lint
-cargo run -q -p pipeline --bin promo -- brief <repo>                       # RepoBrief を見る (LLM ゼロ)
-cargo run -q -p pipeline --bin promo -- run <repo> --concept "..." --snapshot <png> --model sonnet --out <dir>  # live 通し
-cd app && npm install && npm run tauri dev   # GUI (sccache が落ちる時は RUSTC_WRAPPER= を前置)
+cargo run -q -p pipeline --bin promo -- brief <repo>   # RepoBrief を見る (LLM ゼロ)
+cargo run -q -p pipeline --bin promo -- run <repo> --concept "..." --snapshot <png> --model sonnet \
+  --plate perspective|frontal --images gemini --out <dir>          # live 通し
+cargo run -q -p pipeline --bin promo -- images <pkg>/promo.json --images gemini --snapshot <png>  # 参照画像だけ
+cd app && RUSTC_WRAPPER= npm run tauri dev   # GUI
 cd app && npx vitest run && npm run build    # frontend の単体テストと型検査
 cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 ```
 
-## 現状
+## 現状 (2026-09-08)
 
-- 2026-09-07: リサーチ → ユーザー決定 (Tauri+Vue / 走査は CLI 委任) → 台帳凍結 → spec 01 Phase 0 着地 →
-  **ユーザー査読 11 点を rev2 に反映** (promo_core 20 + cli_runner 15 = 35 green・clippy clean。image_gen / pipeline / app は未作成)。
-  次 = ユーザー端末で `pwsh scripts/capture_claude_fixture.ps1` (成功 fixture) → Phase A。
-- 2026-09-08: fixture 採取スクリプトがユーザー実行で 2 段落ち (PowerShell `2>` の二重オープン + 残留 claude.exe /
-  Start-Process の引用符欠落) → `failures.md` #2 #3 に記録し修正。本セッションでは認証で落ちるところまで確認済み。
-  **成功 fixture はユーザー端末での `pwsh scripts/capture_claude_fixture.ps1` 待ち** (Phase A の前提)。
-- 2026-09-08 (2 回目): ユーザー端末の採取も 401 × 10 回再試行 (2.5 分) で失敗 → 失敗ログを fixture 化し、`ApiRetry` 解析と
-  `retry_notice` (再試行を進捗に出す) を追加。原因 = CLI の OAuth 期限切れ。**User スコープの `ANTHROPIC_API_KEY` を適用して
-  成功 fixture を採取** (`claude_json_schema_ok.jsonl`) → `structured_output` 確定。**Phase A の前提が揃った。**
-  反証 1 件: 成功 run にも 401 の再試行が 7 回混じる → 「認証再試行の初回で打ち切る」案は撤回 (failures #4)。
-- 2026-09-08 **Phase A Done** (Windows 実機): `cli_runner::runner::run` (spawn / stdin・一時ファイル / 行ストリーム / timeout /
-  cancel / 終端 auth で打ち切り) + `tree_kill` (Job Object。孫が timeout 後に消えるのを PoC で固定) + `fake_cli` 7 モード。
-  workspace 50 green。Unix の pgid 経路は未コンパイル。
-- 2026-09-08 **Phase B Done**: `crates/pipeline` (collect / TaskRunner trait / stages の再生成ループ / export / `promo` CLI) +
-  promo_core の prompts・export。65 green。**live 1 本** (Kataribe、sonnet): 0.99 USD / 4 分 22 秒、7 シーン、再生成 1 回発火。
-- 2026-09-08 **Phase C Done**: `crates/image_gen` (provider.rs = Kataribe の写し・不触 / generator trait / refs / comfy_wait /
-  palette) + promo_core style + pipeline reference + `promo images`。93 green (+ live 5 ignored)。**live: Gemini 2/2 (17 s)**。
-  live から visual_identity の英語固定と「UI が映るシーンを最低 1 つ」を追加。ComfyUI / OpenAI の live は未実施。
-- 2026-09-08 **Phase D 実装**: `app/` (Tauri 2 + Vue 3)。16 command / event `promo-progress` / 設定 2 タブ (LLM = CLI 認証委任、
-  画像 = API キー) / perProvider スロット / settings.json ミラー。vue-tsc・vite build・vitest 6・src-tauri check・clippy・test 3 green。
-  trait に Send 境界を追加 (Tauri async command の要求)。
-- 2026-09-08 GUI FB: スナップショットのドロップ / Ctrl+V / 横並び + 拡大 (SnapshotStrip / Lightbox)。**GUI からの実行が 401** →
-  7 通りの切り分けで未再現 (failures #7)、有力仮説 = 起動元端末の `ANTHROPIC_API_KEY` が別物。処方 = `cli_runner::env_scrub`
-  (ホスト結合変数を子に渡さない) + 設定に認証診断 + 『OAuth ログインを使う』チェック → **OAuth ON で通過 (端末の鍵が無効で確定)**。
-- 2026-09-08 **rev3**: 「スクショに全く従わない」→ 製品カットは**モデルが背景、Rust が実スクショを合成** (`image_gen::compose`)。
-  カット = product | mood、`motion_prompt` (i2v 用)、コピー先は MiniMax 限定 (Veo / Sora は指示に従わない)。102 green。
-  **live 成功 (Fuseforks → MiniMax i2v、ユーザー「綺麗にできた」)** = P1 + P2 が初めて同時に成立。
-  次 = Phase E (別リポジトリで再現 / v2 候補: 斜め置き合成・mood の一貫性・motion の粒度)。未コミット。
-- 2026-09-08 **見出しの焼き込み (opt-in・既定 OFF)**: `image_gen::fonts` (システム + app_data/fonts) + `image_gen::caption` (ab_glyph)。
-  GUI 設定にフォント一覧・プレビュー。アプリで焼くか手で焼くかはユーザーのアンケート待ち。107 green。
-- 2026-09-08 **Phase E rev4** (別リポジトリでの再現): `promo brief` を 7 リポジトリに当てたら RepoBrief の tree が
-  生成物で埋まった。**tree の出所を `git ls-files` に**、追跡された生成物は**機械生成名で 1 行に畳む**、
-  **鍵に見える名前は tree に載せない** (`collect.rs`。契約 `RepoBrief.tree_source`)。件数による畳み込みは
-  実装前に棄却 (Fuseforks specs/ 52 と outcast .sqlx/ 49 は 3 件差)。実測: mxf-tool 314→51 /
-  CC-Sakura 400(切り捨て)→122 / outcast 280→214。crates 112 green。
-  **live (Verificator、sonnet、snapshot 0 枚)**: analyze 0.2857 USD/27.9 s + plan **attempts 1** 0.2710 USD/81.8 s
-  = 0.557 USD / 110 s、6 シーン。解析は Python コアの中身 (PyAV インメモリ / Fraction の 2 ポインタ結合 /
-  1 パーセンタイル検出) を正しく拾った。**別リポジトリで LLM 2 段は一発通過** = 一般化を確認。
-  合成カットはスナップショット待ち (兄弟リポジトリに実 UI 画像が無く、GUI も素の vite では描けない)。
-  **反証: 「子セッションでは CLI の認証が継承されない」は現行 CLI では成立しない** — `claude -p` が通る
-  (failures #4 / #7 の記述は 2.1.223 時点のもの)。
-- 2026-09-08 **rev5 (面の傾き)**: Phase E の合成 live で、背景がローアングルなのに貼った UI が正対のままだった
-  (failures #10)。`Scene.plate_tilt` (yaw/pitch ±35 度) を LLM が書き、`PlateMode` で貼り方を切り替える —
-  **perspective** (既定、射影変換で面を倒す) / **frontal** (正対固定 + 背景のアングル語を検査で弾く)。
-  検査と本文がモードに依存するので `validate_scene_plan` / `scene_prompt` が `PlateMode` を取る。
-  傾き 0 は従来の overlay 経路のまま (画素等価を PoC で固定)。CLI `--plate`、GUI は画像タブ。
-  crates 117 green / vitest 10 / backend green・clippy clean。**i2v での良し悪しは未実測**。
-- 2026-09-08 **rev6 (出力解像度)**: MiniMax 実測で「判別しにくい文字は作り変えられる」→ canvas 1344×768 が
-  窓 1282×842 より低く、**構造的に必ず 0.711 倍に縮んでいた** (failures #11)。`canvas_for_snapshot` で
-  比率を保ったまま等倍に収まる大きさへ拡げる (実測 1890×1080、縮小率 1.000、長辺上限 3840px)。
-  上限で縮小が残る時は進捗に警告。`fit_to_canvas` で mood カットの JPEG 1376×768 も同寸 PNG に揃える。
-  crates 120 green。**等倍版の i2v 再テストは未実施**。
-- 2026-09-08 **Remotion は採用しない** (ユーザー判断): 北極星「動画そのものは作らない」を守る。
-  検討の記録は `specs/01` の「検討した代案」に (公式 MCP は非推奨・Agent Skills 推奨、ライセンス条件、
-  上流の ScenePlan は貼り先を問わず使える、という事実を含む)。
-- 罠台帳 `failures.md` (#1 RepoBrief の上限単位 / #2 #3 採取スクリプト / #4 401 の再試行ループと「採取できた」の誤読)。
-  実測: claude 2.1.223 の stream-json 封筒 (system/init → assistant → result)。Claude デスクトップの
-  子セッション内では OAuth が継承されず `authentication_failed` (fixture 化済み)。aider / gemini / codex / Flutter 無し。
-- 詳細は `specs/01_promo_pipeline.md` と `data_contract.yaml`。
+- **spec 01 は Phase 0〜E 着地、rev6 まで反映済み。** crates 120 green / vitest 10 / backend 3 green・clippy clean。
+- コミットは Initial `a75c3bc` の上に 8 本。working tree clean、**未 push**。
+- 通し (解析 → 構成 → 参照画像 → 合成) は **3 リポジトリで live 成功** (Kataribe / Verificator / AppPromoVideo 自身)。
+- CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
 
-## 再開の手順 (2026-09-08 /sleep 時点)
+**開いている判断**
 
-1. `cargo test --workspace` (crates 108 green) と `cd app && npx vitest run` (10 green) で足場を確認。
-2. **未コミット** (Initial commit 以来ゼロ)。作業前に `git add -A && git commit` で区切るのが安全。
-3. 開いている判断: 見出し焼き込みの既定 (ユーザーのアンケート待ち、機構は opt-in で入っている)。
-4. 次: **Phase E の live 通しをユーザー端末で** — 別リポジトリ (outcast / Verificator が候補) + UI スナップショット 1 枚。
-   スナップショットは各リポジトリに無い (README の画像はロゴ・マスコットだった) ので**撮影が要る**。
-   その後の候補: 傾けた絵を MiniMax i2v に通して perspective / frontal を実測 / mood カットの一貫性 / motion の粒度。
-5. GUI 起動は `cd app && RUSTC_WRAPPER= npm run tauri dev`。CLI の認証は設定「OAuth ログインを使う」ON が確実 (failures #7)。
+1. **`PlateMode` の既定** — perspective (面を傾ける) と frontal (正対固定) を両方実装済み。
+   等倍 1890×1080 の対を MiniMax i2v に通した結果待ち。
+2. **見出し焼き込みの既定** — 機構は opt-in・既定 OFF で入っている。ユーザーのアンケート待ち。
 
-## 台帳
+**次の候補**: 傾きと可読性の境目 (角度を上げるとどこで文字が壊れるか) / mood カットのモチーフ一貫性 /
+MiniMax 向け `motion_prompt` の粒度 / ComfyUI と OpenAI の live / Unix の `tree_kill` / `--add-dir` 外 Read の拒否確認。
 
-- `data_contract.yaml` — 名詞。`specs/NN_*.md` — 機能ごとの決定と Phase。`failures.md` — 罠台帳 (最初の罠が出たら作る)。
+## 再開の手順
+
+1. `cargo test --workspace` (120 green) と `cd app && npx vitest run` (10 green) で足場を確認。
+2. `git log --oneline -5` で直前の着地を見る。詳しい経緯は `history.md`。
+3. 上の「開いている判断」に答えが来ていないか確認してから着手する。
