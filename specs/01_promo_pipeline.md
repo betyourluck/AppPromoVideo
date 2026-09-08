@@ -175,8 +175,16 @@ Claude デスクトップの子セッションでは継承されないため (fa
     - **傾き 0 は従来の overlay 経路をそのまま通す** (画素等価を PoC で固定)。既存 4 本の PoC を壊さない。
 23. 経路は CLI (`--plate perspective|frontal`) と GUI 設定 (画像タブ「製品カットの画面の貼り方」) の両方から。
 
+**live 検算 (2026-09-08、AppPromoVideo 自身 + 実 GUI スクショ)**: analyze 0.2903 USD / 48 s、
+plan **attempts 2** (再生成の理由は既存の `ProductBackdropDrawsScreen` = 背景に `screen` が 3 シーン混じった) 0.4237 USD / 135 s、
+images 3/3。LLM の傾き指定は意味と一致した — scene 2 `Top-down view` → yaw -10 / pitch -20、
+scene 5 `three-quarter angle` → yaw +18 / pitch -12、正対の背景 (scene 4) は `plate_tilt` null。
+合成結果は上辺が狭く下辺が広い、机に画面が寝た絵になった。
+
 **接地の限界**: 傾けた絵を MiniMax の i2v に通した検証はまだ無い。①傾ける と ②正面固定 のどちらが動画として
 良いかは未決で、だから両方を残した。傾けると画面内の文字は読みにくくなる — 許容範囲は未実測。
+スクショ自身が持つ 1px の窓枠が、傾けるとエッジで階段状に見える (バイリニアの範囲では消えない)。
+影は残っている (実測: 正対 76,476 px / 傾き 66,446 px) が、暗い背景では見えない。
 
 ## 査読の反映 (2026-09-07、ユーザー査読 11 点)
 

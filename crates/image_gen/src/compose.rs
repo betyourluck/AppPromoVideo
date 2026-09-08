@@ -392,6 +392,24 @@ mod tests {
     }
 
     #[test]
+    fn a_tilted_plate_still_casts_a_shadow_outside_its_own_outline() {
+        let bg = png(400, 300, [200, 200, 200]); // 明るい背景 = 影が見える
+        let shot = png(1600, 1000, [255, 0, 200]);
+        let layout = Layout::for_canvas(1344, 768).with_tilt(Tilt { yaw_degrees: 18.0, pitch_degrees: -14.0 });
+        let out = decode(&composite_product_cut(&bg, &shot, &layout).unwrap());
+        // 背景色でも面の色でもない画素 = 影。1 枚のどこかに必ずある。
+        let shadow_px = (0..out.height())
+            .flat_map(|y| (0..out.width()).map(move |x| (x, y)))
+            .filter(|&(x, y)| {
+                let p = out.get_pixel(x, y);
+                let c = [p[0], p[1], p[2]];
+                c != [200, 200, 200] && c != [255, 0, 200] && c[0] < 200 && c[1] < 200
+            })
+            .count();
+        assert!(shadow_px > 2000, "傾けても影が残る (影の画素 {shadow_px})");
+    }
+
+    #[test]
     fn zero_tilt_takes_the_untilted_path_and_stays_pixel_identical() {
         let bg = png(400, 300, [40, 40, 40]);
         let shot = png(1920, 1080, [255, 0, 200]);
