@@ -160,6 +160,14 @@ describe("pickCaptionFont (見出しの自動選択)", () => {
     expect(found?.family).toBe("SomeBrandFont");
   });
 
+  it("優先語に当たったものは、何にも当たらないものより必ず強い", () => {
+    // スコアが 100 - index*10 だったので、リストの末尾 ("sans") に当たると -10 になり、
+    // 何にも当たらない 0 に負けていた。実例: "Noto Sans CJK JP" は "noto sans jp" に
+    // 当たらず ("cjk" が挟まる) "sans" にだけ当たる。
+    expect(pickCaptionFont([f("Aharoni Bold"), f("Noto Sans CJK JP")])?.family).toBe("Noto Sans CJK JP");
+    expect(pickCaptionFont([f("Aharoni Bold"), f("Some Gothic")])?.family).toBe("Some Gothic");
+  });
+
   it("同点なら family 名で決める (実行のたびに変わらない)", () => {
     const a = pickCaptionFont([f("Zeta Gothic"), f("Alpha Gothic")]);
     const b = pickCaptionFont([f("Alpha Gothic"), f("Zeta Gothic")]);

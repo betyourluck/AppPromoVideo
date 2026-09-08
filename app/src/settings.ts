@@ -374,8 +374,10 @@ export function pickCaptionFont(fonts: FontEntry[]): FontEntry | null {
   const score = (e: FontEntry): number => {
     const n = e.family.toLowerCase();
     let s = e.source === "user" ? 1000 : 0;
+    // 当たったものは必ず 0 より上に出す (末尾に当たって負に落ちると、
+    // 何にも当たらないフォントに負ける。実例: "Noto Sans CJK JP" は "sans" にしか当たらない)。
     const hit = PREFER.findIndex((k) => n.includes(k));
-    if (hit >= 0) s += 100 - hit * 10;
+    if (hit >= 0) s += (PREFER.length - hit) * 10;
     if (AVOID.some((k) => n.includes(k))) s -= 50;
     if (n.includes("bold") || n.includes("b ")) s += 5; // 焼き込みは太い方が読める
     return s;

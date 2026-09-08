@@ -254,9 +254,13 @@ scene 5 `three-quarter angle` → yaw +18 / pitch -12、正対の背景 (scene 4
     選べなければ焼かずに進み、理由を進捗に出す。
 34. 解決の場所は `store.ensureCaptionFont()` = `makeImages()` の先頭。設定画面を一度も開かなくても効く。
 
-**接地の限界**: 既定 ON にした状態での live は未実施。自動選択が実機でどの family を引くかも未確認
-(手元の Windows 11 には Noto Sans JP / Yu Gothic / Meiryo / BIZ UDGothic / MS Gothic があるので
-Noto Sans JP が来るはずだが、`has_japanese` の判定を通った実際の一覧では確認していない)。
+**live 確認 (2026-09-08、ユーザー実機)**: 見出しが正しく焼かれた
+(`シーン構成もプロンプトも、まとめて出力。` / 1886×1886 の 1:1 canvas / 上寄せ / 白 + 落ち影)。
+**開いている判断 2 は完全に決着。**
+
+**接地の限界**: 自動選択の経路は**まだ通っていない** — ユーザーが設定画面で `NotoSansCJKjp-Black.otf` を
+手で選んだため。`pickCaptionFont` が実機で何を引くかは、フォント未選択の状態で 1 回走らせるまで未確認
+(実データ 118 件に対して関数単体では `Noto Sans JP` を返すことは確認済み)。
 
 ## 検討した代案: Remotion (2026-09-08、採用しない)
 
