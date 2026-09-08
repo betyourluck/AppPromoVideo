@@ -179,6 +179,9 @@ async function drop(dir: string, files: boolean) {
 }
 .cmp img {
   width: 100%;
+  /* ダイアログ (88vh) の中に表・見出しと一緒に収める。はみ出すと左右を見比べられない。 */
+  max-height: 46vh;
+  object-fit: contain;
   border-radius: 6px;
   display: block;
 }

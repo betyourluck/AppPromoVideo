@@ -140,3 +140,11 @@ perspective / frontal の対を作った時が初めて。その時は手で別�
 UUID は空にせず `<uuid>` に置き換える — `session_id` が空でないことを前提にしたテストがあるため。
 潰した後も workspace 122 green。API キー本体は元から入っていない (`apiKeySource` の名前だけ)。
 
+### rev7 の live 確認 (ユーザー実機)
+
+同じアプリを 2 回実行して履歴に 2 行 (19:36 / 19:40、4 と 5 シーン、どちらも gemini、0.944 / 0.919 USD)。
+**上書きは起きず、左右比較も描画された。** スクリーンショットから回帰を 1 件回収 — 「面」列が
+`Perspective` (Rust の識別子) で出ていた。`RunRecord` の aspect / language / plate_mode は
+`format!("{:?}")` ではなく **契約の表記** (`16:9` / `ja` / `perspective`) を入れる。
+既存の 2 行は表示専用なのでそのまま残す。比較画像に `max-height: 46vh` を入れてダイアログ内に収めた。
+

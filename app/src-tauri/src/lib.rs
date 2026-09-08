@@ -407,9 +407,9 @@ async fn run_inner(app: &AppHandle, cancel: watch::Receiver<bool>, req: RunReque
             package_dir: package_dir.to_string_lossy().to_string(),
             run_dir: dir.to_string_lossy().to_string(),
             seconds: req.seconds,
-            aspect: format!("{:?}", req.aspect),
-            language: format!("{:?}", req.language),
-            plate_mode: format!("{:?}", req.plate_mode),
+            aspect: wire(&req.aspect),
+            language: wire(&req.language),
+            plate_mode: wire(&req.plate_mode),
             scene_count: promo.plan.scenes.len(),
             cost_usd: r1.cost_usd + r2.cost_usd,
             image_provider: None,
@@ -539,13 +539,23 @@ async fn generate_images(app: AppHandle, req: ImagesRequest) -> Result<ImagesRes
             Err(e) => SceneImageInfo { scene_id: r.scene_id, ok: false, path: None, error: Some(e.to_string()) },
         })
         .collect();
-    update_run_images(&app, &req.package_dir, format!("{:?}", cfg.provider).to_lowercase(), &results);
+    update_run_images(&app, &req.package_dir, wire(&cfg.provider), &results);
     Ok(ImagesResult { promo, results, palette, anchor, truncated })
 }
 
 // ---------------------------------------------------------------------------
 // run の履歴 (契約 RunIndex / RunRecord、rev7)
 // ---------------------------------------------------------------------------
+
+/// 契約の表記 (serde の値) を文字列で取る。`format!("{:?}")` は Rust の識別子であって契約ではない —
+/// `Aspect::Landscape` の契約表記は `16:9`、`PlateMode::Perspective` は `perspective`。
+fn wire<T: Serialize>(v: &T) -> String {
+    match serde_json::to_value(v) {
+        Ok(serde_json::Value::String(s)) => s,
+        Ok(other) => other.to_string(),
+        Err(_) => String::new(),
+    }
+}
 
 fn now_unix_ms() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
@@ -843,6 +853,23 @@ mod copy_name_tests {
         // rev6 以前のパッケージ (runs を挟まない) はそのままの名前。
         let legacy = Path::new("D:/out/Task_Flow_Promo_Package");
         assert_eq!(copy_target_name(legacy).as_deref(), Some("Task_Flow_Promo_Package"));
+    }
+}
+
+#[cfg(test)]
+mod wire_tests {
+    use super::wire;
+    use promo_core::plan::{Aspect, PlateMode};
+    use promo_core::prompts::Language;
+
+    /// 履歴に残すのは Rust の識別子ではなく契約の表記 (GUI で `Perspective` と出ていた回帰)。
+    #[test]
+    fn record_keeps_contract_spelling_not_debug_names() {
+        assert_eq!(wire(&Aspect::Landscape), "16:9");
+        assert_eq!(wire(&Aspect::Portrait), "9:16");
+        assert_eq!(wire(&Language::Ja), "ja");
+        assert_eq!(wire(&PlateMode::Perspective), "perspective");
+        assert_eq!(wire(&PlateMode::Frontal), "frontal");
     }
 }
 

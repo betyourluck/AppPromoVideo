@@ -274,9 +274,9 @@ RunRecord:
   package_dir: String               # <export_dir>/<app>_Promo_Package
   run_dir: String                   # package_dir/runs/<id>
   seconds: u32
-  aspect: Aspect
-  language: Language
-  plate_mode: PlateMode
+  aspect: String                    # 表示用。**契約の表記**で入れる ("16:9")。Rust の識別子 ("Landscape") ではない
+  language: String                  # 同上 ("ja")
+  plate_mode: String                # 同上 ("perspective")。GUI に "Perspective" と出ていたのを 2026-09-08 に修正
   scene_count: usize
   cost_usd: f64                     # analyze + plan の合計
   image_provider: Option<String>    # 参照画像を作ったなら "gemini" 等
