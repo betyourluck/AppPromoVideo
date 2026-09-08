@@ -221,7 +221,10 @@ ImageGenConfig:                     # (Kataribe) provider / base_url / model / s
       `pickCaptionFont` (frontend の純関数) が自動で選ぶ。規律は 4 つ:
         ①日本語グリフ必須 (copy_text は日本語)
         ②app_data/fonts に置いたもの (source=user) を最優先 — 意図して置いたものより機械の推測を上に置かない
-        ③**太めのゴシックを優先**。画像に焼くので、細い明朝・教科書体は写真の上で読めない
+        ③**太めのゴシックを優先**。画像に焼くので、細い明朝・教科書体は写真の上で読めない。
+           優先語には**日本語表記を必ず入れる** — 実測 (Windows 11、日本語あり 118 件) で
+           游ゴシック / メイリオ は日本語名で登録されており、ASCII の "yu gothic" / "meiryo" では
+           一生当たらない。半角カナ (HGPｺﾞｼｯｸE) も見る
         ④同点は family 名で決める (実行のたびに変わらない)
       選べなければ**焼かずに進み**、理由を進捗に出す (画像は出す)。fontPath は空のまま保存され、
       toBackendCaption が null を返すので backend には渡らない。

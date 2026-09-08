@@ -135,6 +135,22 @@ describe("pickCaptionFont (見出しの自動選択)", () => {
     expect(found?.family).toBe("Yu Gothic Bold");
   });
 
+  it("family 名が日本語のフォントを取りこぼさない (実機の Windows 11 の顔ぶれ)", () => {
+    // 実測 2026-09-08: 游ゴシック / メイリオ は**日本語名**で登録されている。
+    // ASCII の "yu gothic" / "meiryo" だけを見ていると一生当たらない。
+    expect(pickCaptionFont([f("游明朝"), f("HGP教科書体"), f("游ゴシック")])?.family).toBe("游ゴシック");
+    expect(pickCaptionFont([f("HGP明朝B"), f("メイリオ")])?.family).toBe("メイリオ");
+    // 半角カナの ｺﾞｼｯｸ も拾う (HG シリーズ)。
+    expect(pickCaptionFont([f("HGP行書体"), f("HGPｺﾞｼｯｸE")])?.family).toBe("HGPｺﾞｼｯｸE");
+    // 本命: 日本語名のゴシックが、優先語に当たらない ASCII 名に負けないこと。
+    // 同点だと localeCompare で ASCII が先に来るので、優先語に日本語が無いと必ず負ける。
+    expect(pickCaptionFont([f("Aharoni Bold"), f("游ゴシック")])?.family).toBe("游ゴシック");
+    expect(pickCaptionFont([f("Aharoni Bold"), f("メイリオ")])?.family).toBe("メイリオ");
+    expect(pickCaptionFont([f("Aharoni Bold"), f("BIZ UDゴシック")])?.family).toBe("BIZ UDゴシック");
+    // ゴシックが何も無ければ明朝でも返す (焼けないよりまし)。
+    expect(pickCaptionFont([f("游明朝")])?.family).toBe("游明朝");
+  });
+
   it("明朝しか無ければ諦めずにそれを返す (焼けないより焼ける方がよい)", () => {
     expect(pickCaptionFont([f("Yu Mincho")])?.family).toBe("Yu Mincho");
   });

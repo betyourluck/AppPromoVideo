@@ -351,9 +351,25 @@ export function save(key: string, value: unknown): void {
  * 細い明朝や教科書体は写真の上で読めない ④同点は family 名で決める (実行のたびに変わらない)。
  */
 export function pickCaptionFont(fonts: FontEntry[]): FontEntry | null {
-  // 左ほど強い。実機 (Windows 11) にあった顔ぶれから選んだ。
-  const PREFER = ["noto sans jp", "yu gothic", "meiryo", "biz udgothic", "ms gothic", "gothic", "sans"];
-  const AVOID = ["mincho", "明朝", "serif", "kyokasho", "教科書", "brush", "script"];
+  // 左ほど強い。実機 (Windows 11、日本語あり 118 件) の family 名から選んだ。
+  // **日本語名を必ず入れる**: 游ゴシック / メイリオ は日本語名で登録されており、
+  // ASCII の "yu gothic" / "meiryo" だけでは一生当たらない (実測 2026-09-08)。
+  const PREFER = [
+    "noto sans jp",
+    "游ゴシック",
+    "yu gothic",
+    "メイリオ",
+    "meiryo",
+    "biz udゴシック",
+    "biz udgothic",
+    "ms gothic",
+    // 総称。半角カナ (HG シリーズ) も見る。
+    "ゴシック",
+    "ｺﾞｼｯｸ",
+    "gothic",
+    "sans",
+  ];
+  const AVOID = ["mincho", "明朝", "serif", "kyokasho", "教科書", "行書", "ポップ", "ﾎﾟｯﾌﾟ", "brush", "script"];
 
   const score = (e: FontEntry): number => {
     const n = e.family.toLowerCase();

@@ -153,7 +153,7 @@ mod tests {
         let a = run_id_from(1_757_000_000_000, &[]);
         assert_eq!(a, "20250904-153320", "UTC 固定 (再現可能にするため): {a}");
         // 同じ秒に 2 本目が来たら -2、3 本目は -3。
-        let b = run_id_from(1_757_000_000_000, &[a.clone()]);
+        let b = run_id_from(1_757_000_000_000, std::slice::from_ref(&a));
         assert_eq!(b, format!("{a}-2"));
         let c = run_id_from(1_757_000_000_000, &[a.clone(), b.clone()]);
         assert_eq!(c, format!("{a}-3"));
