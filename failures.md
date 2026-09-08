@@ -191,3 +191,45 @@ ScenePlan に `cut_kind: product|mood` / `snapshot_index` / `motion_prompt` を�
 
 **接地の限界**: 合成の目視は Neo 側 (Gemini 背景 + Kataribe UI で 1 枚)。実 run (LLM が product カットを
 選び、背景だけ描く) の live は未実施。日本語見出しの焼き込みは v1 では持たない (フォント同梱が要る)。
+
+## crates/pipeline (2026-09-08 Phase E — 別リポジトリに当てたら tree が生成物で埋まった)
+
+### 9. 除外語の一覧は、それを凍結した時の標本の形しか知らない
+
+**症状** (`promo brief` を 7 リポジトリに当てて実測): file tree が生成物・ベンダで埋まる。
+mxf-tool は 314 行中 227 行 (72%) が `doxy/html/`、CaptionConverterSakura は 400 行中 251 行が `vcpkg/` で
+**上限 400 に当たって本物のソースが押し出されていた** (`src` はわずか 39 行)。outcast は 280 行中 50 行が
+`backend/.sqlx/`。Verificator は `venv/Scripts/` — 除外語は `.venv` しか知らず、点なしの `venv` を取りこぼしていた。
+
+**真因**: `EXCLUDED_DIRS` の 8 語を凍結した時の標本が Kataribe と Fuseforks の 2 本だけで、**どちらも
+生成物を tree に持たない綺麗な例**だった (ノイズ 0 行)。「上限に当たったら困る」は failures #1 で扱ったが、
+**上限に当たる前に中身がノイズに置き換わる**経路は見ていなかった。live が 1 本通ったこと (rev3、Fuseforks) を
+「動く」と読んだのが誤りで、n=1 は標本ではない。
+
+**棄却した処方**: 「子が N 件を超えるディレクトリを 1 行に畳む」。実測で分離不能 —
+Fuseforks `specs/` 52 件 (そのリポジトリで最も情報量の多いディレクトリ) と outcast `.sqlx/` 49 件 (純ノイズ) は
+**3 件差**。件数はノイズと本体を分けない。閾値を data から決めようとして初めて分かった (実装前に棄却できた)。
+
+**処方 (rev4)**: 二段。①**出所を `git ls-files` にする** — 生成物かどうかを一番よく知っているのは
+除外語の一覧ではなくリポジトリ自身。gitignore 済みの doxy と vcpkg はこれだけで消える。git でない対象は
+従来の FS walk に落ちる。②git でも消えない**追跡された生成物**は、機械生成された名前で畳む
+(`[0-9a-f]{16,}` か UUID 断片が子の過半かつ 5 件以上 → `backend/.sqlx/ (49 entries, elided)`)。
+7 リポジトリで完全分離した (`.sqlx` 49/49、他の全ディレクトリ 0)。
+
+**実測 (tree 行数、修正前 → 後)**: mxf-tool 314→51 / CaptionConverterSakura 400(切り捨て)→122 /
+outcast 280→214 / Verificator 114→68 / Kataribe 188→176 / Fuseforks 141→107 / KindleScan 25→17。
+CC-Sakura の header から `first 400 entries` が消えた = 切り捨てが解消。
+
+**同時に塞いだ穴**: outcast の tree に `.neo_key.txt` / `.servant_key` / `backend/.env` が並んでいた。
+中身は読んでいないが、`cli_runner` は claude に `Read/Glob/Grep` + `--add-dir <repo>` を渡すので、
+**brief がその名前を指すこと自体が鍵の在処を教える経路**になる。名前ごと落とすようにした (契約 `secret_names`)。
+
+**一般化**: 除外語の一覧は「知っている汚れ」しか落とせない。落としたい物の**構造**
+(追跡されていない / 名前が機械生成) を突くと、次に来る未知の汚れにも効く。
+failures #1 と同型 — どちらも「上限や一覧を、それを決めた時の標本の外に持ち出した」失敗。
+
+**接地の限界**: git 優先は**未コミットの作業を tree から落とす**。Fuseforks では消えたのは
+`.claude/worktrees/` `blackboard/` `briefs/` `RundingPage/` の未追跡物だけで実害はなかったが、
+「まだコミットしていない実装」を持つリポジトリでは brief が薄くなる。README 本文が `.env` に言及する分は
+落としていない (公開文書であり、tree とは別の話)。
+

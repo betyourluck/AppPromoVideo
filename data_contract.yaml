@@ -115,8 +115,24 @@ ClaudeStreamLine:                   # claude -p --output-format stream-json の 
 RepoBrief:                          # Rust が本文に載せる圧縮マニフェスト (CLI の深掘りの起点。走査本体は CLI が Read/Glob/Grep で行う)
   purity: "promo_core::brief = 刈り込みと整形だけ (純粋、BriefInputs -> RepoBrief -> render())。FS を読む収集は crates/pipeline (Phase B)。rev2 査読 6"
   root_name: String
-  tree: String                      # 深さ 3。除外: .git node_modules target dist build .venv __pycache__ *.lock。1 行 100 字超は … で切る
+  tree: String                      # 深さ 3。1 行 100 字超は … で切る。収集規則は tree_source を見よ
   tree_truncated: bool
+  tree_source:                      # rev4 (Phase E)。Kataribe / Fuseforks の 2 本は生成物を tree に持たない綺麗な例で、
+                                    # 別リポジトリに当てた瞬間に tree が生成物で埋まった (2026-09-08 実測)。
+    primary: "git ls-files (対象が git リポジトリの時)。深さ 3 以下に絞り、親ディレクトリ行を補う"
+    fallback: "git が無い / 失敗した時のみ従来の FS walk。除外語と拡張子はこちらにだけ効く"
+    excluded_dirs: [".git", "node_modules", "target", "dist", "build", ".venv", "venv", "__pycache__", ".idea"]
+    excluded_ext: ["lock"]
+    secret_names: "*.env / .env* / *key*.txt / *.pem / *.p12 / *secret* / *_key / *credential* は名前ごと落とす (全経路)"
+    machine_named_elision: "子の 50% 以上かつ 5 件以上が機械生成名 ([0-9a-f]{16,} または UUID 断片) のディレクトリは 1 行に畳む: `<dir>/ (N entries, elided)`"
+    measured_20260908: |
+      深さ 3 以下の行数 (FS walk -> git ls-files):
+        mxf-tool 314 -> 39 (doxy/html 227 行が gitignore 済み) / CaptionConverterSakura 400(切り捨て) -> 101 (vcpkg 251 行)
+        Verificator 114 -> 22 (venv/Scripts。除外語は .venv しか知らず venv を取りこぼしていた)
+        outcast 280 -> 231 (backend/.sqlx 49 は追跡されているので git では消えない -> machine_named_elision が畳む)
+        Kataribe 188 / Fuseforks 141 は元からノイズ 0 = 契約を凍結した時の標本が偏っていた
+      件数による畳み込みは棄却: Fuseforks specs/ 52 (最重要) と outcast .sqlx/ 49 (純ノイズ) は 3 件差で分離不能。
+      機械生成名は 7 リポジトリで完全分離した (.sqlx 49/49、他の全ディレクトリ 0)。
   readme: Option<String>            # README*.md 先頭
   readme_truncated: bool
   manifests: Vec<{ path, head, truncated }>   # Cargo.toml / package.json / pyproject.toml / pubspec.yaml / go.mod / *.csproj の順

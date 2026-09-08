@@ -81,6 +81,12 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   次 = Phase E (別リポジトリで再現 / v2 候補: 斜め置き合成・mood の一貫性・motion の粒度)。未コミット。
 - 2026-09-08 **見出しの焼き込み (opt-in・既定 OFF)**: `image_gen::fonts` (システム + app_data/fonts) + `image_gen::caption` (ab_glyph)。
   GUI 設定にフォント一覧・プレビュー。アプリで焼くか手で焼くかはユーザーのアンケート待ち。107 green。
+- 2026-09-08 **Phase E rev4** (別リポジトリでの再現): `promo brief` を 7 リポジトリに当てたら RepoBrief の tree が
+  生成物で埋まった。**tree の出所を `git ls-files` に**、追跡された生成物は**機械生成名で 1 行に畳む**、
+  **鍵に見える名前は tree に載せない** (`collect.rs`。契約 `RepoBrief.tree_source`)。件数による畳み込みは
+  実装前に棄却 (Fuseforks specs/ 52 と outcast .sqlx/ 49 は 3 件差)。実測: mxf-tool 314→51 /
+  CC-Sakura 400(切り捨て)→122 / outcast 280→214。crates 112 green。**LLM を通す live 通しはユーザー端末待ち**
+  (子セッションでは CLI の認証が継承されない)。
 - 罠台帳 `failures.md` (#1 RepoBrief の上限単位 / #2 #3 採取スクリプト / #4 401 の再試行ループと「採取できた」の誤読)。
   実測: claude 2.1.223 の stream-json 封筒 (system/init → assistant → result)。Claude デスクトップの
   子セッション内では OAuth が継承されず `authentication_failed` (fixture 化済み)。aider / gemini / codex / Flutter 無し。
@@ -91,7 +97,9 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 1. `cargo test --workspace` (crates 108 green) と `cd app && npx vitest run` (10 green) で足場を確認。
 2. **未コミット** (Initial commit 以来ゼロ)。作業前に `git add -A && git commit` で区切るのが安全。
 3. 開いている判断: 見出し焼き込みの既定 (ユーザーのアンケート待ち、機構は opt-in で入っている)。
-4. 次の候補: Phase E = 別リポジトリで通しを再現 / 斜め置き合成 (射影変換) / mood カットの一貫性 / MiniMax 向け motion の粒度。
+4. 次: **Phase E の live 通しをユーザー端末で** — 別リポジトリ (outcast / Verificator が候補) + UI スナップショット 1 枚。
+   スナップショットは各リポジトリに無い (README の画像はロゴ・マスコットだった) ので**撮影が要る**。
+   その後の候補: 斜め置き合成 (射影変換) / mood カットの一貫性 / MiniMax 向け motion の粒度。
 5. GUI 起動は `cd app && RUSTC_WRAPPER= npm run tauri dev`。CLI の認証は設定「OAuth ログインを使う」ON が確実 (failures #7)。
 
 ## 台帳

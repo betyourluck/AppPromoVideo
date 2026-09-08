@@ -99,7 +99,7 @@ app/                Tauri 2 + Vue 3。HTTP とプロセスは全部 backend。�
 | B | crates/pipeline: RepoBrief の収集 (FS) → 解析 → ScenePlan、Rust 側検査ループ (違反を戻して再生成、最大 2 回)、export 書き出し、live 用 CLI `promo` | collect 4 本 (除外と深さ / README 大小 + manifest 順 / PNG ヘッダと非対応拒否 / 全件エラー) + stages 4 本 (fake runner: 解析 / **違反 → 再生成 → 通過** / 上限で失敗 / 形違い) + export 1 本 + promo_core prompts 3 + export 3。**live: Kataribe で通し** (analyze 62 s + plan 2 attempts 183 s、0.99 USD、7 シーン 30 s) | **Done (2026-09-08)**。`--add-dir` 外の拒否確認は未実施 (未決へ) |
 | C | image_gen 移植 (provider.rs = Kataribe の写し、以後不触) + `ImageGenerator` trait + 参照上限 + ComfyUI の `/queue` 併読とバックオフ + palette の画素算出 + style anchor + pipeline::reference | Kataribe 同梱 PoC 10 green (live 5 は ignored) + refs 3 + comfy_wait 4 + palette 3 + compose 2 + style 3 + reference 3。**live: Gemini で 2/2 成功 (17 s)**。目視で 1 場面・暖色暗色基調 | **Done (2026-09-08)**。ComfyUI / OpenAI の live は未実施 (`/queue` の形は実機未確認) |
 | D | Tauri 2 + Vue 3 殻 (`app/`): 3 ペイン (入力 / 結果 / 進捗ログ)、設定 2 タブ (LLM = CLI 認証委任 / 画像 = API キー)、perProvider スロット、settings.json ミラー、プロバイダ別コピー、export、16 command + event | vue-tsc + vite build / vitest 6 (toBackendCli・toBackendConfig の漏れ封鎖・migrate) / src-tauri cargo check・clippy・test 3 | **実装済 (2026-09-08)。GUI 目視はユーザー待ち** |
-| E | live 通し (実リポジトリ 1 本) | 出力を Veo に貼って動くか (ユーザー実測) | 未 |
+| E | 別リポジトリでの再現。まず LLM ゼロの `promo brief` を 7 本に当て、RepoBrief の一般化を測る → rev4 (tree の出所を git に) | collect 8 本 (既存 4 + git 優先 / 機械生成名の畳み込み / 鍵名の遮蔽 / `venv`)。**実測 7 リポジトリ**: mxf-tool 314→51 / CC-Sakura 400(切り捨て)→122 / outcast 280→214 / Verificator 114→68 / Kataribe 188→176 / Fuseforks 141→107 / KindleScan 25→17 | **rev4 着地 (2026-09-08)**。LLM を通す live 通しは認証がユーザー端末側のためユーザー待ち |
 
 ---
 
@@ -140,6 +140,26 @@ app/                Tauri 2 + Vue 3。HTTP とプロセスは全部 backend。�
     「自分で `app_data/fonts` に置いたもの」の両方から選ぶ。**アプリで焼くか手で焼くかは判断待ち**なので機構だけ用意し、比較材料の
     見本 1 枚を出す。フォントは同梱しない (Rust の ab_glyph でラスタライズ、名前は ttf-parser)。
     ~~v1 外~~ → 機構は入れたが既定 OFF。決定はユーザーのアンケート結果で。
+
+## rev4 (2026-09-08、Phase E = 別リポジトリでの再現。RepoBrief の tree が生成物で埋まった)
+
+18. **tree の出所を `git ls-files` にする** (契約 `RepoBrief.tree_source.primary`)。対象が git リポジトリなら
+    追跡ファイルから深さ 3 以下の行を組み、祖先ディレクトリを補う。git でない / 失敗した時だけ従来の FS walk に落ち、
+    `EXCLUDED_DIRS` / `EXCLUDED_EXT` はその fallback にだけ効く (`venv` を追加。点なしを取りこぼしていた)。
+    根拠: 生成物かどうかを一番よく知っているのは除外語の一覧ではなくリポジトリ自身。gitignore 済みの
+    `doxy/html` (227 行) と `vcpkg` (251 行) はこれだけで消える。
+19. **追跡された生成物は機械生成名で畳む** (契約 `machine_named_elision`)。子の過半かつ 5 件以上が
+    `[0-9a-f]{16,}` か UUID 断片なら `backend/.sqlx/ (49 entries, elided)` の 1 行にする。
+    **件数による畳み込みは実装前に棄却** — Fuseforks `specs/` 52 件と outcast `.sqlx/` 49 件は 3 件差で分離不能
+    (failures #9)。機械生成名は 7 リポジトリで完全分離した。
+20. **鍵に見える名前は tree に載せない** (契約 `secret_names`)。`.env*` / `*.pem` / `*.p12` / `*_key` /
+    `*key*.txt` / `*secret*` / `*credential*`。`cli_runner` は claude に `Read/Glob/Grep` + `--add-dir <repo>` を
+    渡すので、brief がその名前を指すこと自体が鍵の在処を教える経路になる。README 本文の言及は落とさない。
+
+**接地の限界**: git 優先は未コミットの作業を tree から落とす。Phase E の 7 本では消えたのは未追跡の
+作業メモ・worktree だけだったが、実装が未コミットのリポジトリでは brief が薄くなる。
+LLM を通した live 通し (analyze → plan → 参照画像) は本セッションでは未実施 — CLI の認証が
+Claude デスクトップの子セッションでは継承されないため (failures #4 / #7)、ユーザー端末での実行が要る。
 
 ## 査読の反映 (2026-09-07、ユーザー査読 11 点)
 
