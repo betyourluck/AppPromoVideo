@@ -85,8 +85,13 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   生成物で埋まった。**tree の出所を `git ls-files` に**、追跡された生成物は**機械生成名で 1 行に畳む**、
   **鍵に見える名前は tree に載せない** (`collect.rs`。契約 `RepoBrief.tree_source`)。件数による畳み込みは
   実装前に棄却 (Fuseforks specs/ 52 と outcast .sqlx/ 49 は 3 件差)。実測: mxf-tool 314→51 /
-  CC-Sakura 400(切り捨て)→122 / outcast 280→214。crates 112 green。**LLM を通す live 通しはユーザー端末待ち**
-  (子セッションでは CLI の認証が継承されない)。
+  CC-Sakura 400(切り捨て)→122 / outcast 280→214。crates 112 green。
+  **live (Verificator、sonnet、snapshot 0 枚)**: analyze 0.2857 USD/27.9 s + plan **attempts 1** 0.2710 USD/81.8 s
+  = 0.557 USD / 110 s、6 シーン。解析は Python コアの中身 (PyAV インメモリ / Fraction の 2 ポインタ結合 /
+  1 パーセンタイル検出) を正しく拾った。**別リポジトリで LLM 2 段は一発通過** = 一般化を確認。
+  合成カットはスナップショット待ち (兄弟リポジトリに実 UI 画像が無く、GUI も素の vite では描けない)。
+  **反証: 「子セッションでは CLI の認証が継承されない」は現行 CLI では成立しない** — `claude -p` が通る
+  (failures #4 / #7 の記述は 2.1.223 時点のもの)。
 - 罠台帳 `failures.md` (#1 RepoBrief の上限単位 / #2 #3 採取スクリプト / #4 401 の再試行ループと「採取できた」の誤読)。
   実測: claude 2.1.223 の stream-json 封筒 (system/init → assistant → result)。Claude デスクトップの
   子セッション内では OAuth が継承されず `authentication_failed` (fixture 化済み)。aider / gemini / codex / Flutter 無し。
