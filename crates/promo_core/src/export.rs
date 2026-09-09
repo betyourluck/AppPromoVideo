@@ -59,6 +59,10 @@ pub fn capture_original_copy(plan: &ScenePlan) -> std::collections::BTreeMap<u32
 /// 全フィールド `Option` — 省略したものは既定 (帯と `scene.plate_tilt`) に落ちる。
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct PlateOverride {
+    /// 使うスナップショット (rev13)。LLM の `scene.snapshot_index` を人が選び直せる —
+    /// コピー文に合わない画面が選ばれることがあるため。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_index: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub yaw_degrees: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -76,6 +80,7 @@ impl PlateOverride {
     pub fn clamped(&self) -> PlateOverride {
         let c = |v: Option<f32>, lo: f32, hi: f32| v.map(|x| x.clamp(lo, hi));
         PlateOverride {
+            snapshot_index: self.snapshot_index,
             yaw_degrees: c(self.yaw_degrees, -35.0, 35.0),
             pitch_degrees: c(self.pitch_degrees, -35.0, 35.0),
             screen_ratio: c(self.screen_ratio, 0.2, 0.95),

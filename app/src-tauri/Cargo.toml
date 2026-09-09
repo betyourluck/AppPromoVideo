@@ -29,3 +29,17 @@ promo_core = { path = "../../crates/promo_core" }
 cli_runner = { path = "../../crates/cli_runner" }
 pipeline = { path = "../../crates/pipeline" }
 image_gen = { path = "../../crates/image_gen" }
+
+# 画像処理は debug の既定 (opt-level 0) だと桁で遅い。実測 2026-09-09: 1886x1886 の再合成が
+# release 252 ms に対し debug 17.9 s (71 倍)。GUI は debug ビルドを使うので体感が壊れる。
+# 自分のコードのデバッグ性は保ちたいので、**画像を触る crate と依存だけ**最適化する。
+[profile.dev.package.image_gen]
+opt-level = 3
+[profile.dev.package.image]
+opt-level = 3
+[profile.dev.package.png]
+opt-level = 3
+[profile.dev.package.ab_glyph]
+opt-level = 3
+[profile.dev.package.ab_glyph_rasterizer]
+opt-level = 3

@@ -710,7 +710,8 @@ fn reburn_caption(
     let composed = match scene_kind {
         promo_core::plan::CutKind::Mood => png,
         promo_core::plan::CutKind::Product => {
-            let idx = snapshot_index.unwrap_or(0) as usize;
+            // rev13: 人が選び直した番号が LLM の指定に勝つ。
+                        let idx = plate.as_ref().and_then(|p| p.snapshot_index).or(snapshot_index).unwrap_or(0) as usize;
             let shot = read_run_snapshot(&dir, idx)?;
             let l = pipeline::reference::layout_for(canvas, spec.as_ref().map(|s| s.position), tilt, plate.as_ref());
             image_gen::composite_product_cut(&png, &shot, &l)?

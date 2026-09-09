@@ -10,7 +10,15 @@ import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../store";
 import type { FontEntry } from "../types";
 
-const props = defineProps<{ sceneId: number; hasText: boolean; isProduct: boolean; copyText: string; originalCopy: string | null }>();
+const props = defineProps<{
+  sceneId: number;
+  hasText: boolean;
+  isProduct: boolean;
+  copyText: string;
+  originalCopy: string | null;
+  snapshots: string[];
+  llmSnapshot: number | null;
+}>();
 const store = useStore();
 
 const open = ref(false);
@@ -36,6 +44,15 @@ watch(
 );
 const copyChanged = computed(() => copy.value !== props.copyText);
 
+/** 使うスナップショット (rev13)。null = LLM の選択のまま。 */
+const snapIndex = ref<number | null>(null);
+
+/** 「適用」を押すまで絵は変わらない。押し忘れが分かるように印を出す。 */
+const dirty = ref(false);
+function touch() {
+  dirty.value = true;
+}
+
 const yaw = ref<number | null>(null);
 const pitch = ref<number | null>(null);
 const ratio = ref<number | null>(null);
@@ -60,17 +77,26 @@ function onMove(e: PointerEvent) {
   const clamp = (v: number) => Math.max(-0.4, Math.min(0.4, v));
   dx.value = clamp(drag.dx + (e.clientX - drag.x) / r.width);
   dy.value = clamp(drag.dy + (e.clientY - drag.y) / r.height);
+  dirty.value = true;
 }
 function onUp(e: PointerEvent) {
   if (!drag) return;
   drag = null;
   (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-  apply(); // 離した時だけ焼き直す (ドラッグ中に走らせない)
+  // rev13: ここでは焼かない。焼き直しは「適用」だけ (実測 debug 0.6 s / release 0.25 s、
+  // 触るたびに走らせると操作にならない)。
 }
 
 /** スライダーの値 (`null` = 未指定 = 既定のまま)。 */
 function show(v: number | null, unit = ""): string {
   return v === null ? "既定" : `${v}${unit}`;
+}
+function pickSnap(e: Event): number | null {
+  const v = (e.target as HTMLSelectElement).value;
+  return v === "" ? null : Number(v);
+}
+function baseName(p: string): string {
+  return p.split(/[\/]/).pop() ?? p;
 }
 function num(e: Event): number {
   return Number((e.target as HTMLInputElement).value);
@@ -84,6 +110,7 @@ function currentPlate() {
   if (ratio.value !== null) p.screen_ratio = ratio.value;
   if (dx.value !== null) p.x_offset_ratio = dx.value;
   if (dy.value !== null) p.y_offset_ratio = dy.value;
+  if (snapIndex.value !== null) p.snapshot_index = snapIndex.value;
   return Object.keys(p).length ? p : null;
 }
 
@@ -113,6 +140,7 @@ async function apply() {
   busy.value = true;
   try {
     await store.reburnCaption(props.sceneId, copy.value.trim() ? currentSpec() : null, currentPlate(), copyChanged.value ? copy.value : null);
+    dirty.value = false;
   } finally {
     busy.value = false;
   }
@@ -139,6 +167,8 @@ function reset() {
   ratio.value = null;
   dx.value = null;
   dy.value = null;
+  snapIndex.value = null;
+  dirty.value = true;
 }
 
 /** LLM が最初に書いた文へ戻す。 */
@@ -160,7 +190,7 @@ function restoreCopy() {
     <div v-if="open" class="panel-in">
       <label class="field">
         <span>コピー文 (画像に焼かれ、scenes.md にも出ます)</span>
-        <textarea v-model="copy" rows="2" placeholder="空にすると見出しを焼きません" />
+        <textarea v-model="copy" rows="2" placeholder="空にすると見出しを焼きません" @input="touch()" />
       </label>
       <div v-if="originalCopy !== null && copy !== originalCopy" class="row" style="gap: 4px">
         <button class="btn small" @click="restoreCopy">最初の文に戻す</button>
@@ -172,7 +202,7 @@ function restoreCopy() {
       <div class="row">
         <label class="field" style="flex: 2">
           <span>フォント</span>
-          <select v-model="fontKey">
+          <select v-model="fontKey" @change="touch()">
             <option v-for="f in fonts" :key="f.path + f.index" :value="`${f.path}#${f.index}`">
               {{ f.has_japanese ? "🇯🇵 " : "" }}{{ f.family }}
             </option>
@@ -180,7 +210,7 @@ function restoreCopy() {
         </label>
         <label class="field" style="flex: 1">
           <span>位置</span>
-          <select v-model="position">
+          <select v-model="position" @change="touch()">
             <option value="top">上</option>
             <option value="bottom">下</option>
           </select>
@@ -189,16 +219,23 @@ function restoreCopy() {
       <div class="row">
         <label class="field" style="flex: 1">
           <span>大きさ <b class="mono">{{ sizeRatio.toFixed(3) }}</b></span>
-          <input v-model.number="sizeRatio" type="range" min="0.02" max="0.2" step="0.005" @change="apply" />
+          <input v-model.number="sizeRatio" type="range" min="0.02" max="0.2" step="0.005" @input="touch()" />
         </label>
         <label class="field" style="flex: 1">
           <span>色</span>
-          <input v-model="color" type="color" />
+          <input v-model="color" type="color" @change="touch()" />
         </label>
       </div>
       </template>
       <template v-if="isProduct">
         <h4 class="sub" style="margin: 4px 0 0">はめ込み</h4>
+        <label v-if="snapshots.length > 1" class="field">
+          <span>使うスナップショット</span>
+          <select :value="snapIndex ?? ''" @change="snapIndex = pickSnap($event); touch()">
+            <option value="">LLM の選択のまま ({{ (llmSnapshot ?? 0) + 1 }} 枚目)</option>
+            <option v-for="(sp, i) in snapshots" :key="sp" :value="i">{{ i + 1 }} 枚目 — {{ baseName(sp) }}</option>
+          </select>
+        </label>
         <img
           v-if="store.imageUrls[sceneId]"
           ref="preview"
@@ -213,32 +250,34 @@ function restoreCopy() {
         />
         <label class="field">
           <span>左右の傾き <b class="mono">{{ show(yaw, "°") }}</b></span>
-          <input :value="yaw ?? 0" type="range" min="-35" max="35" step="1" @input="yaw = num($event)" @change="apply" />
+          <input :value="yaw ?? 0" type="range" min="-35" max="35" step="1" @input="yaw = num($event); touch()" />
         </label>
         <label class="field">
           <span>上下の傾き <b class="mono">{{ show(pitch, "°") }}</b></span>
-          <input :value="pitch ?? 0" type="range" min="-35" max="35" step="1" @input="pitch = num($event)" @change="apply" />
+          <input :value="pitch ?? 0" type="range" min="-35" max="35" step="1" @input="pitch = num($event); touch()" />
         </label>
         <label class="field">
           <span>大きさ <b class="mono">{{ show(ratio) }}</b></span>
-          <input :value="ratio ?? 0.78" type="range" min="0.2" max="0.95" step="0.01" @input="ratio = num($event)" @change="apply" />
+          <input :value="ratio ?? 0.78" type="range" min="0.2" max="0.95" step="0.01" @input="ratio = num($event); touch()" />
         </label>
         <label class="field">
           <span>横位置 <b class="mono">{{ show(dx) }}</b></span>
-          <input :value="dx ?? 0" type="range" min="-0.4" max="0.4" step="0.01" @input="dx = num($event)" @change="apply" />
+          <input :value="dx ?? 0" type="range" min="-0.4" max="0.4" step="0.01" @input="dx = num($event); touch()" />
         </label>
         <label class="field">
           <span>縦位置 <b class="mono">{{ show(dy) }}</b></span>
-          <input :value="dy ?? 0" type="range" min="-0.4" max="0.4" step="0.01" @input="dy = num($event)" @change="apply" />
+          <input :value="dy ?? 0" type="range" min="-0.4" max="0.4" step="0.01" @input="dy = num($event); touch()" />
         </label>
         <p class="muted note">
-          スライダーは<b>離した時に</b>焼き直します (途中では走らせません)。
-          画像を<b>ドラッグ</b>しても位置を動かせます。<b>縦位置を動かすと見出しの帯のずらしを置き換えます。</b>
+          スライダーとドラッグは<b>値を変えるだけ</b>です。絵が変わるのは「適用」を押した時だけ
+          (再合成は原寸で 0.6 秒ほどかかるため)。<b>縦位置を動かすと見出しの帯のずらしを置き換えます。</b>
         </p>
       </template>
 
       <div class="row" style="gap: 4px">
-        <button class="btn small" :disabled="busy" @click="apply">{{ busy ? "焼き直し中…" : "適用" }}</button>
+        <button class="btn small" :class="{ on: dirty }" :disabled="busy" @click="apply">
+          {{ busy ? "焼き直し中…" : dirty ? "適用 (未反映)" : "適用" }}
+        </button>
         <button class="btn small" :disabled="busy" @click="reset">既定に戻す</button>
         <button v-if="hasText" class="btn small" :disabled="busy" @click="clear">見出しを消す</button>
       </div>

@@ -265,7 +265,12 @@ pub async fn generate_references(
         let bytes: Result<Vec<u8>, ImageGenError> = match scene.cut_kind {
             // product: 背景だけモデルに描かせ (参照は送らない = 画面を発明させない)、実スクショを Rust が貼る。
             CutKind::Product => {
-                let idx = scene.snapshot_index.map(|i| i as usize).unwrap_or(0);
+                // rev13: 人が選び直したスナップショットが LLM の指定に勝つ。
+                let idx = plate_overrides
+                    .get(&scene.scene_id)
+                    .and_then(|o| o.snapshot_index)
+                    .or(scene.snapshot_index)
+                    .unwrap_or(0) as usize;
                 match refs.get(idx) {
                     None => Err(ImageGenError::Config(format!(
                         "scene {}: snapshot_index {idx} に対応するスナップショットが無い ({} 枚)",
@@ -512,6 +517,18 @@ mod tests {
         let tilted = layout_for(canvas, Some(CaptionPosition::Top), Some(Tilt { yaw_degrees: 12.0, pitch_degrees: -8.0 }), None);
         assert!(tilted.tilt.is_some());
         assert_eq!(tilted.y_offset_ratio, top.y_offset_ratio);
+    }
+
+    /// rev13: 人が選び直したスナップショットが LLM の指定に勝つ。
+    #[test]
+    fn a_hand_picked_snapshot_wins_over_the_llm_choice() {
+        let pick = |o: Option<u32>, llm: Option<u32>| o.or(llm).unwrap_or(0);
+        assert_eq!(pick(Some(2), Some(0)), 2, "人の指定が勝つ");
+        assert_eq!(pick(None, Some(1)), 1, "指定が無ければ LLM のまま");
+        assert_eq!(pick(None, None), 0, "どちらも無ければ先頭");
+        // clamped は番号を丸めない (枚数はここでは分からない。範囲外は読み出しで弾く)。
+        let o = PlateOverride { snapshot_index: Some(7), ..Default::default() };
+        assert_eq!(o.clamped().snapshot_index, Some(7));
     }
 
     /// rev11: はめ込みの上書きは**フィールド単位で**既定に落ちる。
