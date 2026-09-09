@@ -90,8 +90,11 @@ export interface ImageGenSettings {
   caption: CaptionSettings;
   /**
    * 製品カットで実スクショを貼るときの面の扱い (契約 PlateMode、rev5)。
-   * perspective = 背景のパースに合わせて射影変換で傾ける (既定)。
-   * frontal = 正面固定。背景側のアングル指定も検査で弾く。
+   * frontal = 正面固定 (**既定**、rev22)。背景側のアングル指定も検査で弾く。
+   * perspective = 背景のパースに合わせて射影変換で傾ける。
+   * 既定を frontal にしたのは、MiniMax の i2v で傾けると動きが過剰になったという実測から
+   * (ユーザー観測 2026-09-09)。**保存済みの明示値は上書きしない** — 既に perspective を
+   * 選んでいる人はそのまま (rev8 の precedent)。
    */
   plateMode: PlateMode;
 }
@@ -167,7 +170,7 @@ export function defaultImageGenSettings(): ImageGenSettings {
     requestedRefs: 0,
     perProvider: { openai: defaultSlot("openai"), gemini: defaultSlot("gemini"), comfy: defaultSlot("comfy") },
     caption: defaultCaptionSettings(),
-    plateMode: "perspective",
+    plateMode: "frontal",
   };
 }
 

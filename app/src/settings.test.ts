@@ -68,10 +68,13 @@ describe("migrate", () => {
     expect(m.perProvider.comfy.model).toBe("");
     expect(m.perProvider.comfy.timeoutSecs).toBe(99);
     expect(m.perProvider.openai.baseUrl).toBe("https://api.openai.com/v1");
-    // rev5: 面の貼り方。既定は perspective、知らない値は既定に落ちる。
-    expect(migrateImageGenSettings(null).plateMode).toBe("perspective");
+    // rev22: 既定は **frontal**。MiniMax i2v の実測で、傾けると動きが過剰になった
+    // (ユーザー観測 2026-09-09、開いている判断 1 の決着)。知らない値は既定に落ちる。
+    expect(migrateImageGenSettings(null).plateMode).toBe("frontal");
+    expect(migrateImageGenSettings({ plateMode: "tilted" }).plateMode).toBe("frontal");
+    // **保存済みの明示値は勝つ** — 既定を変えても人が選んだ値は上書きしない (rev8 の precedent)。
+    expect(migrateImageGenSettings({ plateMode: "perspective" }).plateMode).toBe("perspective");
     expect(migrateImageGenSettings({ plateMode: "frontal" }).plateMode).toBe("frontal");
-    expect(migrateImageGenSettings({ plateMode: "tilted" }).plateMode).toBe("perspective");
     expect(migrateImageGenSettings(null).provider).toBe("gemini");
     const p = migrateProjectSettings({ seconds: 45, aspect: "4:3", snapshots: ["a.png", 3], lang: "en" });
     expect(p.seconds).toBe(30);

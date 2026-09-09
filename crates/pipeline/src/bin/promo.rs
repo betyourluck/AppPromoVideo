@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! promo run <repo> --concept "..." [--out <dir>] [--snapshot <img>]... [--seconds 30] [--aspect 16:9]
-//!           [--plate perspective|frontal] [--lang ja|en] [--cli claude|aider|custom] [--exe <path>] [--model <m>] [--max-turns 12] [--timeout 600]
+//!           [--plate frontal|perspective] [--lang ja|en] [--cli claude|aider|custom] [--exe <path>] [--model <m>] [--max-turns 12] [--timeout 600]
 //!           [--images openai|gemini|comfy] [--image-base-url <url>] [--image-model <m>] [--workflow <api.json>]
 //!           [--image-scenes N] [--image-refs N] [--image-detail standard|high|highest]
 //! promo brief <repo> [--snapshot <img>]...      # RepoBrief.render() を出すだけ (LLM ゼロ)

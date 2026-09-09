@@ -72,10 +72,10 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 ## 現状 (2026-09-09)
 
-- **spec 01 は Phase 0〜E 着地、rev21 まで反映済み。** crates 150 green / vitest 30 / backend 10 green・clippy clean。
+- **spec 01 は Phase 0〜E 着地、rev22 まで反映済み。** crates 152 green / vitest 30 / backend 10 green・clippy clean。
 - コミットは Initial `a75c3bc` の上に 25 本、`origin/main` に push 済み (private。**週末に public 予定**)。
 - 通し (解析 → 構成 → 参照画像 → 合成) は **4 リポジトリで live 成功** (Kataribe / Verificator /
-  AppPromoVideo 自身 / Fuseforks)。
+  AppPromoVideo 自身 / Fuseforks)。**出口まで到達** — MiniMax i2v の 15 秒が X に投稿された (2026-09-09)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
 - **GUI は再ビルドしてから触る**。rev13 で dev プロファイルを変えた (debug の画像処理が 71 倍遅かった)。
 
@@ -97,13 +97,15 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 **開いている判断**
 
-1. **`PlateMode` の既定** — perspective (面を傾ける) と frontal (正対固定) を両方実装済み。
-   等倍の対を MiniMax i2v に通した結果待ち。**今セッションでは進んでいない。**
-2. **frontal が高い理由** — rev15 で再生成の回数と種別を残すようにした (`RunStats`、正本は
+1. **frontal が高い理由** — rev15 で再生成の回数と種別を残すようにした (`RunStats`、正本は
    `<run>/promo.json`。索引と GUI の「再生成」列はその写し)。**live の記録はまだ 0 件**なので、
    1.5 倍の説明は依然として推測。数えるには同一リポジトリ・同一スナップショットで
    perspective / frontal を各数本走らせる必要がある (LLM 費用がかかる)。
    過去の 3 行は遡って埋められない — 当時どこにも残していないため。
+
+**決着 (2026-09-09)**: `PlateMode` の既定は **frontal**。MiniMax i2v の実機観測で「斜めにすると
+動画が動かしすぎる」(ユーザー)。傾ける経路は残す (設定 / `--plate perspective`)。
+**保存済みの設定は上書きしないので、既に perspective の環境は設定で 1 度切り替える必要がある。**
 
 **次の候補**: 傾きと可読性の境目 /
 mood カットのモチーフ一貫性 / `motion_prompt` の粒度 / ComfyUI と OpenAI の live /
@@ -114,6 +116,6 @@ rev14 のコミット `5929f93` に巻き込んだ。実害は無いが粒度が
 
 ## 再開の手順
 
-1. `cargo test --workspace` (150 green) と `cd app && npx vitest run` (30 green) で足場を確認。
+1. `cargo test --workspace` (152 green) と `cd app && npx vitest run` (30 green) で足場を確認。
 2. `git log --oneline -5` で直前の着地を見る。詳しい経緯は `history.md`。
 3. 上の「開いている判断」に答えが来ていないか確認してから着手する。

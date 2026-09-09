@@ -256,7 +256,7 @@ struct RunRequest {
     language: Language,
     export_dir: String,
     cli: CliSettings,
-    /// 面の貼り方 (rev5)。省略時は perspective。
+    /// 面の貼り方 (rev5)。省略時は frontal (rev22)。
     #[serde(default)]
     plate_mode: PlateMode,
 }
@@ -464,7 +464,7 @@ struct ImagesRequest {
     /// 見出しの焼き込み (None = 焼かない。既定 OFF)。
     #[serde(default)]
     caption: Option<CaptionSpec>,
-    /// 面の貼り方 (rev5)。省略時は perspective。
+    /// 面の貼り方 (rev5)。省略時は frontal (rev22)。
     #[serde(default)]
     plate_mode: PlateMode,
 }

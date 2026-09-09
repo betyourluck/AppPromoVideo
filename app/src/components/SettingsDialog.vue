@@ -319,8 +319,8 @@ function close() {
         <label class="field">
           <span>面の扱い</span>
           <select v-model="store.image.plateMode" @change="store.persist()">
-            <option value="perspective">背景のパースに合わせて傾ける (既定)</option>
-            <option value="frontal">正面固定 — 背景も正対に保つ</option>
+            <option value="frontal">正面固定 — 背景も正対に保つ (既定)</option>
+            <option value="perspective">背景のパースに合わせて傾ける</option>
           </select>
         </label>
         <p class="muted note">

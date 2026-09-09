@@ -183,14 +183,22 @@ Scene:                              # rev3 (2026-09-08、ユーザー FB「ス�
                                     # 各 -35〜35 度。範囲外は違反 (PlateTiltOutOfRange)。省略 = 正面。frontal モードでは無視される
   reference_image: Option<PathBuf>  # 生成後に埋まる
 
-PlateMode:                          # rev5 (2026-09-08 Phase E 実測: 背景のパースと貼った面のパースが噛み合わない)。設定で切り替え、既定 = perspective
-  perspective: "既定。scene.plate_tilt に従い、スクショ面を射影変換で傾けてから合成する。背景のアングルと整合する。tilt が 0 / 省略なら frontal と同じ経路 (画素等価)"
-  frontal: "正面固定。plate_tilt を無視し、さらに image_prompt のアングル語 (low angle / top-down / tilted / three-quarter / isometric / overhead 等) を検査で弾いて背景も正対に保つ。絵の変化は乏しくなるが不整合は原理的に出ない"
+PlateMode:                          # rev5 (2026-09-08 Phase E 実測: 背景のパースと貼った面のパースが噛み合わない)。設定で切り替え、**既定 = frontal** (rev22)
+  perspective: "scene.plate_tilt に従い、スクショ面を射影変換で傾けてから合成する。背景のアングルと整合する。tilt が 0 / 省略なら frontal と同じ経路 (画素等価)"
+  frontal: "**既定** (rev22)。正面固定。plate_tilt を無視し、さらに image_prompt のアングル語 (low angle / top-down / tilted / three-quarter / isometric / overhead 等) を検査で弾いて背景も正対に保つ。絵の変化は乏しくなるが不整合は原理的に出ない"
   note: |
     Phase E (AppPromoVideo 自身、2026-09-08) で表面化。scene 3 の image_prompt が `photographed at a low angle` で
     背景も実際にローアングルなのに、貼られた UI は正対のままだった。product カットが 1 種類しか無かった
     Fuseforks の 1 本では見えず、複数の product カットを別アングルで作った瞬間に出る。
     検査はモードに依存する = validate_scene_plan は PlateMode を受け取る。
+  default_frontal: |
+    **既定を frontal にした根拠** (rev22、2026-09-09 ユーザー観測、rev5 から開いていた判断の決着):
+    MiniMax の image-to-video に通したところ、**傾けると動きが過剰になった**。静止画としての整合
+    (背景のパースと面のパースが合う) と、そこから起こした動画の落ち着きは別の話で、後者が製品の目的。
+    perspective は残す — 捨てる根拠は無く、設定と `--plate perspective` で選べる。
+    **既存の run は影響を受けない** (rev10 で promo.json 自身が plate_mode を持つ)。
+    **保存済みの設定も上書きしない** — localStorage に perspective がある人はそのまま。
+    既定の変更が効くのは新規の環境・CLI・plateMode を持たない保存 (rev8 の precedent と同じ扱い)。
 
 # ---------------------------------------------------------------------------
 # 画像生成 (Kataribe image_gen.rs を移植。差分は本節に記す)

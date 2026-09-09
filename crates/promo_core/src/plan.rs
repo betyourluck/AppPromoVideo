@@ -224,13 +224,17 @@ pub fn violation_kind(v: &PlanViolation) -> &'static str {
 }
 
 /// product カットのスクショ面の貼り方 (契約 `PlateMode`、rev5)。設定で切り替える。
+///
+/// **既定は rev22 で `Frontal` に変えた** — MiniMax の image-to-video に通した実測で、
+/// 面を傾けると**動きが過剰になった** (ユーザー観測 2026-09-09、rev5 から開いていた判断の決着)。
+/// 傾ける経路は残す (静止画としての見栄えと i2v での挙動は別の話なので、捨てる根拠は無い)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlateMode {
-    /// 既定。`Scene::plate_tilt` に従い、面を射影変換で傾けて背景のパースに合わせる。
-    #[default]
+    /// `Scene::plate_tilt` に従い、面を射影変換で傾けて背景のパースに合わせる。
     Perspective,
-    /// 正面固定。`plate_tilt` を無視し、背景側もアングル語を弾いて正対に保つ。
+    /// **既定** (rev22)。正面固定。`plate_tilt` を無視し、背景側もアングル語を弾いて正対に保つ。
+    #[default]
     Frontal,
 }
 
@@ -782,5 +786,30 @@ mod violation_kind_tests {
             crate::describe_violation(&b),
             "人が読む文は畳まない (この差が集計を壊すので種別を別に持つ)"
         );
+    }
+}
+
+#[cfg(test)]
+mod plate_mode_default_tests {
+    use super::*;
+
+    /// rev22: 既定は **frontal** (正面固定)。MiniMax の image-to-video に等倍で通した実測で、
+    /// 面を傾けると**動きが過剰になった** (ユーザー観測 2026-09-09、開いている判断 1 の決着)。
+    /// 傾ける経路は残す — 設定と `--plate perspective` で選べる。
+    #[test]
+    fn the_default_is_frontal() {
+        assert_eq!(PlateMode::default(), PlateMode::Frontal);
+        // 契約の表記は変えない (既存の run の promo.json / runs.json が読めなくなる)。
+        assert_eq!(serde_json::to_value(PlateMode::Frontal).unwrap(), "frontal");
+        assert_eq!(serde_json::to_value(PlateMode::Perspective).unwrap(), "perspective");
+    }
+
+    /// **既存の run は影響を受けない** — rev10 で promo.json 自身が plate_mode を持つ。
+    /// 既定に頼っていないので、焼き直しは作られた時のモードのまま動く。
+    #[test]
+    fn an_existing_run_keeps_the_mode_it_was_made_with() {
+        let v = serde_json::json!("perspective");
+        let mode: PlateMode = serde_json::from_value(v).unwrap();
+        assert_eq!(mode, PlateMode::Perspective, "既定が変わっても保存済みの値が勝つ");
     }
 }
