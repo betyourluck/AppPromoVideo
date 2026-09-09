@@ -70,37 +70,42 @@ cd app && npx vitest run && npm run build    # frontend の単体テストと型
 cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 ```
 
-## 現状 (2026-09-08)
+## 現状 (2026-09-09)
 
-- **spec 01 は Phase 0〜E 着地、rev7 まで反映済み。** crates 122 green / vitest 10 / backend 7 green・clippy clean。
-- コミットは Initial `a75c3bc` の上に 10 本、`origin/main` に push 済み (private)。
-- 通し (解析 → 構成 → 参照画像 → 合成) は **3 リポジトリで live 成功** (Kataribe / Verificator / AppPromoVideo 自身)。
+- **spec 01 は Phase 0〜E 着地、rev14 まで反映済み。** crates 132 green / vitest 19 / backend 8 green・clippy clean。
+- コミットは Initial `a75c3bc` の上に 25 本、`origin/main` に push 済み (private。**週末に public 予定**)。
+- 通し (解析 → 構成 → 参照画像 → 合成) は **4 リポジトリで live 成功** (Kataribe / Verificator /
+  AppPromoVideo 自身 / Fuseforks)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
+- **GUI は再ビルドしてから触る**。rev13 で dev プロファイルを変えた (debug の画像処理が 71 倍遅かった)。
 
-**直近の追加 (rev9→rev10)**: 見出しを 1 枚ごとに変えられる。`<run>/base/` に**素材**を残し
-(product は背景 / mood は絵)、結果ペインの各シーンから位置・フォント・色・大きさを変えて
-**合成からやり直す** (`reburn_caption`。生成 API は呼ばないので無料・無劣化)。
-**rev11〜12 では傾き・大きさ・はめ込み位置 (スライダー + ドラッグ)、コピー文そのものも同じ経路で変えられる**
-(`PromoJson.plate_overrides` / `original_copy`)。焼き直しはスライダーを**離した時だけ**走る。
-帯は `layout_for` が**効いている位置**から毎回決める — 合成画像を残していた rev9 では帯が焼き込まれていて
-位置を変えると重なった (failures #15)。設定側は全シーンの既定。上書きは `PromoJson.caption_overrides`。
+**編集できるもの (rev9〜14、結果ペインの各シーン)**
 
-**直近の追加 (rev7)**: run の履歴。実行ごとに `<pkg>/runs/<日時>/` へ隔離し、タイトルバーの時計アイコンから
-一覧・復元・**2 つの run の同じシーンを左右に並べて比較**・削除ができる。索引は `app_data/runs.json`
-(キャッシュ。正本は各 run の `promo.json`)。
+| | |
+|---|---|
+| コピー文 | 書き換え + 「最初の文に戻す」(`original_copy` に LLM の初出を控えてある) |
+| 見出し | フォント / 上下 / 大きさ / 色 / **縦位置を数値で** (`y_ratio`) |
+| はめ込み | 傾き (yaw・pitch) / 大きさ / 横位置 / 縦位置 / **使うスナップショットの選び直し** |
+
+やり直しは `<run>/base/` の**素材**(product は背景 / mood は絵) から**合成ごと**行う。
+**生成 API は呼ばない** = 無料・無劣化。焼き直しは「適用」を押した時だけ (実測 debug 0.64 s / release 0.25 s)。
+いじっている間は予定位置を枠で重ねる (座標は合成と同じ `plate_quad` から取る)。
 
 **開いている判断**
 
 1. **`PlateMode` の既定** — perspective (面を傾ける) と frontal (正対固定) を両方実装済み。
-   等倍 1890×1080 の対を MiniMax i2v に通した結果待ち。
-2. ~~見出し焼き込みの既定~~ → **rev8 で既定 ON に決着** (2026-09-08)。フォントは実行直前に
-   `pickCaptionFont` が自動選択する (日本語グリフ / 太めのゴシック優先)。字幕ファイルは作らない。
+   等倍の対を MiniMax i2v に通した結果待ち。**今セッションでは進んでいない。**
 
-**次の候補**: 傾きと可読性の境目 (角度を上げるとどこで文字が壊れるか) / mood カットのモチーフ一貫性 /
-MiniMax 向け `motion_prompt` の粒度 / ComfyUI と OpenAI の live / Unix の `tree_kill` / `--add-dir` 外 Read の拒否確認。
+**次の候補**: 見出しの文字位置も枠に含める (今はプレートだけ) / 傾きと可読性の境目 /
+mood カットのモチーフ一貫性 / `motion_prompt` の粒度 / ComfyUI と OpenAI の live /
+Unix の `tree_kill` / `--add-dir` 外 Read の拒否確認 / `RunRecord` に attempts と違反種別
+(frontal の run だけ 1.5 倍高い理由が推測のまま)。
+
+**未整理**: `README_en.md` と `briefs/readme_en_translation.md` (会話の外で作られたもの) を
+rev14 のコミット `5929f93` に巻き込んだ。実害は無いが粒度が嘘になっている。分離するかは未判断。
 
 ## 再開の手順
 
-1. `cargo test --workspace` (120 green) と `cd app && npx vitest run` (10 green) で足場を確認。
+1. `cargo test --workspace` (132 green) と `cd app && npx vitest run` (19 green) で足場を確認。
 2. `git log --oneline -5` で直前の着地を見る。詳しい経緯は `history.md`。
 3. 上の「開いている判断」に答えが来ていないか確認してから着手する。
