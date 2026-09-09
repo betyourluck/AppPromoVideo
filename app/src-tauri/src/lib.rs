@@ -756,6 +756,7 @@ fn reburn_caption(
                         image_gen::CaptionPosition::Bottom => "bottom".into(),
                     }),
                     color: sp.color.clone(),
+                    y_ratio: sp.y_ratio,
                 },
             );
         }
@@ -767,6 +768,48 @@ fn reburn_caption(
         write_atomic(&dir.join("scenes.md"), scenes_markdown(&promo.summary, &promo.plan).as_bytes())?;
     }
     Ok(image_gen::provider::data_url("image/png", &out))
+}
+
+#[derive(Serialize)]
+struct PlatePreview {
+    canvas: [u32; 2],
+    /// 左上・右上・右下・左下 (canvas 座標)。傾けると台形になる。
+    quad: [[f32; 2]; 4],
+}
+
+/// プレートの**予定位置**だけを返す (rev14)。画像は作らないので速い —
+/// 素材とスクショのヘッダから寸法を読むだけ。枠のプレビューはここから描く。
+///
+/// **合成と同じ `layout_for` + `plate_quad` を通す。** TS 側に射影の数式を写すと必ず食い違う。
+#[tauri::command]
+fn plate_preview(
+    run_dir: String,
+    scene_id: u32,
+    spec: Option<CaptionSpec>,
+    plate: Option<promo_core::export::PlateOverride>,
+) -> Result<PlatePreview, String> {
+    let dir = PathBuf::from(&run_dir);
+    let text = std::fs::read_to_string(dir.join("promo.json")).map_err(|e| format!("promo.json を読めません: {e}"))?;
+    let promo: PromoJson = serde_json::from_str(&text).map_err(|e| format!("promo.json の形が違います: {e}"))?;
+    let scene = promo
+        .plan
+        .scenes
+        .iter()
+        .find(|s| s.scene_id == scene_id)
+        .ok_or_else(|| format!("scene {scene_id} がありません"))?;
+
+    let name = promo_core::export::reference_image_name(scene_id, 1);
+    let base = std::fs::read(pipeline::reference::base_image_path(&dir, &name)).map_err(|e| format!("素材がありません: {e}"))?;
+    let canvas = pipeline::reference::image_dims(&base)?;
+
+    let idx = plate.as_ref().and_then(|p| p.snapshot_index).or(scene.snapshot_index).unwrap_or(0) as usize;
+    let shot = read_run_snapshot(&dir, idx)?;
+    let shot_dims = pipeline::reference::image_dims(&shot)?;
+
+    let tilt = pipeline::reference::tilt_of(promo.plate_mode, scene);
+    let l = pipeline::reference::layout_for(canvas, spec.as_ref().map(|s| s.position), tilt, plate.as_ref());
+    let q = image_gen::compose::plate_quad(&l, shot_dims);
+    Ok(PlatePreview { canvas: [canvas.0, canvas.1], quad: [[q[0].0, q[0].1], [q[1].0, q[1].1], [q[2].0, q[2].1], [q[3].0, q[3].1]] })
 }
 
 /// run に写したスナップショット (rev10)。**元のパスではなく run の写しを読む** — 元は移動されうるし、
@@ -957,6 +1000,7 @@ pub fn run() {
             open_run,
             forget_run,
             reburn_caption,
+            plate_preview,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

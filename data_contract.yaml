@@ -247,7 +247,13 @@ PlateOverride:                      # rev11 (2026-09-09 ユーザー要望「傾
   y_offset_ratio: Option<f32>       # ±0.4。縦ずらし (正 = 下)。**指定すると見出しの帯のずらしを置き換える**
   resolution: "上書き → 無ければ帯と scene.plate_tilt から決まる既定。フィールド単位で落ちる"
   clamp: "範囲外は Rust 側で丸める (UI の入力を信用しない)"
-  ui: "rev12: スライダー + プレビューのドラッグ。**離した時だけ**焼き直す (ドラッグ中は走らせない)"
+  ui: |
+    rev13: スライダーとドラッグは**値を変えるだけ**。焼き直しは「適用」だけ (実測 debug 0.64 s / release 0.25 s)。
+    rev14: 触っている間は**予定位置を枠で重ねる** — 座標は command `plate_preview` が
+    `layout_for` + `compose::plate_quad` (合成と同じ関数) から出す。**射影の数式を TS に写さない**。
+    画像は作らないので速い (ヘッダから寸法を読むだけ)。枠を画像にぴったり重ねるため、
+    プレビューの要素は object-fit を使わず画像そのものの箱にする (contain だとレターボックス分ズレる)。
+  caption_y: "rev14: `CaptionSpec.y_ratio` / `CaptionOverride.y_ratio` (canvas 高さ比 = 文字ブロックの上端)。指定すると position + 余白より優先。canvas からはみ出す値は端で丸める"
 
 # PromoJson.original_copy (rev12): scene_id → LLM が最初に書いたコピー文。生成時に 1 度だけ入れて以後触らない。
 # コピー文の書き換えは `scene.copy_text` を**その場で**書き換える — scenes.md もクリップボードも plan を

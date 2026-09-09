@@ -44,6 +44,9 @@ pub struct CaptionOverride {
     /// "#RRGGBB"
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+    /// 縦位置 (canvas 高さ比、rev14)。指定すると `position` + 余白より優先。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub y_ratio: Option<f32>,
 }
 
 /// 生成時のコピー文を控える (rev12、純粋)。空文字のシーンは入れない。

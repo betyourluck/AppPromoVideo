@@ -29,6 +29,9 @@ pub struct CaptionSpec {
     /// 文字色 `#RRGGBB` (rev9)。読めない / 省略で白。
     #[serde(default)]
     pub color: Option<String>,
+    /// 縦位置を直接指定する (rev14、canvas 高さ比)。省略で `position` + 余白の従来どおり。
+    #[serde(default)]
+    pub y_ratio: Option<f32>,
 }
 
 impl CaptionSpec {
@@ -45,6 +48,7 @@ impl CaptionSpec {
                 _ => self.position,
             },
             color: o.color.clone().or_else(|| self.color.clone()),
+            y_ratio: o.y_ratio.or(self.y_ratio),
         }
     }
 
@@ -323,6 +327,7 @@ pub async fn generate_references(
                 cap.size_ratio = spec.size_ratio;
                 cap.position = spec.position;
                 cap.color = spec.rgba();
+                cap.y_ratio = spec.y_ratio;
                 match burn_caption(png, &cap) {
                     Ok(b) => Ok(b),
                     Err(e) => {
@@ -599,6 +604,7 @@ mod tests {
             size_ratio: 0.055,
             position: CaptionPosition::Bottom,
             color: Some("#FFFFFF".into()),
+            y_ratio: None,
         };
         let only_pos = base.with_override(&CaptionOverride { position: Some("top".into()), ..Default::default() });
         assert_eq!(only_pos.position, CaptionPosition::Top);

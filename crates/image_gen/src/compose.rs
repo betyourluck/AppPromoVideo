@@ -328,6 +328,42 @@ fn warp_onto(
     }
 }
 
+/// プレートが canvas のどこに乗るか (左上・右上・右下・左下、canvas 座標、純粋。rev14)。
+///
+/// **枠のプレビューはここから出す。** 合成と同じ縮小・同じ投影・同じずらしを通るので、
+/// 数式を TS 側に写して食い違う事故が起きない。
+pub fn plate_quad(layout: &Layout, shot: (u32, u32)) -> [(f32, f32); 4] {
+    let (tw, th) = plate_size(layout, shot);
+    let cx = layout.width as f32 / 2.0 + layout.width as f32 * layout.x_offset_ratio;
+    let cy = layout.height as f32 / 2.0 + layout.height as f32 * layout.y_offset_ratio;
+    match layout.tilt {
+        None => {
+            let (hw, hh) = (tw / 2.0, th / 2.0);
+            [(cx - hw, cy - hh), (cx + hw, cy - hh), (cx + hw, cy + hh), (cx - hw, cy + hh)]
+        }
+        Some(tilt) => {
+            let max_w = layout.width as f32 * layout.screen_ratio;
+            let max_h = layout.height as f32 * layout.screen_ratio;
+            let q = project_corners(tw, th, &tilt, max_w, max_h);
+            [
+                (cx + q[0].0, cy + q[0].1),
+                (cx + q[1].0, cy + q[1].1),
+                (cx + q[2].0, cy + q[2].1),
+                (cx + q[3].0, cy + q[3].1),
+            ]
+        }
+    }
+}
+
+/// 縮小後のプレートの大きさ (純粋)。合成と同じ計算。
+fn plate_size(layout: &Layout, shot: (u32, u32)) -> (f32, f32) {
+    let (sw, sh) = (shot.0 as f32, shot.1 as f32);
+    let max_w = layout.width as f32 * layout.screen_ratio;
+    let max_h = layout.height as f32 * layout.screen_ratio;
+    let scale = (max_w / sw).min(max_h / sh).min(1.0);
+    (((sw * scale) as u32).max(1) as f32, ((sh * scale) as u32).max(1) as f32)
+}
+
 /// 背景 + 実スクショ → 製品カット (PNG)。スクショの画素は等比縮小以外いじらない。
 pub fn composite_product_cut(
     background: &[u8],
@@ -484,6 +520,44 @@ mod tests {
         // 上限を超える窓は上限で止める (縮小は避けられないが、暴走もしない)。
         let (bw, bh) = canvas_for_snapshot((1344, 768), (7680, 4320), 0.78, 3840);
         assert!(bw <= 3840 && bh <= 3840, "上限で止まる: {bw}x{bh}");
+    }
+
+    /// rev14: 枠のプレビューは**焼き込みと同じ数式**から出す (TS 側に写すと必ずズレる)。
+    #[test]
+    fn plate_quad_matches_where_the_plate_actually_lands() {
+        let bg = png(400, 300, [40, 40, 40]);
+        let shot = png(800, 600, [255, 0, 200]);
+        let l = Layout { width: 1000, height: 1000, screen_ratio: 0.5, corner_radius: 0, shadow: false, y_offset_ratio: 0.1, x_offset_ratio: -0.2, tilt: None };
+        let q = plate_quad(&l, (800, 600));
+        let out = decode(&composite_product_cut(&bg, &shot, &l).unwrap());
+
+        // 実際にプレートが乗っている矩形を測り、quad の外接矩形と突き合わせる。
+        let mut lo = (u32::MAX, u32::MAX);
+        let mut hi = (0u32, 0u32);
+        for y in 0..out.height() {
+            for x in 0..out.width() {
+                let p = out.get_pixel(x, y);
+                if [p[0], p[1], p[2]] == [255, 0, 200] {
+                    lo = (lo.0.min(x), lo.1.min(y));
+                    hi = (hi.0.max(x), hi.1.max(y));
+                }
+            }
+        }
+        let qx: Vec<f32> = q.iter().map(|p| p.0).collect();
+        let qy: Vec<f32> = q.iter().map(|p| p.1).collect();
+        let (x0, x1) = (qx.iter().cloned().fold(f32::MAX, f32::min), qx.iter().cloned().fold(f32::MIN, f32::max));
+        let (y0, y1) = (qy.iter().cloned().fold(f32::MAX, f32::min), qy.iter().cloned().fold(f32::MIN, f32::max));
+        assert!((x0 - lo.0 as f32).abs() <= 2.0, "左 {x0} vs {}", lo.0);
+        assert!((y0 - lo.1 as f32).abs() <= 2.0, "上 {y0} vs {}", lo.1);
+        assert!((x1 - hi.0 as f32).abs() <= 2.0, "右 {x1} vs {}", hi.0);
+        assert!((y1 - hi.1 as f32).abs() <= 2.0, "下 {y1} vs {}", hi.1);
+
+        // 傾けると 4 点が平行四辺形でなくなる (台形になる)。
+        let tl = Layout { tilt: Some(Tilt { yaw_degrees: 25.0, pitch_degrees: 0.0 }), ..l };
+        let qt = plate_quad(&tl, (800, 600));
+        let left_h = (qt[3].1 - qt[0].1).abs();
+        let right_h = (qt[2].1 - qt[1].1).abs();
+        assert!(left_h > right_h, "yaw 正 = 右が奥で短い ({left_h} > {right_h})");
     }
 
     /// rev11: はめ込み位置を動かせる。横のずらしが無く、中央固定だった。

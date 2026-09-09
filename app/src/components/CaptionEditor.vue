@@ -30,6 +30,8 @@ const base = computed(() => store.image.caption);
 const position = ref<"top" | "bottom">(base.value.position);
 const sizeRatio = ref(base.value.sizeRatio);
 const color = ref(base.value.color);
+/** 見出しの縦位置 (canvas 高さ比)。null = position + 余白の既定どおり。rev14。 */
+const capY = ref<number | null>(null);
 const fontKey = ref(`${base.value.fontPath}#${base.value.fontIndex}`);
 
 /**
@@ -51,6 +53,7 @@ const snapIndex = ref<number | null>(null);
 const dirty = ref(false);
 function touch() {
   dirty.value = true;
+  refreshQuad();
 }
 
 const yaw = ref<number | null>(null);
@@ -64,6 +67,38 @@ const dy = ref<number | null>(null);
  * ずらしは canvas 幅・高さに対する比なので、表示サイズの比に直せばそのまま使える。
  */
 const preview = ref<HTMLImageElement | null>(null);
+
+/**
+ * プレートの**予定位置** (rev14)。座標は backend が合成と同じ関数から出すので、
+ * 射影の数式をここに写さない (写すと必ず食い違う)。
+ */
+const quad = ref<{ canvas: [number, number]; quad: [number, number][] } | null>(null);
+let pending = 0;
+async function refreshQuad() {
+  if (!props.isProduct) return;
+  const runDir = store.result?.package_dir;
+  if (!runDir) return;
+  const my = ++pending;
+  try {
+    const r = await invoke<{ canvas: [number, number]; quad: [number, number][] }>("plate_preview", {
+      runDir,
+      sceneId: props.sceneId,
+      spec: copy.value.trim() ? currentSpec() : null,
+      plate: currentPlate(),
+    });
+    if (my === pending) quad.value = r; // 古い応答で新しい枠を上書きしない
+  } catch {
+    /* 枠が出ないだけ。操作は妨げない */
+  }
+}
+
+/** 表示サイズに合わせた SVG のポリゴン点列。 */
+const quadPoints = computed(() => {
+  const q = quad.value;
+  if (!q) return "";
+  const [cw, ch] = q.canvas;
+  return q.quad.map(([x, y]) => `${(x / cw) * 100},${(y / ch) * 100}`).join(" ");
+});
 let drag: { x: number; y: number; dx: number; dy: number } | null = null;
 
 function onDown(e: PointerEvent) {
@@ -78,6 +113,7 @@ function onMove(e: PointerEvent) {
   dx.value = clamp(drag.dx + (e.clientX - drag.x) / r.width);
   dy.value = clamp(drag.dy + (e.clientY - drag.y) / r.height);
   dirty.value = true;
+  refreshQuad();
 }
 function onUp(e: PointerEvent) {
   if (!drag) return;
@@ -119,6 +155,7 @@ async function toggle() {
   if (open.value && !fonts.value.length) {
     try {
       fonts.value = await invoke<FontEntry[]>("list_fonts");
+      refreshQuad();
     } catch (e) {
       store.push("error", `フォント一覧を取れません: ${e}`);
     }
@@ -133,6 +170,7 @@ function currentSpec() {
     size_ratio: Math.min(0.2, Math.max(0.02, sizeRatio.value || 0.055)),
     position: position.value,
     color: /^#[0-9a-fA-F]{6}$/.test(color.value) ? color.value : "#FFFFFF",
+    y_ratio: capY.value,
   };
 }
 
@@ -161,6 +199,7 @@ function reset() {
   position.value = base.value.position;
   sizeRatio.value = base.value.sizeRatio;
   color.value = base.value.color;
+  capY.value = null;
   fontKey.value = `${base.value.fontPath}#${base.value.fontIndex}`;
   yaw.value = null;
   pitch.value = null;
@@ -226,6 +265,11 @@ function restoreCopy() {
           <input v-model="color" type="color" @change="touch()" />
         </label>
       </div>
+      <label class="field">
+        <span>見出しの縦位置 <b class="mono">{{ show(capY) }}</b></span>
+        <input :value="capY ?? (position === 'top' ? 0.06 : 0.85)" type="range" min="0" max="0.95" step="0.01"
+               @input="capY = num($event); touch()" />
+      </label>
       </template>
       <template v-if="isProduct">
         <h4 class="sub" style="margin: 4px 0 0">はめ込み</h4>
@@ -236,18 +280,23 @@ function restoreCopy() {
             <option v-for="(sp, i) in snapshots" :key="sp" :value="i">{{ i + 1 }} 枚目 — {{ baseName(sp) }}</option>
           </select>
         </label>
-        <img
-          v-if="store.imageUrls[sceneId]"
-          ref="preview"
-          class="preview"
-          :src="store.imageUrls[sceneId]"
-          :alt="`scene ${sceneId}`"
-          title="ドラッグで位置を動かす"
-          @pointerdown.prevent="onDown"
-          @pointermove="onMove"
-          @pointerup="onUp"
-          @pointercancel="onUp"
-        />
+        <div v-if="store.imageUrls[sceneId]" class="stage">
+          <img
+            ref="preview"
+            class="preview"
+            :src="store.imageUrls[sceneId]"
+            :alt="`scene ${sceneId}`"
+            title="ドラッグで位置を動かす"
+            @pointerdown.prevent="onDown"
+            @pointermove="onMove"
+            @pointerup="onUp"
+            @pointercancel="onUp"
+          />
+          <!-- 予定位置。座標は backend の plate_quad (合成と同じ関数) から来る。 -->
+          <svg v-if="quadPoints" class="ghost" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <polygon :points="quadPoints" />
+          </svg>
+        </div>
         <label class="field">
           <span>左右の傾き <b class="mono">{{ show(yaw, "°") }}</b></span>
           <input :value="yaw ?? 0" type="range" min="-35" max="35" step="1" @input="yaw = num($event); touch()" />
@@ -292,10 +341,30 @@ function restoreCopy() {
 .cap {
   margin-top: 4px;
 }
+.stage {
+  position: relative;
+  line-height: 0;
+  /* 枠を画像にぴったり重ねるため、要素の箱を画像そのものにする。
+     object-fit: contain だとレターボックスのぶんだけ枠がズレる。 */
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+}
+.ghost {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.ghost polygon {
+  fill: rgb(120 170 255 / 0.12);
+  stroke: #78aaff;
+  stroke-width: 0.4;
+  vector-effect: non-scaling-stroke;
+}
 .preview {
   width: 100%;
-  max-height: 32vh;
-  object-fit: contain;
+  height: auto;
+  display: block;
   border-radius: 6px;
   cursor: grab;
   touch-action: none;

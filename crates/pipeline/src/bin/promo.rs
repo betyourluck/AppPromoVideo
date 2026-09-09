@@ -256,6 +256,7 @@ async fn make_images(a: &Args, provider: Provider, promo: &mut PromoJson, pkg_di
         size_ratio: a.caption_size,
         position: a.caption_pos,
         color: a.caption_color.clone(),
+        y_ratio: None,
     });
     let job = RefJob {
         cfg: &cfg,

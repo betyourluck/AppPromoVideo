@@ -28,11 +28,14 @@ pub struct Caption<'a> {
     pub position: CaptionPosition,
     /// canvas の高さに対する余白比。
     pub margin_ratio: f32,
+    /// 縦位置を直接指定する (rev14、canvas 高さ比 0.0〜1.0 = 文字ブロックの上端)。
+    /// `None` なら `position` + `margin_ratio` の従来どおり。上下に収まらない値は端で丸める。
+    pub y_ratio: Option<f32>,
 }
 
 impl<'a> Caption<'a> {
     pub fn new(text: &'a str, font_data: &'a [u8], font_index: u32) -> Self {
-        Caption { text, font_data, font_index, size_ratio: 0.055, color: [255, 255, 255, 255], position: CaptionPosition::Bottom, margin_ratio: 0.06 }
+        Caption { text, font_data, font_index, size_ratio: 0.055, color: [255, 255, 255, 255], position: CaptionPosition::Bottom, margin_ratio: 0.06, y_ratio: None }
     }
 }
 
@@ -84,6 +87,18 @@ fn draw_line<F: Font, S: ScaleFont<F>>(img: &mut RgbaImage, font: &S, line: &str
 }
 
 /// PNG に見出しを焼く。空文字なら入力をそのまま返す。
+/// 文字ブロックの上端 (canvas 座標、純粋)。枠のプレビューが焼き込みと同じ数式を使うために公開する。
+pub fn caption_top(canvas_h: u32, block_h: f32, cap: &Caption<'_>) -> f32 {
+    let h = canvas_h as f32;
+    match cap.y_ratio {
+        Some(r) => (h * r).clamp(0.0, (h - block_h).max(0.0)),
+        None => match cap.position {
+            CaptionPosition::Top => h * cap.margin_ratio,
+            CaptionPosition::Bottom => h - h * cap.margin_ratio - block_h,
+        },
+    }
+}
+
 pub fn burn_caption(png: &[u8], cap: &Caption<'_>) -> Result<Vec<u8>, String> {
     if cap.text.trim().is_empty() {
         return Ok(png.to_vec());
@@ -111,9 +126,13 @@ pub fn burn_caption(png: &[u8], cap: &Caption<'_>) -> Result<Vec<u8>, String> {
     let line_h = px * 1.3;
     let block_h = line_h * lines.len() as f32;
     let margin = h as f32 * cap.margin_ratio;
-    let top = match cap.position {
-        CaptionPosition::Top => margin,
-        CaptionPosition::Bottom => h as f32 - margin - block_h,
+    let top = match cap.y_ratio {
+        // rev14: 直接指定。文字ブロックが canvas からはみ出さないよう端で丸める。
+        Some(r) => (h as f32 * r).clamp(0.0, (h as f32 - block_h).max(0.0)),
+        None => match cap.position {
+            CaptionPosition::Top => margin,
+            CaptionPosition::Bottom => h as f32 - margin - block_h,
+        },
     };
     let shadow = [0, 0, 0, 190];
     let shadow_off = (px * 0.05).max(1.5);
