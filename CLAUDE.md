@@ -73,7 +73,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 ## 現状 (2026-09-09)
 
 - **spec 01 は Phase 0〜E 着地、rev22 まで反映済み。** crates 152 green / vitest 30 / backend 10 green・clippy clean。
-- コミットは Initial `a75c3bc` の上に 25 本、`origin/main` に push 済み (private。**週末に public 予定**)。
+- コミットは Initial `a75c3bc` の上に 28 本、`origin/main` に push 済み (private。**週末に public 予定**)。
 - 通し (解析 → 構成 → 参照画像 → 合成) は **4 リポジトリで live 成功** (Kataribe / Verificator /
   AppPromoVideo 自身 / Fuseforks)。**出口まで到達** — MiniMax i2v の 15 秒が X に投稿された (2026-09-09)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
@@ -106,6 +106,12 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 **決着 (2026-09-09)**: `PlateMode` の既定は **frontal**。MiniMax i2v の実機観測で「斜めにすると
 動画が動かしすぎる」(ユーザー)。傾ける経路は残す (設定 / `--plate perspective`)。
 **保存済みの設定は上書きしないので、既に perspective の環境は設定で 1 度切り替える必要がある。**
+
+**次の主題 (2026-09-09 ユーザー)**: **UI をもっと簡単にする。** 機能は出口 (MiniMax の 15 秒) まで
+到達したので、次は使い勝手。ユーザーが X で今どきの UI デザインを探して持ち込む予定 —
+**参照が来てから着手する** (こちらで先に作り込まない)。
+現状の形は 3 ペイン + ダイアログ 3 種 (設定 / 履歴 / シーン編集) で、rev16〜21 で
+シーン編集の中身が増えた。**私は画面を見ていないので、どこが複雑かの判断材料を持っていない。**
 
 **次の候補**: 傾きと可読性の境目 /
 mood カットのモチーフ一貫性 / `motion_prompt` の粒度 / ComfyUI と OpenAI の live /

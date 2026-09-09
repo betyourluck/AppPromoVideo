@@ -678,7 +678,9 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
       中央揃え・落ち影・自動縮小) + RefJob.caption + GUI 設定 (フォント一覧 / 高さ / 位置 / プレビュー / フォルダ) + `promo caption` / `promo fonts`。
       crates 107 green・vitest 10・backend check/clippy green。見本 1 枚 (BIZ UDゴシック B)。**既定 OFF、採否はユーザーのアンケート待ち**。
 - [x] Phase E: 別リポジトリで再現 (rev4 = tree の出所を git に) + live 2 本 (Verificator 一発通過 / AppPromoVideo で合成カット) + rev5 (面の傾きを設定で切替)
-- [ ] Phase F 候補: **等倍 (1890x1080) の対を MiniMax i2v で再テスト** (perspective / frontal、文字が作り変えられないかを含む) / 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度
+- [x] Phase F 一部: **MiniMax i2v の実機到達** (2026-09-09、X に 15 秒公開)。「斜めにすると動かしすぎる」→ rev22 で既定 frontal
+- [ ] **UI を簡単にする** (2026-09-09 ユーザー、次の主題)。X で今どきの UI デザインを探して持ち込む予定。**参照待ちで着手しない**
+- [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度 / `RunStats` の live 記録 (frontal の費用)
 - [ ] Phase E
 
 ## Notes
