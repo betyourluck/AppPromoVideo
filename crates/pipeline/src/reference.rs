@@ -57,7 +57,7 @@ impl CaptionSpec {
 fn default_size_ratio() -> f32 {
     0.055
 }
-use promo_core::export::{CaptionOverride, reference_image_name};
+use promo_core::export::{CaptionOverride, PlateOverride, reference_image_name};
 use promo_core::plan::{CutKind, PlateMode, ScenePlan};
 use promo_core::style::extract_hex;
 
@@ -124,6 +124,8 @@ pub struct RefJob<'a> {
     pub plate_mode: PlateMode,
     /// scene ごとの見出しの上書き (rev9)。無ければ `caption` がそのまま既定として効く。
     pub caption_overrides: &'a std::collections::BTreeMap<u32, CaptionOverride>,
+    /// scene ごとのはめ込みの上書き (rev11)。product のみ。
+    pub plate_overrides: &'a std::collections::BTreeMap<u32, PlateOverride>,
 }
 
 /// 画像の寸法をヘッダだけで読む (デコードしない)。焼き直しで canvas を素材から取るのに使う。
@@ -166,15 +168,30 @@ fn spec_for_scene(
 /// 帯 (`with_caption_band`) は**そのカットで実際に効いている見出しの位置**から決める。
 /// rev9 はここをジョブ既定の位置で合成時に焼き込んでいたので、あとから位置を下→上に変えると
 /// 上に空きが無いところへ焼くことになりプレートに重なった。生成と焼き直しでこの関数を共有する。
-pub fn layout_for(canvas: (u32, u32), caption: Option<CaptionPosition>, tilt: Option<Tilt>) -> Layout {
-    let base = match caption {
+pub fn layout_for(
+    canvas: (u32, u32),
+    caption: Option<CaptionPosition>,
+    tilt: Option<Tilt>,
+    plate: Option<&PlateOverride>,
+) -> Layout {
+    let mut l = match caption {
         Some(pos) => Layout::for_canvas(canvas.0, canvas.1).with_caption_band(pos == CaptionPosition::Top),
         None => Layout::for_canvas(canvas.0, canvas.1),
     };
-    match tilt {
-        Some(t) => base.with_tilt(t),
-        None => base,
+    // 傾きの既定は LLM が書いた `scene.plate_tilt` (perspective のときだけ)。
+    let mut yaw = tilt.map(|t| t.yaw_degrees).unwrap_or(0.0);
+    let mut pitch = tilt.map(|t| t.pitch_degrees).unwrap_or(0.0);
+    if let Some(o) = plate {
+        // rev11: 人の上書きは LLM の値に勝つ。触っていないフィールドは既定のまま。
+        let o = o.clamped();
+        yaw = o.yaw_degrees.unwrap_or(yaw);
+        pitch = o.pitch_degrees.unwrap_or(pitch);
+        l.screen_ratio = o.screen_ratio.unwrap_or(l.screen_ratio);
+        l.x_offset_ratio = o.x_offset_ratio.unwrap_or(l.x_offset_ratio);
+        // 縦のずらしを指定したら**帯のずらしを置き換える** (人が決めた位置を優先する)。
+        l.y_offset_ratio = o.y_offset_ratio.unwrap_or(l.y_offset_ratio);
     }
+    l.with_tilt(Tilt { yaw_degrees: yaw, pitch_degrees: pitch })
 }
 
 /// 見出しを焼く**前**の合成の置き場 (契約 `ExportPackage.layout`、rev9)。
@@ -202,6 +219,7 @@ pub async fn generate_references(
         requested_refs,
         plate_mode,
         caption_overrides: overrides,
+        plate_overrides,
     } = *job;
     // フォントは 1 回だけ読む。読めなければ焼かずに進む (進捗に理由を出す)。
     let font_data: Option<(Vec<u8>, &CaptionSpec)> = match caption {
@@ -268,7 +286,7 @@ pub async fn generate_references(
                         // あとから**合成からやり直せる** (帯の取り直し・傾きの変更が無料でできる)。
                         let backdrop = fit_to_canvas(&backdrop, cw, ch).unwrap_or(backdrop);
                         save_base(out_dir, &reference_image_name(scene.scene_id, 1), &backdrop, scene.scene_id, progress);
-                        let l = layout_for((cw, ch), spec.as_ref().map(|s| s.position), tilt_of(plate_mode, scene));
+                        let l = layout_for((cw, ch), spec.as_ref().map(|s| s.position), tilt_of(plate_mode, scene), plate_overrides.get(&scene.scene_id));
                         composite_product_cut(&backdrop, &shot.bytes, &l).map_err(ImageGenError::Config)
                     }
                 }
@@ -439,7 +457,7 @@ mod tests {
         let dir = out_dir();
         let mut log = Vec::new();
         let c = cfg(Provider::Gemini);
-        let job = RefJob { cfg: &c, api_key: "k", out_dir: &dir, palette: &[], caption: None, max_scenes: None, seed_base: 7, requested_refs: None, plate_mode: PlateMode::default(), caption_overrides: &Default::default() };
+        let job = RefJob { cfg: &c, api_key: "k", out_dir: &dir, palette: &[], caption: None, max_scenes: None, seed_base: 7, requested_refs: None, plate_mode: PlateMode::default(), caption_overrides: &Default::default(), plate_overrides: &Default::default() };
         let out = generate_references(&fake, &job, &mut p, &refs(2), &mut |s| log.push(s)).await;
         assert_eq!(out.len(), 3);
         assert!(out.iter().all(|s| s.result.is_ok()));
@@ -461,7 +479,7 @@ mod tests {
         let mut log = Vec::new();
         let c = cfg(Provider::Openai);
         let dir = out_dir();
-        let job = RefJob { cfg: &c, api_key: "k", out_dir: &dir, palette: &[], caption: None, max_scenes: Some(1), seed_base: 0, requested_refs: None, plate_mode: PlateMode::default(), caption_overrides: &Default::default() };
+        let job = RefJob { cfg: &c, api_key: "k", out_dir: &dir, palette: &[], caption: None, max_scenes: Some(1), seed_base: 0, requested_refs: None, plate_mode: PlateMode::default(), caption_overrides: &Default::default(), plate_overrides: &Default::default() };
         let out = generate_references(&fake, &job, &mut p, &refs(3), &mut |s| log.push(s)).await;
         assert_eq!(out.len(), 1, "max_scenes で先頭 1 シーンだけ");
         assert_eq!(fake.calls.lock().unwrap()[0].1, 1);
@@ -478,22 +496,72 @@ mod tests {
     #[test]
     fn the_caption_band_follows_the_position_that_is_actually_used() {
         let canvas = (1000, 1000);
-        let none = layout_for(canvas, None, None);
+        let none = layout_for(canvas, None, None, None);
         assert_eq!(none.screen_ratio, 0.78, "見出し無しなら帯を取らない");
         assert_eq!(none.y_offset_ratio, 0.0);
 
-        let bottom = layout_for(canvas, Some(CaptionPosition::Bottom), None);
+        let bottom = layout_for(canvas, Some(CaptionPosition::Bottom), None, None);
         assert_eq!(bottom.screen_ratio, 0.68);
         assert!(bottom.y_offset_ratio < 0.0, "下に帯 → プレートは上へ寄る");
 
-        let top = layout_for(canvas, Some(CaptionPosition::Top), None);
+        let top = layout_for(canvas, Some(CaptionPosition::Top), None, None);
         assert!(top.y_offset_ratio > 0.0, "上に帯 → プレートは下へ寄る");
         assert_ne!(top.y_offset_ratio, bottom.y_offset_ratio, "位置で向きが変わる");
 
         // 傾きはそのまま乗る (焼き直しで合成をやり直しても tilt を失わない)。
-        let tilted = layout_for(canvas, Some(CaptionPosition::Top), Some(Tilt { yaw_degrees: 12.0, pitch_degrees: -8.0 }));
+        let tilted = layout_for(canvas, Some(CaptionPosition::Top), Some(Tilt { yaw_degrees: 12.0, pitch_degrees: -8.0 }), None);
         assert!(tilted.tilt.is_some());
         assert_eq!(tilted.y_offset_ratio, top.y_offset_ratio);
+    }
+
+    /// rev11: はめ込みの上書きは**フィールド単位で**既定に落ちる。
+    #[test]
+    fn plate_overrides_replace_only_what_was_set() {
+        let canvas = (1000, 1000);
+        let with_band = layout_for(canvas, Some(CaptionPosition::Bottom), None, None);
+
+        // 大きさだけ変える → ずらしは帯のまま。
+        let bigger = layout_for(
+            canvas,
+            Some(CaptionPosition::Bottom),
+            None,
+            Some(&PlateOverride { screen_ratio: Some(0.9), ..Default::default() }),
+        );
+        assert_eq!(bigger.screen_ratio, 0.9);
+        assert_eq!(bigger.y_offset_ratio, with_band.y_offset_ratio, "触っていないずらしは帯のまま");
+
+        // 縦のずらしを指定したら**帯のずらしを置き換える**。
+        let moved = layout_for(
+            canvas,
+            Some(CaptionPosition::Bottom),
+            None,
+            Some(&PlateOverride { y_offset_ratio: Some(0.3), x_offset_ratio: Some(-0.15), ..Default::default() }),
+        );
+        assert_eq!(moved.y_offset_ratio, 0.3);
+        assert_eq!(moved.x_offset_ratio, -0.15);
+        assert_eq!(moved.screen_ratio, with_band.screen_ratio, "大きさは帯の値のまま");
+
+        // 傾きは上書きが LLM の値に勝つ。
+        let tilted = layout_for(
+            canvas,
+            None,
+            Some(Tilt { yaw_degrees: 5.0, pitch_degrees: 5.0 }),
+            Some(&PlateOverride { yaw_degrees: Some(20.0), ..Default::default() }),
+        );
+        let t = tilted.tilt.expect("傾きが乗る");
+        assert_eq!(t.yaw_degrees, 20.0, "上書きが勝つ");
+        assert_eq!(t.pitch_degrees, 5.0, "触っていない軸は LLM の値のまま");
+
+        // 範囲外は丸める (UI の入力を信用しない)。
+        let wild = layout_for(
+            canvas,
+            None,
+            None,
+            Some(&PlateOverride { yaw_degrees: Some(90.0), screen_ratio: Some(5.0), x_offset_ratio: Some(-9.0), ..Default::default() }),
+        );
+        assert_eq!(wild.tilt.unwrap().yaw_degrees, 35.0);
+        assert_eq!(wild.screen_ratio, 0.95);
+        assert_eq!(wild.x_offset_ratio, -0.4);
     }
 
     /// rev9: 見出しを焼く**前**を base/ に残す。あとから位置や色を変えるのに背景を作り直さないため。
@@ -570,7 +638,7 @@ mod tests {
         let c = cfg(Provider::Gemini);
         let dir = out_dir();
         let palette = vec!["#112233".to_string()];
-        let job = RefJob { cfg: &c, api_key: "k", out_dir: &dir, palette: &palette, caption: None, max_scenes: None, seed_base: 0, requested_refs: None, plate_mode: PlateMode::default(), caption_overrides: &Default::default() };
+        let job = RefJob { cfg: &c, api_key: "k", out_dir: &dir, palette: &palette, caption: None, max_scenes: None, seed_base: 0, requested_refs: None, plate_mode: PlateMode::default(), caption_overrides: &Default::default(), plate_overrides: &Default::default() };
         let out = generate_references(&Bg, &job, &mut p, &[shot], &mut |_| {}).await;
         assert!(out.iter().all(|r| r.result.is_ok()), "{:?}", out.iter().map(|r| r.result.as_ref().err().map(|e| e.to_string())).collect::<Vec<_>>());
         // rev6: 1920x1080 のスクショを 0.78 で等倍に置ける canvas まで拡がる (1344x768 では 0.711 倍に縮んでいた)。
@@ -592,7 +660,7 @@ mod tests {
         let mut p = plan();
         let c = cfg(Provider::Comfy);
         let dir = out_dir();
-        let job = RefJob { cfg: &c, api_key: "", out_dir: &dir, palette: &[], caption: None, max_scenes: None, seed_base: 0, requested_refs: None, plate_mode: PlateMode::default(), caption_overrides: &Default::default() };
+        let job = RefJob { cfg: &c, api_key: "", out_dir: &dir, palette: &[], caption: None, max_scenes: None, seed_base: 0, requested_refs: None, plate_mode: PlateMode::default(), caption_overrides: &Default::default(), plate_overrides: &Default::default() };
         let out = generate_references(&fake, &job, &mut p, &[], &mut |_| {}).await;
         assert!(out[0].result.is_ok());
         assert!(matches!(out[1].result, Err(ImageGenError::RateLimited { .. })));

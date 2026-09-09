@@ -235,7 +235,18 @@ ImageGenConfig:                     # (Kataribe) provider / base_url / model / s
         product: base/ の背景 + snapshots/ の写し → `layout_for(canvas, 効いている position, tilt)` で合成 → 焼く。
         mood: base/ をそのまま → 焼く。どちらも直下の完成品を置き換え、promo.json の overrides を更新して data URL を返す。
         毎回 base から作り直すので、何度やっても劣化しない。
-      layout_for: "canvas / 見出しの有無と位置 / 傾き から Layout を作る**唯一の関数**。生成と焼き直しで共有する (帯の計算が二重にならないように)"
+      layout_for: "canvas / 見出しの有無と位置 / 傾き / はめ込みの上書き から Layout を作る**唯一の関数**。生成と焼き直しで共有する (帯の計算が二重にならないように)"
+
+PlateOverride:                      # rev11 (2026-09-09 ユーザー要望「傾きもはめ込み位置も変えたい」)。product カットのみ
+  why: "rev10 で合成からやり直せるようになったので、見出しだけでなく**プレートの置き方**も無料で変えられる。より複雑な PR 動画を作るには 1 枚ごとの調整が要る"
+  where: "PromoJson.plate_overrides: Map<scene_id, PlateOverride>。caption_overrides と同じく**LLM の schema には足さない**"
+  yaw_degrees: Option<f32>          # ±35。省略で scene.plate_tilt (LLM が書いた値)
+  pitch_degrees: Option<f32>        # ±35。同上
+  screen_ratio: Option<f32>         # 0.2〜0.95。プレートが canvas に占める最大比。省略で 0.78 (見出しありは 0.68)
+  x_offset_ratio: Option<f32>       # ±0.4。中央からの横ずらし (canvas 幅比、正 = 右)
+  y_offset_ratio: Option<f32>       # ±0.4。縦ずらし (正 = 下)。**指定すると見出しの帯のずらしを置き換える**
+  resolution: "上書き → 無ければ帯と scene.plate_tilt から決まる既定。フィールド単位で落ちる"
+  clamp: "範囲外は Rust 側で丸める (UI の入力を信用しない)"
     default_font: |
       既定 ON にすると「ON なのにフォント未選択で何も焼かれない」が無言で起きるので、実行直前に
       `pickCaptionFont` (frontend の純関数) が自動で選ぶ。規律は 4 つ:

@@ -391,6 +391,7 @@ async fn run_inner(app: &AppHandle, cancel: watch::Receiver<bool>, req: RunReque
         summary,
         plan,
         caption_overrides: Default::default(),
+            plate_overrides: Default::default(),
         plate_mode: req.plate_mode,
     };
     // rev7: run ごとに隔離する。以前は同じパッケージを上書きして過去の出力を消していた。
@@ -523,6 +524,7 @@ async fn generate_images(app: AppHandle, req: ImagesRequest) -> Result<ImagesRes
         caption: req.caption.as_ref(),
         plate_mode: req.plate_mode,
         caption_overrides: &promo.caption_overrides,
+        plate_overrides: &promo.plate_overrides,
         max_scenes: req.max_scenes,
         seed_base,
         requested_refs: req.requested_refs,
@@ -669,7 +671,12 @@ fn forget_run(app: AppHandle, run_dir: String, delete_files: bool) -> Result<boo
 /// **生成 API は呼ばない。** `base/` に残した焼く前の合成を読んで焼き、直下の完成品を置き換える。
 /// 何度やっても劣化しない (毎回 base から焼くので、焼いた上に焼くことがない)。
 #[tauri::command]
-fn reburn_caption(run_dir: String, scene_id: u32, spec: Option<CaptionSpec>) -> Result<String, String> {
+fn reburn_caption(
+    run_dir: String,
+    scene_id: u32,
+    spec: Option<CaptionSpec>,
+    plate: Option<promo_core::export::PlateOverride>,
+) -> Result<String, String> {
     let dir = PathBuf::from(&run_dir);
     let text = std::fs::read_to_string(dir.join("promo.json")).map_err(|e| format!("promo.json を読めません: {e}"))?;
     let mut promo: PromoJson = serde_json::from_str(&text).map_err(|e| format!("promo.json の形が違います: {e}"))?;
@@ -698,7 +705,7 @@ fn reburn_caption(run_dir: String, scene_id: u32, spec: Option<CaptionSpec>) -> 
         promo_core::plan::CutKind::Product => {
             let idx = snapshot_index.unwrap_or(0) as usize;
             let shot = read_run_snapshot(&dir, idx)?;
-            let l = pipeline::reference::layout_for(canvas, spec.as_ref().map(|s| s.position), tilt);
+            let l = pipeline::reference::layout_for(canvas, spec.as_ref().map(|s| s.position), tilt, plate.as_ref());
             image_gen::composite_product_cut(&png, &shot, &l)?
         }
     };
@@ -715,6 +722,15 @@ fn reburn_caption(run_dir: String, scene_id: u32, spec: Option<CaptionSpec>) -> 
     };
     std::fs::write(dir.join(&name), &out).map_err(|e| format!("書けません {name}: {e}"))?;
 
+    // はめ込みの上書きも残す (rev11)。空の指定は「既定に戻す」なので行ごと消す。
+    match &plate {
+        Some(p) if *p != Default::default() => {
+            promo.plate_overrides.insert(scene_id, p.clamped());
+        }
+        _ => {
+            promo.plate_overrides.remove(&scene_id);
+        }
+    }
     // 上書きを promo.json に残す (run を開き直しても効くように)。
     match &spec {
         None => {

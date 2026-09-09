@@ -15,6 +15,9 @@ pub struct PromoJson {
     /// scene_id → 見出しの上書き (rev9)。**LLM の schema には足さない** — 埋めるのは人。
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub caption_overrides: std::collections::BTreeMap<u32, CaptionOverride>,
+    /// scene_id → はめ込みの上書き (rev11)。product カットのみ。
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub plate_overrides: std::collections::BTreeMap<u32, PlateOverride>,
     /// この run がどちらのモードで合成されたか (rev10)。焼き直しで合成をやり直すとき、
     /// 傾きを効かせるかがこれで決まる — 索引 (app_data) に頼らず promo.json 自身が持つ。
     #[serde(default)]
@@ -37,6 +40,36 @@ pub struct CaptionOverride {
     /// "#RRGGBB"
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+}
+
+/// プレート (実スクショの面) の置き方の上書き (契約 `PlateOverride`、rev11)。
+/// 全フィールド `Option` — 省略したものは既定 (帯と `scene.plate_tilt`) に落ちる。
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct PlateOverride {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub yaw_degrees: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pitch_degrees: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub screen_ratio: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x_offset_ratio: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub y_offset_ratio: Option<f32>,
+}
+
+impl PlateOverride {
+    /// UI の入力は信用せず範囲に丸める (契約 `PlateOverride.clamp`)。
+    pub fn clamped(&self) -> PlateOverride {
+        let c = |v: Option<f32>, lo: f32, hi: f32| v.map(|x| x.clamp(lo, hi));
+        PlateOverride {
+            yaw_degrees: c(self.yaw_degrees, -35.0, 35.0),
+            pitch_degrees: c(self.pitch_degrees, -35.0, 35.0),
+            screen_ratio: c(self.screen_ratio, 0.2, 0.95),
+            x_offset_ratio: c(self.x_offset_ratio, -0.4, 0.4),
+            y_offset_ratio: c(self.y_offset_ratio, -0.4, 0.4),
+        }
+    }
 }
 
 /// `#RRGGBB` → RGBA (純粋)。読めなければ `None` — 呼び出し側が既定 (白) に落とす。
@@ -167,6 +200,7 @@ mod tests {
             },
             plan: ScenePlan { total_seconds: 15, aspect: Aspect::Square, scenes: vec![] },
             caption_overrides: Default::default(),
+            plate_overrides: Default::default(),
             plate_mode: Default::default(),
         }
     }

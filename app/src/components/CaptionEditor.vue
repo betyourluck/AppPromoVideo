@@ -1,16 +1,16 @@
 <script setup lang="ts">
 /**
- * 1 シーンぶんの見出しの上書き (契約 `caption.per_scene`、rev9)。
+ * 1 シーンぶんの上書き — 見出し (rev9) と、はめ込み (rev11、product のみ)。
  *
- * 設定の値が**既定**で、ここで変えたぶんだけがその scene に効く。焼き直しは `base/` に
- * 残した「焼く前の合成」から行うので、**生成 API は呼ばず、何度やっても劣化しない**。
+ * 設定の値が**既定**で、ここで変えたぶんだけがその scene に効く。やり直しは `base/` の
+ * **素材** (product は背景 / mood は絵) から合成し直すので、**生成 API は呼ばず、劣化しない**。
  */
 import { computed, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../store";
 import type { FontEntry } from "../types";
 
-const props = defineProps<{ sceneId: number; hasText: boolean }>();
+const props = defineProps<{ sceneId: number; hasText: boolean; isProduct: boolean }>();
 const store = useStore();
 
 const open = ref(false);
@@ -23,6 +23,27 @@ const position = ref<"top" | "bottom">(base.value.position);
 const sizeRatio = ref(base.value.sizeRatio);
 const color = ref(base.value.color);
 const fontKey = ref(`${base.value.fontPath}#${base.value.fontIndex}`);
+
+/**
+ * はめ込み (product のみ、rev11)。空欄 = 既定に従う。
+ * 傾きの既定は LLM が書いた `scene.plate_tilt`、大きさとずらしの既定は見出しの帯が決める。
+ */
+const yaw = ref<number | null>(null);
+const pitch = ref<number | null>(null);
+const ratio = ref<number | null>(null);
+const dx = ref<number | null>(null);
+const dy = ref<number | null>(null);
+
+/** 触ったフィールドだけ送る。null は「既定のまま」。 */
+function currentPlate() {
+  const p: Record<string, number> = {};
+  if (yaw.value !== null) p.yaw_degrees = yaw.value;
+  if (pitch.value !== null) p.pitch_degrees = pitch.value;
+  if (ratio.value !== null) p.screen_ratio = ratio.value;
+  if (dx.value !== null) p.x_offset_ratio = dx.value;
+  if (dy.value !== null) p.y_offset_ratio = dy.value;
+  return Object.keys(p).length ? p : null;
+}
 
 async function toggle() {
   open.value = !open.value;
@@ -49,7 +70,7 @@ function currentSpec() {
 async function apply() {
   busy.value = true;
   try {
-    await store.reburnCaption(props.sceneId, currentSpec());
+    await store.reburnCaption(props.sceneId, props.hasText ? currentSpec() : null, currentPlate());
   } finally {
     busy.value = false;
   }
@@ -59,7 +80,7 @@ async function apply() {
 async function clear() {
   busy.value = true;
   try {
-    await store.reburnCaption(props.sceneId, null);
+    await store.reburnCaption(props.sceneId, null, currentPlate());
   } finally {
     busy.value = false;
   }
@@ -71,15 +92,26 @@ function reset() {
   sizeRatio.value = base.value.sizeRatio;
   color.value = base.value.color;
   fontKey.value = `${base.value.fontPath}#${base.value.fontIndex}`;
+  yaw.value = null;
+  pitch.value = null;
+  ratio.value = null;
+  dx.value = null;
+  dy.value = null;
 }
 </script>
 
 <template>
   <div class="cap">
-    <button class="btn small" :disabled="!hasText" :title="hasText ? '' : 'このシーンには copy_text がありません'" @click="toggle">
-      見出し {{ open ? "▲" : "▼" }}
+    <button
+      class="btn small"
+      :disabled="!hasText && !isProduct"
+      :title="hasText || isProduct ? '' : 'このシーンには copy_text も、はめ込むスクショもありません'"
+      @click="toggle"
+    >
+      {{ hasText ? (isProduct ? "見出し / はめ込み" : "見出し") : "はめ込み" }} {{ open ? "▲" : "▼" }}
     </button>
     <div v-if="open" class="panel-in">
+      <template v-if="hasText">
       <p v-if="!fonts.length" class="muted note">フォント一覧を読み込み中…</p>
       <div class="row">
         <label class="field" style="flex: 2">
@@ -108,13 +140,46 @@ function reset() {
           <input v-model="color" type="color" />
         </label>
       </div>
+      </template>
+      <template v-if="isProduct">
+        <h4 class="sub" style="margin: 4px 0 0">はめ込み (空欄 = 既定のまま)</h4>
+        <div class="row">
+          <label class="field" style="flex: 1">
+            <span>左右の傾き</span>
+            <input v-model.number="yaw" type="number" min="-35" max="35" step="1" placeholder="既定" />
+          </label>
+          <label class="field" style="flex: 1">
+            <span>上下の傾き</span>
+            <input v-model.number="pitch" type="number" min="-35" max="35" step="1" placeholder="既定" />
+          </label>
+          <label class="field" style="flex: 1">
+            <span>大きさ</span>
+            <input v-model.number="ratio" type="number" min="0.2" max="0.95" step="0.02" placeholder="既定" />
+          </label>
+        </div>
+        <div class="row">
+          <label class="field" style="flex: 1">
+            <span>横位置</span>
+            <input v-model.number="dx" type="number" min="-0.4" max="0.4" step="0.02" placeholder="中央" />
+          </label>
+          <label class="field" style="flex: 1">
+            <span>縦位置</span>
+            <input v-model.number="dy" type="number" min="-0.4" max="0.4" step="0.02" placeholder="既定" />
+          </label>
+        </div>
+        <p class="muted note">
+          傾きは度、大きさは canvas に占める比、位置は中央からのずらし (canvas 比、正 = 右 / 下)。
+          <b>縦位置を入れると見出しの帯のずらしを置き換えます。</b>
+        </p>
+      </template>
+
       <div class="row" style="gap: 4px">
         <button class="btn small" :disabled="busy" @click="apply">{{ busy ? "焼き直し中…" : "適用" }}</button>
         <button class="btn small" :disabled="busy" @click="reset">既定に戻す</button>
-        <button class="btn small" :disabled="busy" @click="clear">見出しを消す</button>
+        <button v-if="hasText" class="btn small" :disabled="busy" @click="clear">見出しを消す</button>
       </div>
       <p class="muted note">
-        焼く前の画像から焼き直すので、何度変えても劣化しません。生成の費用もかかりません。
+        背景から合成をやり直すので、何度変えても劣化しません。生成の費用もかかりません。
       </p>
     </div>
   </div>

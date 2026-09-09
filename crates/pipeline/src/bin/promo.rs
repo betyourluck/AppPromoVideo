@@ -268,6 +268,7 @@ async fn make_images(a: &Args, provider: Provider, promo: &mut PromoJson, pkg_di
         requested_refs: a.image_refs,
         plate_mode: a.plate_mode,
         caption_overrides: &promo.caption_overrides,
+        plate_overrides: &promo.plate_overrides,
     };
     let results = generate_references(&generator, &job, &mut promo.plan, &refs, &mut |s| eprintln!("[img] {s}")).await;
     let ok = results.iter().filter(|r| r.result.is_ok()).count();
@@ -397,6 +398,7 @@ async fn run(a: &Args) -> Result<(), String> {
         summary,
         plan,
         caption_overrides: Default::default(),
+            plate_overrides: Default::default(),
         plate_mode: a.plate_mode,
     };
     // rev7: run ごとに隔離する。既存の id を見てから採番 (同じ秒に 2 本走っても衝突しない)。

@@ -300,6 +300,26 @@ scene 5 `three-quarter angle` → yaw +18 / pitch -12、正対の背景 (scene 4
 ディスクは run あたり約 2 倍 (6 シーンで 18 MB → 36 MB)。古い run の掃除機構は無い。
 **傾きを GUI から変える UI はまだ無い** — 機構としては無料でできるようになったが、今回は入れていない。
 
+## rev11 (2026-09-09、はめ込みも 1 枚ごとに)
+
+rev10 で**合成からやり直せる**ようになったので、見出しだけでなくプレートの置き方も無料で変えられる。
+ユーザー要望「傾きも変えられたほうがいい、はめ込み位置とかもね」— より複雑な PR 動画を作るには
+1 枚ごとの調整が要る、という理由。
+
+44. **`Layout.x_offset_ratio`** を追加。横方向のずらしが無く中央固定だった (正対・傾きの両経路に効かせる)。
+45. **`PromoJson.plate_overrides: Map<scene_id, PlateOverride>`** (product のみ)。
+    `yaw_degrees` / `pitch_degrees` / `screen_ratio` / `x_offset_ratio` / `y_offset_ratio` の全てが `Option`。
+    **傾きの上書きは LLM が書いた `scene.plate_tilt` に勝つ**が、触っていない軸は LLM の値のまま。
+    **縦位置を指定すると見出しの帯のずらしを置き換える** (人が決めた位置を優先)。
+46. **範囲は Rust 側で丸める** (`PlateOverride::clamped`、傾き ±35 / 比 0.2〜0.95 / ずらし ±0.4)。
+    UI の入力を信用しない。
+47. `reburn_caption` が `plate` も受ける。空の指定は「既定に戻す」なので行ごと消す。
+48. UI は `CaptionEditor` に「はめ込み」節を追加 (product のみ表示)。**空欄 = 既定のまま**。
+    `copy_text` が無い product カットでも開けるようにした (見出しの入力群は隠す)。
+
+**接地の限界**: live 未実施。数値入力なので**結果を見るまで当たりが分からない** — スライダーや
+ドラッグでの直接操作、プレビューの即時反映は入れていない。rev10 より前の run は焼き直せない。
+
 ## 検討した代案: Remotion (2026-09-08、採用しない)
 
 React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](https://github.com/remotion-dev/remotion))。

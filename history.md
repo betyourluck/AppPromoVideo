@@ -235,3 +235,14 @@ crates 122→126 / backend 8 / vitest 19 green。**live 未実施、rev9 より�
 `PromoJson.plate_mode` を追加し、焼き直しの傾き適用を promo.json 自身が決めるようにした。
 crates 126→127 / backend 8 / vitest 19 green。**live 未実施、rev10 より前の run は焼き直せない。**
 
+## 2026-09-09
+
+### rev11 — はめ込みも 1 枚ごとに変えられるように
+
+rev10 で合成からやり直せるようになった副産物として、傾き・大きさ・位置も無料で変えられる。
+ユーザー要望を受けて UI まで通した。`Layout` に横方向のずらしが無く中央固定だったので追加
+(正対・傾きの両経路)。`PlateOverride` は全フィールド `Option` で、傾きの上書きは LLM の
+`scene.plate_tilt` に勝つが触っていない軸は残る。縦位置を指定すると見出しの帯のずらしを置き換える。
+範囲は Rust 側で丸める (UI の入力を信用しない)。`copy_text` が無い product カットでも
+はめ込みだけ触れるようにした。crates 127→129 / backend 8 / vitest 19 green。**live 未実施。**
+

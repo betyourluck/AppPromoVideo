@@ -34,6 +34,8 @@ pub struct Layout {
     pub shadow: bool,
     /// 縦のずらし (canvas 高さ比、負 = 上へ)。見出しの帯を空けるために使う。
     pub y_offset_ratio: f32,
+    /// 横のずらし (canvas 幅比、負 = 左へ)。rev11: はめ込み位置を動かすために足した。
+    pub x_offset_ratio: f32,
     /// 面の傾き (rev5)。`None` / ゼロなら従来どおり正対で貼る (画素等価)。
     pub tilt: Option<Tilt>,
 }
@@ -47,6 +49,7 @@ impl Layout {
             corner_radius: (width.min(height) / 60).max(6),
             shadow: true,
             y_offset_ratio: 0.0,
+            x_offset_ratio: 0.0,
             tilt: None,
         }
     }
@@ -345,7 +348,7 @@ pub fn composite_product_cut(
     let th = ((sh as f32 * scale) as u32).max(1);
     let mut shot = shot.resize_exact(tw, th, FilterType::Lanczos3).to_rgba8();
     round_corners(&mut shot, layout.corner_radius);
-    let x = ((layout.width - tw) / 2) as i64;
+    let x = ((layout.width - tw) / 2) as i64 + (layout.width as f32 * layout.x_offset_ratio) as i64;
     let y =
         ((layout.height - th) / 2) as i64 + (layout.height as f32 * layout.y_offset_ratio) as i64;
 
@@ -374,7 +377,7 @@ pub fn composite_product_cut(
         // 傾きあり = 面と影を同じ quad で射影変換して焼く (rev5)。
         Some(tilt) => {
             let quad = project_corners(tw as f32, th as f32, &tilt, max_w as f32, max_h as f32);
-            let cx = layout.width as f32 / 2.0;
+            let cx = layout.width as f32 / 2.0 + layout.width as f32 * layout.x_offset_ratio;
             let cy = layout.height as f32 / 2.0 + layout.height as f32 * layout.y_offset_ratio;
             if layout.shadow {
                 let pad = 24u32;
@@ -483,6 +486,37 @@ mod tests {
         assert!(bw <= 3840 && bh <= 3840, "上限で止まる: {bw}x{bh}");
     }
 
+    /// rev11: はめ込み位置を動かせる。横のずらしが無く、中央固定だった。
+    #[test]
+    fn the_plate_can_be_moved_horizontally_and_vertically() {
+        let bg = png(400, 300, [40, 40, 40]);
+        let shot = png(800, 600, [255, 0, 200]);
+        let center = Layout { width: 1000, height: 1000, screen_ratio: 0.5, corner_radius: 0, shadow: false, y_offset_ratio: 0.0, x_offset_ratio: 0.0, tilt: None };
+        let right = Layout { x_offset_ratio: 0.2, ..center };
+
+        let cols = |l: &Layout| {
+            let out = decode(&composite_product_cut(&bg, &shot, l).unwrap());
+            let hit: Vec<u32> = (0..out.width())
+                .filter(|&x| {
+                    let p = out.get_pixel(x, 500);
+                    [p[0], p[1], p[2]] == [255, 0, 200]
+                })
+                .collect();
+            (*hit.first().unwrap(), *hit.last().unwrap())
+        };
+        let (c0, c1) = cols(&center);
+        let (r0, r1) = cols(&right);
+        assert_eq!(r1 - r0, c1 - c0, "大きさは変わらない");
+        assert_eq!(r0 as i64 - c0 as i64, 200, "canvas 幅の 20% だけ右へ");
+
+        // 傾けた経路でも同じだけ動く。
+        let tilted = Layout { tilt: Some(Tilt { yaw_degrees: 15.0, pitch_degrees: 0.0 }), ..center };
+        let moved = Layout { x_offset_ratio: 0.2, ..tilted };
+        let (t0, _) = cols(&tilted);
+        let (m0, _) = cols(&moved);
+        assert!((m0 as i64 - t0 as i64 - 200).abs() <= 2, "傾けても 20% 右へ ({t0} → {m0})");
+    }
+
     #[test]
     fn zero_tilt_takes_the_untilted_path_and_stays_pixel_identical() {
         let bg = png(400, 300, [40, 40, 40]);
@@ -562,6 +596,7 @@ mod tests {
             corner_radius: 40,
             shadow: false,
             y_offset_ratio: 0.0,
+            x_offset_ratio: 0.0,
             tilt: None,
         };
         let out = decode(&composite_product_cut(&bg, &shot, &layout).unwrap());
@@ -589,6 +624,7 @@ mod tests {
             corner_radius: 0,
             shadow: false,
             y_offset_ratio: 0.0,
+            x_offset_ratio: 0.0,
             tilt: None,
         };
         let out = decode(&composite_product_cut(&bg, &shot, &layout).unwrap());
