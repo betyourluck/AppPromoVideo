@@ -293,7 +293,7 @@ function restoreCopy() {
             @pointercancel="onUp"
           />
           <!-- 予定位置。座標は backend の plate_quad (合成と同じ関数) から来る。 -->
-          <svg v-if="quadPoints" class="ghost" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <svg v-if="quadPoints && dirty" class="ghost" viewBox="0 0 100 100" preserveAspectRatio="none">
             <polygon :points="quadPoints" />
           </svg>
         </div>
@@ -318,6 +318,7 @@ function restoreCopy() {
           <input :value="dy ?? 0" type="range" min="-0.4" max="0.4" step="0.01" @input="dy = num($event); touch()" />
         </label>
         <p class="muted note">
+いじっている間は<b>予定位置を枠で重ねます</b> (適用すると消えます)。
           スライダーとドラッグは<b>値を変えるだけ</b>です。絵が変わるのは「適用」を押した時だけ
           (再合成は原寸で 0.6 秒ほどかかるため)。<b>縦位置を動かすと見出しの帯のずらしを置き換えます。</b>
         </p>
@@ -352,7 +353,12 @@ function restoreCopy() {
 }
 .ghost {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  /* SVG は置換要素なので inset: 0 だけでは伸びず、固有サイズ (既定 300x150) で描かれる。
+     幅と高さを明示しないとポリゴンの座標が画像の箱に乗らない (実測 2026-09-09)。 */
+  width: 100%;
+  height: 100%;
   pointer-events: none;
 }
 .ghost polygon {
