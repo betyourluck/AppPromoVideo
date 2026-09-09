@@ -219,12 +219,23 @@ ImageGenConfig:                     # (Kataribe) provider / base_url / model / s
     spec: "CaptionSpec { font_path, font_index, size_ratio 0.055, position top|bottom, color '#RRGGBB' (rev9、省略で白) }"
     per_scene:                      # rev9 (2026-09-08 ユーザー要望「1 枚ごとに位置を決めたい」)
       why: |
-        見出しは**生成時に焼き込まれ、焼いた後の 1 枚しか残らなかった**ので、あとから位置や色を
-        変えるには背景から作り直すしかなかった (お金がかかり、絵まで変わる)。
-        焼く前の合成を `base/` に残し、そこから**何度でも焼き直せる**ようにする。劣化しない。
+        見出しは**生成時に焼き込まれ、完成品の 1 枚しか残らなかった**。焼く行為そのものはアプリ内で無料だが、
+        **焼く対象を作り直せなかった** — 背景 (`generator.generate` の戻り値) はローカル変数で、
+        一度も書き出していなかったため。スクショは `snapshots/` にあるので、材料の半分だけが残っていた。
+      rev10_correction: |
+        rev9 は「焼く前の**合成画像**」を base/ に置いたが、それでは足りなかった。合成の時点で
+        `with_caption_band` が**帯の位置を焼き込む** (プレートを 0.78→0.68 に縮め、見出しと反対側へ 7.5% ずらす)。
+        つまり位置を下→上に変えると、上に空きが無いところへ焼くことになりプレートに重なる。
+        **base/ に置くのは背景**にする。スクショは `snapshots/` にあるので、アプリ内で**合成からやり直せる** —
+        帯も正しく取り直せ、`plate_tilt` も無料で変えられる。ディスクは同じ (どちらも canvas 同寸)。
       overrides: "PromoJson.caption_overrides: Map<scene_id, CaptionOverride>。**LLM のスキーマ (Scene) には足さない** — 埋めるのは人であって LLM ではない"
       resolution: "scene の上書き → 無ければ設定 (既定) → それも無ければ焼かない。フィールド単位で落ちる (位置だけ上書き、他は既定 が成り立つ)"
-      reburn: "command reburn_caption(run_dir, scene_id, spec) — base/ を読んで焼き、直下の完成品を置き換え、promo.json の overrides を更新して data URL を返す。**生成 API は呼ばない**"
+      reburn: |
+        command reburn_caption(run_dir, scene_id, spec) — **生成 API は呼ばない**。
+        product: base/ の背景 + snapshots/ の写し → `layout_for(canvas, 効いている position, tilt)` で合成 → 焼く。
+        mood: base/ をそのまま → 焼く。どちらも直下の完成品を置き換え、promo.json の overrides を更新して data URL を返す。
+        毎回 base から作り直すので、何度やっても劣化しない。
+      layout_for: "canvas / 見出しの有無と位置 / 傾き から Layout を作る**唯一の関数**。生成と焼き直しで共有する (帯の計算が二重にならないように)"
     default_font: |
       既定 ON にすると「ON なのにフォント未選択で何も焼かれない」が無言で起きるので、実行直前に
       `pickCaptionFont` (frontend の純関数) が自動で選ぶ。規律は 4 つ:
@@ -263,7 +274,7 @@ ExportPackage:                      # export_dir/<app_name>_Promo_Package/runs/<
     - "<pkg>/runs/<run_id>/promo.json          — { project: PromoProject(パスのみ), summary: AnalyzedSummary, plan: ScenePlan }"
     - "<pkg>/runs/<run_id>/scenes.md           — シーン構成表 (Markdown 表 + 各シーンの video_prompt 全文)"
     - "<pkg>/runs/<run_id>/scene_NN_ref_MM.png — 参照画像 (**見出しを焼いた完成品**。MiniMax へ渡すのはこれ)"
-    - "<pkg>/runs/<run_id>/base/scene_NN_ref_MM.png — 見出しを焼く**前**の合成 (rev9、再焼き用)"
+    - "<pkg>/runs/<run_id>/base/scene_NN_ref_MM.png — **素材** (rev10): product は背景だけ / mood は絵そのもの。どちらも canvas 同寸の PNG"
     - "<pkg>/runs/<run_id>/snapshots/          — 入力スナップショットの写し"
   run_isolation:                    # rev7 (2026-09-08 ユーザー指摘「再起動すると出力が揮発」→ 調べたらディスク上で破壊されていた)
     why: |
@@ -312,6 +323,8 @@ RunRecord:
   aspect: String                    # 表示用。**契約の表記**で入れる ("16:9")。Rust の識別子 ("Landscape") ではない
   language: String                  # 同上 ("ja")
   plate_mode: String                # 同上 ("perspective")。GUI に "Perspective" と出ていたのを 2026-09-08 に修正
+# PromoJson.plate_mode (rev10): run がどちらのモードで合成されたかを promo.json 自身が持つ。
+# 焼き直しで合成をやり直すとき、傾きを適用するかどうかがこれで決まる (索引に頼らない)。
   scene_count: usize
   cost_usd: f64                     # analyze + plan の合計
   image_provider: Option<String>    # 参照画像を作ったなら "gemini" 等

@@ -126,6 +126,28 @@ pub struct RefJob<'a> {
     pub caption_overrides: &'a std::collections::BTreeMap<u32, CaptionOverride>,
 }
 
+/// 画像の寸法をヘッダだけで読む (デコードしない)。焼き直しで canvas を素材から取るのに使う。
+pub fn image_dims(bytes: &[u8]) -> Result<(u32, u32), String> {
+    imagesize::blob_size(bytes).map(|d| (d.width as u32, d.height as u32)).map_err(|e| format!("寸法を読めません: {e}"))
+}
+
+/// 素材を base/ に残す。失敗しても本流は止めない (画像は出す) が、焼き直せなくなるので理由は出す。
+fn save_base(out_dir: &Path, name: &str, bytes: &[u8], scene_id: u32, progress: &mut (dyn FnMut(String) + Send)) {
+    let bp = base_image_path(out_dir, name);
+    let saved = fs::create_dir_all(bp.parent().unwrap_or(out_dir)).and_then(|_| fs::write(&bp, bytes));
+    if let Err(e) = saved {
+        progress(format!("scene {scene_id}: 素材を残せません ({e}) → あとから見出しだけ変えられません"));
+    }
+}
+
+/// perspective の時だけ scene の傾きを効かせる (純粋)。
+pub fn tilt_of(mode: PlateMode, scene: &promo_core::plan::Scene) -> Option<Tilt> {
+    match (mode, scene.plate_tilt) {
+        (PlateMode::Perspective, Some(t)) => Some(Tilt { yaw_degrees: t.yaw_degrees, pitch_degrees: t.pitch_degrees }),
+        _ => None,
+    }
+}
+
 /// その scene に効く見出し指定 (純粋)。既定に上書きを重ねる。既定が無ければ焼かない。
 fn spec_for_scene(
     base: Option<&CaptionSpec>,
@@ -137,6 +159,22 @@ fn spec_for_scene(
         Some(o) => base.with_override(o),
         None => base.clone(),
     })
+}
+
+/// 合成の配置を決める**唯一の場所** (純粋、契約 `caption.per_scene.layout_for`、rev10)。
+///
+/// 帯 (`with_caption_band`) は**そのカットで実際に効いている見出しの位置**から決める。
+/// rev9 はここをジョブ既定の位置で合成時に焼き込んでいたので、あとから位置を下→上に変えると
+/// 上に空きが無いところへ焼くことになりプレートに重なった。生成と焼き直しでこの関数を共有する。
+pub fn layout_for(canvas: (u32, u32), caption: Option<CaptionPosition>, tilt: Option<Tilt>) -> Layout {
+    let base = match caption {
+        Some(pos) => Layout::for_canvas(canvas.0, canvas.1).with_caption_band(pos == CaptionPosition::Top),
+        None => Layout::for_canvas(canvas.0, canvas.1),
+    };
+    match tilt {
+        Some(t) => base.with_tilt(t),
+        None => base,
+    }
 }
 
 /// 見出しを焼く**前**の合成の置き場 (契約 `ExportPackage.layout`、rev9)。
@@ -200,14 +238,12 @@ pub async fn generate_references(
             ));
         }
     }
-    let layout = match caption {
-        Some(c) => Layout::for_canvas(cw, ch).with_caption_band(c.position == CaptionPosition::Top),
-        None => Layout::for_canvas(cw, ch),
-    };
     let n = max_scenes.unwrap_or(plan.scenes.len()).min(plan.scenes.len());
     let mut out = Vec::new();
     for (i, scene) in plan.scenes.iter_mut().take(n).enumerate() {
         let seed = if cfg.lock_seed { cfg.seed } else { seed_base.wrapping_add(i as u64) };
+        // 帯の有無と向きは、そのカットで効く見出し指定から決める (rev10)。
+        let spec = spec_for_scene(caption, overrides, scene.scene_id);
         let bytes: Result<Vec<u8>, ImageGenError> = match scene.cut_kind {
             // product: 背景だけモデルに描かせ (参照は送らない = 画面を発明させない)、実スクショを Rust が貼る。
             CutKind::Product => {
@@ -228,11 +264,11 @@ pub async fn generate_references(
                                 solid_backdrop(cw, ch, fallback_rgb(palette))
                             }
                         };
-                        // rev5: perspective なら面を背景のパースに合わせて傾ける。
-                        let l = match (plate_mode, scene.plate_tilt) {
-                            (PlateMode::Perspective, Some(t)) => layout.with_tilt(Tilt { yaw_degrees: t.yaw_degrees, pitch_degrees: t.pitch_degrees }),
-                            _ => layout,
-                        };
+                        // rev10: 背景を canvas 同寸で base/ に残す。スクショは snapshots/ にあるので、
+                        // あとから**合成からやり直せる** (帯の取り直し・傾きの変更が無料でできる)。
+                        let backdrop = fit_to_canvas(&backdrop, cw, ch).unwrap_or(backdrop);
+                        save_base(out_dir, &reference_image_name(scene.scene_id, 1), &backdrop, scene.scene_id, progress);
+                        let l = layout_for((cw, ch), spec.as_ref().map(|s| s.position), tilt_of(plate_mode, scene));
                         composite_product_cut(&backdrop, &shot.bytes, &l).map_err(ImageGenError::Config)
                     }
                 }
@@ -243,28 +279,20 @@ pub async fn generate_references(
                 // rev6: プロバイダの出力は寸法も形式もまちまち (Gemini は JPEG 1376x768) なので canvas に揃える。
                 generator.generate(cfg, api_key, &prompt, seed, &sent, progress).await.map(|g| {
                     // 揃えられない時は素のまま通す (生成には金がかかっている)。ただし黙らない。
-                    match fit_to_canvas(&g.bytes, cw, ch) {
+                    let b = match fit_to_canvas(&g.bytes, cw, ch) {
                         Ok(b) => b,
                         Err(e) => {
                             progress(format!("scene {}: 生成画像を canvas に揃えられません ({e}) → そのまま保存", scene.scene_id));
                             g.bytes
                         }
-                    }
+                    };
+                    // mood は合成が無いので、絵そのものが素材 (rev10)。
+                    save_base(out_dir, &reference_image_name(scene.scene_id, 1), &b, scene.scene_id, progress);
+                    b
                 })
             }
         };
-        // rev9: 焼く**前**を base/ に残す。見出しの位置や色をあとから変えるのに背景を作り直さないため。
-        // 保存に失敗しても本流は止めない (画像そのものは出す)。焼き直せなくなるだけなので理由は出す。
-        let name = reference_image_name(scene.scene_id, 1);
-        if let Ok(png) = &bytes {
-            let bp = base_image_path(out_dir, &name);
-            let saved = fs::create_dir_all(bp.parent().unwrap_or(out_dir)).and_then(|_| fs::write(&bp, png));
-            if let Err(e) = saved {
-                progress(format!("scene {}: 焼く前の画像を残せません ({e}) → あとから見出しだけ変えられません", scene.scene_id));
-            }
-        }
         // 見出し (opt-in): 生成・合成の後に copy_text を焼く。失敗は焼かずに続行 (画像は残す)。
-        let spec = spec_for_scene(caption, overrides, scene.scene_id);
         let bytes = match (&bytes, &font_data) {
             (Ok(png), Some((font, _))) if !scene.copy_text.trim().is_empty() => {
                 let spec = spec.as_ref().expect("font_data があるなら spec もある");
@@ -445,6 +473,29 @@ mod tests {
 
     /// rev3: product カットは参照を送らず背景だけ生成し、実スクショの画素を中央に貼る。
     /// 背景生成が失敗しても単色背景で合成する (製品カットは provider の都合で落ちない)。
+    /// rev10: 帯は**効いている見出しの位置**から決める。rev9 は合成時のジョブ既定で焼き込んでいたので、
+    /// あとから位置を下→上に変えるとプレートに重なった。
+    #[test]
+    fn the_caption_band_follows_the_position_that_is_actually_used() {
+        let canvas = (1000, 1000);
+        let none = layout_for(canvas, None, None);
+        assert_eq!(none.screen_ratio, 0.78, "見出し無しなら帯を取らない");
+        assert_eq!(none.y_offset_ratio, 0.0);
+
+        let bottom = layout_for(canvas, Some(CaptionPosition::Bottom), None);
+        assert_eq!(bottom.screen_ratio, 0.68);
+        assert!(bottom.y_offset_ratio < 0.0, "下に帯 → プレートは上へ寄る");
+
+        let top = layout_for(canvas, Some(CaptionPosition::Top), None);
+        assert!(top.y_offset_ratio > 0.0, "上に帯 → プレートは下へ寄る");
+        assert_ne!(top.y_offset_ratio, bottom.y_offset_ratio, "位置で向きが変わる");
+
+        // 傾きはそのまま乗る (焼き直しで合成をやり直しても tilt を失わない)。
+        let tilted = layout_for(canvas, Some(CaptionPosition::Top), Some(Tilt { yaw_degrees: 12.0, pitch_degrees: -8.0 }));
+        assert!(tilted.tilt.is_some());
+        assert_eq!(tilted.y_offset_ratio, top.y_offset_ratio);
+    }
+
     /// rev9: 見出しを焼く**前**を base/ に残す。あとから位置や色を変えるのに背景を作り直さないため。
     #[test]
     fn base_path_sits_under_the_run_and_keeps_the_same_name() {

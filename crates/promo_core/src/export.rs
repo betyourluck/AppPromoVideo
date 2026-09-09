@@ -15,6 +15,10 @@ pub struct PromoJson {
     /// scene_id → 見出しの上書き (rev9)。**LLM の schema には足さない** — 埋めるのは人。
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub caption_overrides: std::collections::BTreeMap<u32, CaptionOverride>,
+    /// この run がどちらのモードで合成されたか (rev10)。焼き直しで合成をやり直すとき、
+    /// 傾きを効かせるかがこれで決まる — 索引 (app_data) に頼らず promo.json 自身が持つ。
+    #[serde(default)]
+    pub plate_mode: crate::plan::PlateMode,
 }
 
 /// 1 シーンぶんの見出しの上書き (契約 `caption.per_scene`)。**省略したフィールドは既定に落ちる。**
@@ -163,6 +167,7 @@ mod tests {
             },
             plan: ScenePlan { total_seconds: 15, aspect: Aspect::Square, scenes: vec![] },
             caption_overrides: Default::default(),
+            plate_mode: Default::default(),
         }
     }
     use crate::plan::{Aspect, Scene, VisualIdentity};

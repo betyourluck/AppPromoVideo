@@ -391,6 +391,7 @@ async fn run_inner(app: &AppHandle, cancel: watch::Receiver<bool>, req: RunReque
         summary,
         plan,
         caption_overrides: Default::default(),
+        plate_mode: req.plate_mode,
     };
     // rev7: run ごとに隔離する。以前は同じパッケージを上書きして過去の出力を消していた。
     let export_dir = Path::new(&req.export_dir);
@@ -679,23 +680,37 @@ fn reburn_caption(run_dir: String, scene_id: u32, spec: Option<CaptionSpec>) -> 
         .find(|s| s.scene_id == scene_id)
         .ok_or_else(|| format!("scene {scene_id} がありません"))?;
     let copy_text = scene.copy_text.clone();
+    let scene_kind = scene.cut_kind;
+    let snapshot_index = scene.snapshot_index;
+    let tilt = pipeline::reference::tilt_of(promo.plate_mode, scene);
 
     let name = promo_core::export::reference_image_name(scene_id, 1);
     let base = pipeline::reference::base_image_path(&dir, &name);
     let png = std::fs::read(&base).map_err(|e| {
-        format!("焼く前の画像がありません ({}): {e}。rev9 より前に作った run は焼き直せません", base.display())
+        format!("素材がありません ({}): {e}。rev10 より前に作った run は焼き直せません", base.display())
     })?;
 
+    // rev10: base/ は**素材** (product は背景 / mood は絵)。product は合成からやり直すので、
+    // 見出しの位置を変えても帯が正しく取り直され、傾きもそのまま乗る。
+    let canvas = pipeline::reference::image_dims(&png)?;
+    let composed = match scene_kind {
+        promo_core::plan::CutKind::Mood => png,
+        promo_core::plan::CutKind::Product => {
+            let idx = snapshot_index.unwrap_or(0) as usize;
+            let shot = read_run_snapshot(&dir, idx)?;
+            let l = pipeline::reference::layout_for(canvas, spec.as_ref().map(|s| s.position), tilt);
+            image_gen::composite_product_cut(&png, &shot, &l)?
+        }
+    };
     let out = match &spec {
-        // spec なし = 見出しを消す。base をそのまま戻す。
-        None => png,
+        None => composed,
         Some(sp) => {
             let font = std::fs::read(&sp.font_path).map_err(|e| format!("フォントを読めません {}: {e}", sp.font_path))?;
             let mut cap = image_gen::Caption::new(&copy_text, &font, sp.font_index);
             cap.size_ratio = sp.size_ratio;
             cap.position = sp.position;
             cap.color = sp.rgba();
-            image_gen::burn_caption(&png, &cap)?
+            image_gen::burn_caption(&composed, &cap)?
         }
     };
     std::fs::write(dir.join(&name), &out).map_err(|e| format!("書けません {name}: {e}"))?;
@@ -724,6 +739,19 @@ fn reburn_caption(run_dir: String, scene_id: u32, spec: Option<CaptionSpec>) -> 
     let json = serde_json::to_string_pretty(&promo).map_err(|e| e.to_string())?;
     write_atomic(&dir.join("promo.json"), json.as_bytes())?;
     Ok(image_gen::provider::data_url("image/png", &out))
+}
+
+/// run に写したスナップショット (rev10)。**元のパスではなく run の写しを読む** — 元は移動されうるし、
+/// run は自己完結しているべきなので。
+fn read_run_snapshot(run_dir: &Path, idx: usize) -> Result<Vec<u8>, String> {
+    let dir = run_dir.join("snapshots");
+    let want = format!("snapshot_{:02}.", idx + 1);
+    let entry = std::fs::read_dir(&dir)
+        .map_err(|e| format!("snapshots/ を読めません: {e}"))?
+        .filter_map(|e| e.ok())
+        .find(|e| e.file_name().to_string_lossy().starts_with(&want))
+        .ok_or_else(|| format!("snapshots/{want}* がありません (この run は焼き直せません)"))?;
+    std::fs::read(entry.path()).map_err(|e| format!("スナップショットを読めません: {e}"))
 }
 
 /// 表示用 data URL (CSP: img-src に data: あり。ローカルファイルを WebView に直接見せない)。

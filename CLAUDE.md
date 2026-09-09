@@ -77,9 +77,11 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 - 通し (解析 → 構成 → 参照画像 → 合成) は **3 リポジトリで live 成功** (Kataribe / Verificator / AppPromoVideo 自身)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
 
-**直近の追加 (rev9)**: 見出しを 1 枚ごとに変えられる。焼く前の合成を `<run>/base/` に残し、結果ペインの
-各シーンから位置・フォント・色・大きさを変えて**焼き直す** (`reburn_caption`。生成 API は呼ばないので
-無料・無劣化)。設定側は全シーンの既定。上書きは `PromoJson.caption_overrides` に入り run に残る。
+**直近の追加 (rev9→rev10)**: 見出しを 1 枚ごとに変えられる。`<run>/base/` に**素材**を残し
+(product は背景 / mood は絵)、結果ペインの各シーンから位置・フォント・色・大きさを変えて
+**合成からやり直す** (`reburn_caption`。生成 API は呼ばないので無料・無劣化)。
+帯は `layout_for` が**効いている位置**から毎回決める — 合成画像を残していた rev9 では帯が焼き込まれていて
+位置を変えると重なった (failures #15)。設定側は全シーンの既定。上書きは `PromoJson.caption_overrides`。
 
 **直近の追加 (rev7)**: run の履歴。実行ごとに `<pkg>/runs/<日時>/` へ隔離し、タイトルバーの時計アイコンから
 一覧・復元・**2 つの run の同じシーンを左右に並べて比較**・削除ができる。索引は `app_data/runs.json`

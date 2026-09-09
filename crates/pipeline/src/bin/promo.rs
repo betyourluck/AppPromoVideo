@@ -397,6 +397,7 @@ async fn run(a: &Args) -> Result<(), String> {
         summary,
         plan,
         caption_overrides: Default::default(),
+        plate_mode: a.plate_mode,
     };
     // rev7: run ごとに隔離する。既存の id を見てから採番 (同じ秒に 2 本走っても衝突しない)。
     let now_ms = std::time::SystemTime::now()
