@@ -35,7 +35,7 @@ pub fn write_package(export_dir: &Path, promo: &PromoJson, run_id: &str) -> Resu
     for (i, s) in promo.snapshot_paths.iter().enumerate() {
         let src = Path::new(s);
         let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("png").to_ascii_lowercase();
-        let dst = dir.join("snapshots").join(format!("snapshot_{:02}.{ext}", i + 1));
+        let dst = dir.join("snapshots").join(promo_core::snapshot_file_name(i, &ext));
         fs::copy(src, &dst).map_err(|e| format!("スナップショットを写せません {}: {e}", src.display()))?;
     }
     Ok(dir)
@@ -62,6 +62,7 @@ mod tests {
             plate_overrides: Default::default(),
             original_copy: Default::default(),
             plate_mode: Default::default(),
+            run_stats: None,
             summary: AnalyzedSummary {
                 app_name: "Task Flow".into(),
                 one_liner: "o".into(),

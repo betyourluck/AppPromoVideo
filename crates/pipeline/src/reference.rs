@@ -52,6 +52,35 @@ impl CaptionSpec {
         }
     }
 
+    /// 面が避けるべき側 (rev18)。
+    ///
+    /// 「位置」の選択は UI から外した — 縦位置スライダー (`y_ratio`) が上位互換だから
+    /// (ユーザー判断 2026-09-09)。だが `layout_for` は**帯をどちら側に空けるか**を知る必要がある。
+    /// 縦位置が指定されていればそこから導き (上半分なら上)、無ければ設定の値をそのまま使う。
+    /// **これが無いと、見出しを上へ動かしたのに面が下の帯を避け続ける**という食い違いが残る。
+    pub fn effective_position(&self) -> CaptionPosition {
+        match self.y_ratio {
+            Some(r) if r < 0.5 => CaptionPosition::Top,
+            Some(_) => CaptionPosition::Bottom,
+            None => self.position,
+        }
+    }
+
+    /// 焼き込みの指定を `Caption` に組み立てる (rev17)。
+    ///
+    /// **生成と焼き直しの両方がここを通る。** rev14 で `y_ratio` を足したとき、生成側には入れたが
+    /// 焼き直し側 (app の `reburn_caption`) が `Caption` を手で組み直していて入れ忘れ、
+    /// 縦位置スライダーが promo.json には残るのに絵が動かない状態になっていた。
+    /// フィールドを足すときは**ここだけ**直せば両方に届く。
+    pub fn to_caption<'a>(&'a self, text: &'a str, font_data: &'a [u8]) -> Caption<'a> {
+        let mut cap = Caption::new(text, font_data, self.font_index);
+        cap.size_ratio = self.size_ratio;
+        cap.position = self.position;
+        cap.color = self.rgba();
+        cap.y_ratio = self.y_ratio;
+        cap
+    }
+
     /// 焼くときの色 (読めない指定は白に落ちる)。
     pub fn rgba(&self) -> [u8; 4] {
         self.color.as_deref().and_then(promo_core::export::parse_hex_rgba).unwrap_or([255, 255, 255, 255])
@@ -295,7 +324,7 @@ pub async fn generate_references(
                         // あとから**合成からやり直せる** (帯の取り直し・傾きの変更が無料でできる)。
                         let backdrop = fit_to_canvas(&backdrop, cw, ch).unwrap_or(backdrop);
                         save_base(out_dir, &reference_image_name(scene.scene_id, 1), &backdrop, scene.scene_id, progress);
-                        let l = layout_for((cw, ch), spec.as_ref().map(|s| s.position), tilt_of(plate_mode, scene), plate_overrides.get(&scene.scene_id));
+                        let l = layout_for((cw, ch), spec.as_ref().map(|s| s.effective_position()), tilt_of(plate_mode, scene), plate_overrides.get(&scene.scene_id));
                         composite_product_cut(&backdrop, &shot.bytes, &l).map_err(ImageGenError::Config)
                     }
                 }
@@ -323,11 +352,7 @@ pub async fn generate_references(
         let bytes = match (&bytes, &font_data) {
             (Ok(png), Some((font, _))) if !scene.copy_text.trim().is_empty() => {
                 let spec = spec.as_ref().expect("font_data があるなら spec もある");
-                let mut cap = Caption::new(&scene.copy_text, font, spec.font_index);
-                cap.size_ratio = spec.size_ratio;
-                cap.position = spec.position;
-                cap.color = spec.rgba();
-                cap.y_ratio = spec.y_ratio;
+                let cap = spec.to_caption(&scene.copy_text, font);
                 match burn_caption(png, &cap) {
                     Ok(b) => Ok(b),
                     Err(e) => {
@@ -691,5 +716,135 @@ mod tests {
         assert!(p.scenes[1].reference_image.is_none() && p.scenes[2].reference_image.is_some());
         // 参照なしなら 1 場面規律は付かない。
         assert!(!fake.calls.lock().unwrap()[0].0.contains("single continuous scene"));
+    }
+}
+
+#[cfg(test)]
+mod to_caption_tests {
+    use super::*;
+
+    fn spec() -> CaptionSpec {
+        CaptionSpec {
+            font_path: "X".into(),
+            font_index: 2,
+            size_ratio: 0.09,
+            position: CaptionPosition::Top,
+            color: Some("#FF0000".into()),
+            y_ratio: Some(0.42),
+        }
+    }
+
+    /// **rev14 の穴**: `y_ratio` を足したとき生成側 (`generate_references`) には入れたが、
+    /// 焼き直し側 (app の `reburn_caption`) は `Caption` を手で組み直していて入れ忘れていた。
+    /// 縦位置スライダーは promo.json には残るのに絵が動かない、という形で出ていた。
+    /// **組み立てを 1 箇所にして、全フィールドが運ばれることをここで固定する。**
+    #[test]
+    fn every_field_reaches_the_caption() {
+        let s = spec();
+        let font = [0u8; 4];
+        let cap = s.to_caption("見出し", &font);
+        assert_eq!(cap.text, "見出し");
+        assert_eq!(cap.font_index, 2);
+        assert_eq!(cap.size_ratio, 0.09);
+        assert_eq!(cap.position, CaptionPosition::Top);
+        assert_eq!(cap.color, [255, 0, 0, 255]);
+        assert_eq!(cap.y_ratio, Some(0.42), "rev14 の縦位置。ここが落ちていた");
+    }
+
+    /// 省略は既定に落ちる (色が読めない指定は白)。
+    #[test]
+    fn absent_fields_fall_back() {
+        let mut s = spec();
+        s.color = Some("not a color".into());
+        s.y_ratio = None;
+        let font = [0u8; 4];
+        let cap = s.to_caption("x", &font);
+        assert_eq!(cap.color, [255, 255, 255, 255]);
+        assert_eq!(cap.y_ratio, None);
+    }
+}
+
+#[cfg(test)]
+mod y_ratio_reaches_pixels {
+    use super::*;
+    use image_gen::fonts::{FontSource, describe_font_file, system_font_dirs};
+
+    fn find_font() -> Option<(Vec<u8>, u32)> {
+        let dir = system_font_dirs().into_iter().find(|d| d.is_dir())?;
+        for c in ["BIZ-UDGothicB.ttc", "YuGothM.ttc", "meiryo.ttc", "msgothic.ttc", "arial.ttf", "DejaVuSans.ttf"] {
+            let p = dir.join(c);
+            if p.exists() {
+                let idx = describe_font_file(&p, FontSource::System).first().map(|f| f.index).unwrap_or(0);
+                return Some((std::fs::read(&p).ok()?, idx));
+            }
+        }
+        None
+    }
+
+    /// 文字が実際に**動く**ことまで見る。`to_caption` が `y_ratio` を落とすと、
+    /// 上寄せと下寄せが同じ画像になってここが落ちる (rev14 の穴の再発防止)。
+    #[test]
+    fn moving_the_caption_moves_the_ink() {
+        let Some((font, index)) = find_font() else {
+            eprintln!("システムフォントが見つからないので飛ばします");
+            return;
+        };
+        let png = image_gen::compose::solid_backdrop(320, 240, [30, 30, 40]);
+        let mut spec = CaptionSpec {
+            font_path: "unused".into(),
+            font_index: index,
+            size_ratio: 0.12,
+            position: CaptionPosition::Bottom,
+            color: Some("#FFFFFF".into()),
+            y_ratio: Some(0.05),
+        };
+        let high = image_gen::burn_caption(&png, &spec.to_caption("AB", &font)).unwrap();
+        spec.y_ratio = Some(0.80);
+        let low = image_gen::burn_caption(&png, &spec.to_caption("AB", &font)).unwrap();
+        assert_ne!(high, low, "縦位置を変えたのに同じ絵なら、y_ratio が焼き込みに届いていない");
+
+        // どちらが上かまで見る (差が出ただけでは「別の理由で変わった」を排除できない)。
+        let ink_row = |bytes: &[u8]| -> u32 {
+            let img = image::load_from_memory(bytes).unwrap().to_rgba8();
+            let mut rows: Vec<u32> = vec![];
+            for (_, y, p) in img.enumerate_pixels() {
+                if p[0] > 200 && p[1] > 200 && p[2] > 200 {
+                    rows.push(y);
+                }
+            }
+            rows.iter().sum::<u32>() / rows.len().max(1) as u32
+        };
+        assert!(ink_row(&high) < ink_row(&low), "0.05 の方が 0.80 より上に来る");
+    }
+}
+
+#[cfg(test)]
+mod effective_position_tests {
+    use super::*;
+
+    fn spec(y: Option<f32>, pos: CaptionPosition) -> CaptionSpec {
+        CaptionSpec { font_path: "X".into(), font_index: 0, size_ratio: 0.055, position: pos, color: None, y_ratio: y }
+    }
+
+    /// rev18: 「位置」の選択を UI から外した (縦位置スライダーが上位互換なので、ユーザー判断 2026-09-09)。
+    /// **選択が消えても面の避け方は正しくなければならない** — 帯は見出しが実際に来る側に空ける。
+    #[test]
+    fn the_slider_decides_which_side_the_plate_avoids() {
+        assert_eq!(spec(Some(0.05), CaptionPosition::Bottom).effective_position(), CaptionPosition::Top);
+        assert_eq!(spec(Some(0.90), CaptionPosition::Top).effective_position(), CaptionPosition::Bottom);
+    }
+
+    /// 境目は canvas の真ん中。上半分なら上、下半分なら下。
+    #[test]
+    fn the_middle_falls_to_the_bottom_half() {
+        assert_eq!(spec(Some(0.49), CaptionPosition::Bottom).effective_position(), CaptionPosition::Top);
+        assert_eq!(spec(Some(0.50), CaptionPosition::Top).effective_position(), CaptionPosition::Bottom);
+    }
+
+    /// 縦位置を触っていない (既定のまま) なら、設定の値がそのまま効く。
+    #[test]
+    fn without_a_slider_value_the_setting_still_decides() {
+        assert_eq!(spec(None, CaptionPosition::Top).effective_position(), CaptionPosition::Top);
+        assert_eq!(spec(None, CaptionPosition::Bottom).effective_position(), CaptionPosition::Bottom);
     }
 }

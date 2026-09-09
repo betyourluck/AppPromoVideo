@@ -24,7 +24,7 @@ pub mod provider;
 pub mod refs;
 
 pub use generator::{HttpImageGenerator, ImageGenerator, SINGLE_FRAME_CLAUSE, compose_reference_prompt};
-pub use caption::{Caption, CaptionPosition, burn_caption};
+pub use caption::{Caption, CaptionLayout, CaptionPosition, LaidOutLine, burn_caption, caption_layout};
 pub use compose::{CANVAS_MAX_LONG_EDGE, Layout, Tilt, canvas_for_snapshot, composite_product_cut, fit_to_canvas, plate_scale, solid_backdrop};
 pub use fonts::{FontEntry, FontSource, describe_font_file, list_fonts, system_font_dirs};
 pub use palette::{DEFAULT_COLORS, dominant_colors, palette_from_file};

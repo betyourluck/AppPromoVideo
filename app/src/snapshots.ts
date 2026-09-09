@@ -46,3 +46,29 @@ export function imageFilesFrom(items: DataTransferItemList | null | undefined): 
 export function baseName(p: string): string {
   return p.split(/[\\/]/).pop() ?? p;
 }
+
+/** はめ込みに使える 1 枚 (rev20)。 */
+export interface SnapshotChoice {
+  /** run の中での番号。`null` = **まだ run に写していない** (選ばれた時に写す)。 */
+  index: number | null;
+  path: string;
+  inRun: boolean;
+}
+
+/**
+ * はめ込みで選べる一覧を組み立てる (rev20)。
+ *
+ * 従来は run を作った時 (最初に「解析」を押した時) の一覧しか選べなかった。コピー文に合う画面が
+ * 無いときは**入力ペインに足せばそこから選べる**のが自然、というユーザー判断 (2026-09-09)。
+ *
+ * 並びは **run の番号順が先**で、入力ペインで後から足したぶんが下に付く。
+ * **入力ペインから外されても run のぶんは消さない** — run は自己完結していて (rev10)、
+ * 入力の一覧はこの run の履歴ではないから。
+ */
+export function snapshotChoices(runPaths: string[], inputPaths: string[]): SnapshotChoice[] {
+  const inRun = new Set(runPaths);
+  return [
+    ...runPaths.map((path, index) => ({ index, path, inRun: true })),
+    ...inputPaths.filter((p) => !inRun.has(p)).map((path) => ({ index: null, path, inRun: false })),
+  ];
+}

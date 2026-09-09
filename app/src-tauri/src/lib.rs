@@ -394,6 +394,7 @@ async fn run_inner(app: &AppHandle, cancel: watch::Receiver<bool>, req: RunReque
         caption_overrides: Default::default(),
         plate_overrides: Default::default(),
         plate_mode: req.plate_mode,
+        run_stats: Some(promo_core::RunStats::new(r2.attempts, &r2.violations_per_attempt, r1.cost_usd + r2.cost_usd)),
     };
     // rev7: run ごとに隔離する。以前は同じパッケージを上書きして過去の出力を消していた。
     let export_dir = Path::new(&req.export_dir);
@@ -418,6 +419,12 @@ async fn run_inner(app: &AppHandle, cancel: watch::Receiver<bool>, req: RunReque
             cost_usd: r1.cost_usd + r2.cost_usd,
             image_provider: None,
             image_count: 0,
+            plan_attempts: r2.attempts,
+            violation_kinds: promo
+                .run_stats
+                .as_ref()
+                .map(|s| s.violation_kinds.clone())
+                .unwrap_or_default(),
         },
     );
     emit(app, "done", format!("書き出し: {}", dir.display()));
@@ -679,7 +686,7 @@ fn reburn_caption(
     plate: Option<promo_core::export::PlateOverride>,
     new_copy: Option<String>, // コピー文の書き換え (rev12)。None なら今の文のまま
 
-) -> Result<String, String> {
+) -> Result<Reburned, String> {
     let dir = PathBuf::from(&run_dir);
     let text = std::fs::read_to_string(dir.join("promo.json")).map_err(|e| format!("promo.json を読めません: {e}"))?;
     let mut promo: PromoJson = serde_json::from_str(&text).map_err(|e| format!("promo.json の形が違います: {e}"))?;
@@ -713,7 +720,7 @@ fn reburn_caption(
             // rev13: 人が選び直した番号が LLM の指定に勝つ。
                         let idx = plate.as_ref().and_then(|p| p.snapshot_index).or(snapshot_index).unwrap_or(0) as usize;
             let shot = read_run_snapshot(&dir, idx)?;
-            let l = pipeline::reference::layout_for(canvas, spec.as_ref().map(|s| s.position), tilt, plate.as_ref());
+            let l = pipeline::reference::layout_for(canvas, spec.as_ref().map(|s| s.effective_position()), tilt, plate.as_ref());
             image_gen::composite_product_cut(&png, &shot, &l)?
         }
     };
@@ -721,11 +728,9 @@ fn reburn_caption(
         None => composed,
         Some(sp) => {
             let font = std::fs::read(&sp.font_path).map_err(|e| format!("フォントを読めません {}: {e}", sp.font_path))?;
-            let mut cap = image_gen::Caption::new(&copy_text, &font, sp.font_index);
-            cap.size_ratio = sp.size_ratio;
-            cap.position = sp.position;
-            cap.color = sp.rgba();
-            image_gen::burn_caption(&composed, &cap)?
+            // rev17: 組み立ては CaptionSpec::to_caption 1 箇所。手で組むと足したフィールドが片方に落ちる
+            // (rev14 の y_ratio がまさにそれで、縦位置スライダーが焼き直しに届いていなかった)。
+            image_gen::burn_caption(&composed, &sp.to_caption(&copy_text, &font))?
         }
     };
     std::fs::write(dir.join(&name), &out).map_err(|e| format!("書けません {name}: {e}"))?;
@@ -767,26 +772,65 @@ fn reburn_caption(
     if new_copy.is_some() {
         write_atomic(&dir.join("scenes.md"), scenes_markdown(&promo.summary, &promo.plan).as_bytes())?;
     }
-    Ok(image_gen::provider::data_url("image/png", &out))
+    Ok(Reburned { url: image_gen::provider::data_url("image/png", &out), promo })
+}
+
+/// 焼き直しの戻り (rev21)。**書き換えた後の `promo` も返す** — 上書きを書くのは backend なので、
+/// frontend が手元で真似ると食い違う。開き直したときにつまみが実効値を指すのはこの値が根拠。
+#[derive(Serialize)]
+struct Reburned {
+    url: String,
+    promo: PromoJson,
 }
 
 #[derive(Serialize)]
 struct PlatePreview {
     canvas: [u32; 2],
-    /// 左上・右上・右下・左下 (canvas 座標)。傾けると台形になる。
-    quad: [[f32; 2]; 4],
+    /// 面の予定位置。左上・右上・右下・左下 (canvas 座標)。傾けると台形になる。
+    /// **mood カットには面が無いので `None`。**
+    quad: Option<[[f32; 2]; 4]>,
+    /// 見出しの予定位置 (rev18)。1 行 1 個の `[x, y, w, h]` (canvas 座標)。
+    /// 焼き込みと同じ `caption_layout` から出すので、数式の写しを TS 側に持たない。
+    caption_lines: Vec<[f32; 4]>,
+    /// **いま効いている傾き** `[yaw, pitch]` (rev21)。合成が使う `tilt_of` がそのまま出す。
+    /// `PlateMode::Frontal` や `plate_tilt` 無しでは `[0, 0]` = 本当に正面。
+    /// スライダーの基準はここ — 0 に置くと、絵が傾いているのにつまみが 0° を指す嘘になる。
+    tilt: [f32; 2],
 }
 
-/// プレートの**予定位置**だけを返す (rev14)。画像は作らないので速い —
-/// 素材とスクショのヘッダから寸法を読むだけ。枠のプレビューはここから描く。
+/// フォントは 1 ファイルが数 MB〜数十 MB ある。プレビューは打鍵・スライダーのたびに走るので、
+/// **直前に読んだものだけ**持ち回す (同じフォントを触り続ける操作が大半)。
+type CachedFont = Mutex<Option<(String, std::sync::Arc<Vec<u8>>)>>;
+static LAST_FONT: std::sync::OnceLock<CachedFont> = std::sync::OnceLock::new();
+
+async fn font_bytes(path: &str) -> Result<std::sync::Arc<Vec<u8>>, String> {
+    let cell = LAST_FONT.get_or_init(|| Mutex::new(None));
+    {
+        let g = cell.lock().await;
+        if let Some((p, bytes)) = g.as_ref() {
+            if p == path {
+                return Ok(bytes.clone());
+            }
+        }
+    }
+    let bytes = std::sync::Arc::new(std::fs::read(path).map_err(|e| format!("フォントを読めません {path}: {e}"))?);
+    *cell.lock().await = Some((path.to_string(), bytes.clone()));
+    Ok(bytes)
+}
+
+/// 見出しと面の**予定位置**を返す (rev14 → rev18)。**画像は作らないので速い** —
+/// 素材とスクショのヘッダから寸法を読み、フォントの幅送りを測るだけ。
 ///
-/// **合成と同じ `layout_for` + `plate_quad` を通す。** TS 側に射影の数式を写すと必ず食い違う。
+/// **合成と同じ `layout_for` + `plate_quad` + `caption_layout` を通す。**
+/// TS 側に射影や版組みの数式を写すと必ず食い違う。
 #[tauri::command]
-fn plate_preview(
+async fn plate_preview(
     run_dir: String,
     scene_id: u32,
     spec: Option<CaptionSpec>,
     plate: Option<promo_core::export::PlateOverride>,
+    // copy: 編集中のコピー文 (rev18)。**適用前の textarea の中身**なので promo.json ではなくこちらを見る。
+    copy: Option<String>,
 ) -> Result<PlatePreview, String> {
     let dir = PathBuf::from(&run_dir);
     let text = std::fs::read_to_string(dir.join("promo.json")).map_err(|e| format!("promo.json を読めません: {e}"))?;
@@ -802,21 +846,98 @@ fn plate_preview(
     let base = std::fs::read(pipeline::reference::base_image_path(&dir, &name)).map_err(|e| format!("素材がありません: {e}"))?;
     let canvas = pipeline::reference::image_dims(&base)?;
 
-    let idx = plate.as_ref().and_then(|p| p.snapshot_index).or(scene.snapshot_index).unwrap_or(0) as usize;
-    let shot = read_run_snapshot(&dir, idx)?;
-    let shot_dims = pipeline::reference::image_dims(&shot)?;
-
+    // 面は product にしか無い (mood は絵そのものなので貼るものが無い)。
     let tilt = pipeline::reference::tilt_of(promo.plate_mode, scene);
-    let l = pipeline::reference::layout_for(canvas, spec.as_ref().map(|s| s.position), tilt, plate.as_ref());
-    let q = image_gen::compose::plate_quad(&l, shot_dims);
-    Ok(PlatePreview { canvas: [canvas.0, canvas.1], quad: [[q[0].0, q[0].1], [q[1].0, q[1].1], [q[2].0, q[2].1], [q[3].0, q[3].1]] })
+    let quad = match scene.cut_kind {
+        promo_core::plan::CutKind::Mood => None,
+        promo_core::plan::CutKind::Product => {
+            let idx = plate.as_ref().and_then(|p| p.snapshot_index).or(scene.snapshot_index).unwrap_or(0) as usize;
+            let shot_dims = pipeline::reference::image_dims(&read_run_snapshot(&dir, idx)?)?;
+            let l = pipeline::reference::layout_for(canvas, spec.as_ref().map(|s| s.effective_position()), tilt, plate.as_ref());
+            let q = image_gen::compose::plate_quad(&l, shot_dims);
+            Some([[q[0].0, q[0].1], [q[1].0, q[1].1], [q[2].0, q[2].1], [q[3].0, q[3].1]])
+        }
+    };
+
+    // 見出しの予定位置。フォントが読めないだけなら枠を出さずに続ける (操作は妨げない)。
+    let copy_text = copy.unwrap_or_else(|| scene.copy_text.clone());
+    let mut caption_lines = vec![];
+    if let Some(sp) = &spec {
+        if !copy_text.trim().is_empty() {
+            if let Ok(font) = font_bytes(&sp.font_path).await {
+                let cap = sp.to_caption(&copy_text, &font);
+                if let Ok(Some(l)) = image_gen::caption_layout(canvas.0, canvas.1, &cap) {
+                    caption_lines = l.lines.iter().map(|ln| [ln.x, ln.top, ln.width, l.line_h]).collect();
+                }
+            }
+        }
+    }
+
+    Ok(PlatePreview {
+        canvas: [canvas.0, canvas.1],
+        quad,
+        caption_lines,
+        tilt: tilt.map(|t| [t.yaw_degrees, t.pitch_degrees]).unwrap_or([0.0, 0.0]),
+    })
+}
+
+#[derive(Serialize)]
+struct AddedSnapshot {
+    /// 足した画像の番号 (`PlateOverride.snapshot_index` にそのまま渡せる)。
+    index: usize,
+    /// 更新後の一覧 (promo.json と同じ並び)。
+    snapshot_paths: Vec<String>,
+}
+
+/// **既存の run にスナップショットを足す** (rev19)。
+///
+/// 動機: コピー文に合う画面が run の中に無いことがある。そのとき「撮り直して貼る」で済ませたい
+/// (ユーザー判断 2026-09-09)。生成はやり直さない — 足した画像は焼き直しの材料になるだけ。
+///
+/// **契約**: `snapshot_paths[i]` ↔ `snapshots/snapshot_{i+1:02}.*`。新しい番号は**一覧の長さ**で決める
+/// (ファイルを数えない — 数えると欠番や孤児で番号がずれ、`snapshot_index` が別の画像を指す)。
+/// 同じ番号の孤児ファイルが居たら**拡張子を問わず先に消す**。残すと `read_run_snapshot` の
+/// 前方一致がどちらを拾うか決まらなくなる。
+#[tauri::command]
+fn add_run_snapshot(run_dir: String, path: String) -> Result<AddedSnapshot, String> {
+    let src = PathBuf::from(&path);
+    // 壊れた画像を run に入れない (入力ペインと同じヘッダ検証)。
+    snapshot_meta(&src)?;
+
+    let dir = PathBuf::from(&run_dir);
+    let text = std::fs::read_to_string(dir.join("promo.json")).map_err(|e| format!("promo.json を読めません: {e}"))?;
+    let mut promo: PromoJson = serde_json::from_str(&text).map_err(|e| format!("promo.json の形が違います: {e}"))?;
+
+    let index = promo.snapshot_paths.len();
+    let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("png").to_ascii_lowercase();
+    let shots = dir.join("snapshots");
+    std::fs::create_dir_all(&shots).map_err(|e| format!("snapshots フォルダを作れません: {e}"))?;
+
+    // 同じ番号の孤児を掃除してから置く。
+    let prefix = promo_core::snapshot_prefix(index);
+    if let Ok(entries) = std::fs::read_dir(&shots) {
+        for e in entries.filter_map(|e| e.ok()) {
+            if e.file_name().to_string_lossy().starts_with(&prefix) {
+                let _ = std::fs::remove_file(e.path());
+            }
+        }
+    }
+    let dst = shots.join(promo_core::snapshot_file_name(index, &ext));
+    std::fs::copy(&src, &dst).map_err(|e| format!("スナップショットを写せません {}: {e}", src.display()))?;
+
+    // 一覧に足すのは**元のパス**。run の中の写しが正本で、これは由来の記録
+    // (元が動いても run は壊れない — rev10 で read_run_snapshot が写しを読むようにしてある)。
+    promo.snapshot_paths.push(path);
+    let json = serde_json::to_string_pretty(&promo).map_err(|e| e.to_string())?;
+    write_atomic(&dir.join("promo.json"), json.as_bytes())?;
+    Ok(AddedSnapshot { index, snapshot_paths: promo.snapshot_paths })
 }
 
 /// run に写したスナップショット (rev10)。**元のパスではなく run の写しを読む** — 元は移動されうるし、
 /// run は自己完結しているべきなので。
 fn read_run_snapshot(run_dir: &Path, idx: usize) -> Result<Vec<u8>, String> {
     let dir = run_dir.join("snapshots");
-    let want = format!("snapshot_{:02}.", idx + 1);
+    let want = promo_core::snapshot_prefix(idx);
     let entry = std::fs::read_dir(&dir)
         .map_err(|e| format!("snapshots/ を読めません: {e}"))?
         .filter_map(|e| e.ok())
@@ -1001,6 +1122,7 @@ pub fn run() {
             forget_run,
             reburn_caption,
             plate_preview,
+            add_run_snapshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

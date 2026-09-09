@@ -4,11 +4,18 @@
  *
  * 設定の値が**既定**で、ここで変えたぶんだけがその scene に効く。やり直しは `base/` の
  * **素材** (product は背景 / mood は絵) から合成し直すので、**生成 API は呼ばず、劣化しない**。
+ *
+ * rev16: 折り畳みパネルから**ダイアログ**へ。結果ペインの中に畳むと絵が列幅 (420px) に縛られ、
+ * 焼き上がりを確かめる用途に足りなかった (ユーザー判断 2026-09-09「大きい画面で確認できるようにしたい」)。
+ * ダイアログは左が絵・右がつまみの 2 段組で、絵は画面の高さまで使う。
+ * `Teleport` で body に出すのは、この部品が `overflow: auto` の列の中に居るため。
  */
-import { computed, ref, watch } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../store";
 import type { FontEntry } from "../types";
+import { baseName as fileName, snapshotChoices } from "../snapshots";
+import { tiltLabel, tiltValue } from "../plate";
 
 const props = defineProps<{
   sceneId: number;
@@ -49,6 +56,50 @@ const copyChanged = computed(() => copy.value !== props.copyText);
 /** 使うスナップショット (rev13)。null = LLM の選択のまま。 */
 const snapIndex = ref<number | null>(null);
 
+/**
+ * 選べる一覧 (rev20) = run に写してあるもの + **入力ペインで後から足したもの**。
+ * 取り込み口は入力ペインの 1 つだけ (ドロップ / 貼り付け / ファイル選択)。ここは選ぶだけ。
+ */
+const choices = computed(() => snapshotChoices(props.snapshots, store.project.snapshots));
+const copying = ref(false);
+
+/**
+ * まだ run に写していないものが選ばれたら、その場で写す。
+ * **run は自己完結する** (rev10) ので、入力ペインのパスを直に指すことはできない。
+ */
+async function chooseSnapshot(e: Event) {
+  const v = (e.target as HTMLSelectElement).value;
+  if (v === "") {
+    snapIndex.value = null;
+    touch();
+    return;
+  }
+  const c = choices.value[Number(v)];
+  if (!c) return;
+  if (c.index !== null) {
+    snapIndex.value = c.index;
+    touch();
+    return;
+  }
+  copying.value = true;
+  try {
+    const index = await store.addRunSnapshot(c.path);
+    if (index !== null) {
+      snapIndex.value = index;
+      touch();
+    }
+  } finally {
+    copying.value = false;
+  }
+}
+
+/** 選択中が一覧の何番目か (run の番号ではなく表示上の位置)。 */
+const chosen = computed(() => {
+  if (snapIndex.value === null) return "";
+  const i = choices.value.findIndex((c) => c.index === snapIndex.value);
+  return i < 0 ? "" : String(i);
+});
+
 /** 「適用」を押すまで絵は変わらない。押し忘れが分かるように印を出す。 */
 const dirty = ref(false);
 function touch() {
@@ -69,35 +120,62 @@ const dy = ref<number | null>(null);
 const preview = ref<HTMLImageElement | null>(null);
 
 /**
- * プレートの**予定位置** (rev14)。座標は backend が合成と同じ関数から出すので、
- * 射影の数式をここに写さない (写すと必ず食い違う)。
+ * **予定位置** — 面 (rev14) と見出し (rev18)。座標は backend が合成・焼き込みと同じ関数から出す。
+ * 射影も版組みもここに写さない (写すと必ず食い違う)。mood カットには面が無いので `quad` は null。
  */
-const quad = ref<{ canvas: [number, number]; quad: [number, number][] } | null>(null);
+interface Preview {
+  canvas: [number, number];
+  quad: [number, number][] | null;
+  /** 1 行 1 個の [x, y, w, h] (canvas 座標)。 */
+  caption_lines: [number, number, number, number][];
+  /** いま効いている傾き [yaw, pitch]。合成が使う `tilt_of` の値。 */
+  tilt: [number, number];
+}
+const previewBoxes = ref<Preview | null>(null);
 let pending = 0;
 async function refreshQuad() {
-  if (!props.isProduct) return;
   const runDir = store.result?.package_dir;
   if (!runDir) return;
   const my = ++pending;
   try {
-    const r = await invoke<{ canvas: [number, number]; quad: [number, number][] }>("plate_preview", {
+    const r = await invoke<Preview>("plate_preview", {
       runDir,
       sceneId: props.sceneId,
       spec: copy.value.trim() ? currentSpec() : null,
       plate: currentPlate(),
+      copy: copy.value,
     });
-    if (my === pending) quad.value = r; // 古い応答で新しい枠を上書きしない
+    if (my === pending) previewBoxes.value = r; // 古い応答で新しい枠を上書きしない
   } catch {
     /* 枠が出ないだけ。操作は妨げない */
   }
 }
 
-/** 表示サイズに合わせた SVG のポリゴン点列。 */
+/**
+ * 傾きスライダーの**基準** (rev21)。触っていないときは LLM が書いた傾きを指す。
+ * ここを 0 にすると、絵が傾いているのにつまみが 0° を指す嘘になる (ユーザー指摘 2026-09-09)。
+ */
+const baseTilt = computed<[number, number]>(() => previewBoxes.value?.tilt ?? [0, 0]);
+
+/** 表示サイズに合わせた SVG のポリゴン点列 (面)。 */
 const quadPoints = computed(() => {
-  const q = quad.value;
-  if (!q) return "";
-  const [cw, ch] = q.canvas;
-  return q.quad.map(([x, y]) => `${(x / cw) * 100},${(y / ch) * 100}`).join(" ");
+  const p = previewBoxes.value;
+  if (!p?.quad) return "";
+  const [cw, ch] = p.canvas;
+  return p.quad.map(([x, y]) => `${(x / cw) * 100},${(y / ch) * 100}`).join(" ");
+});
+
+/** 見出しの予定位置 (1 行 1 枠、canvas 比の %)。 */
+const captionRects = computed(() => {
+  const p = previewBoxes.value;
+  if (!p) return [];
+  const [cw, ch] = p.canvas;
+  return p.caption_lines.map(([x, y, w, h]) => ({
+    x: (x / cw) * 100,
+    y: (y / ch) * 100,
+    w: (w / cw) * 100,
+    h: (h / ch) * 100,
+  }));
 });
 let drag: { x: number; y: number; dx: number; dy: number } | null = null;
 
@@ -127,13 +205,6 @@ function onUp(e: PointerEvent) {
 function show(v: number | null, unit = ""): string {
   return v === null ? "既定" : `${v}${unit}`;
 }
-function pickSnap(e: Event): number | null {
-  const v = (e.target as HTMLSelectElement).value;
-  return v === "" ? null : Number(v);
-}
-function baseName(p: string): string {
-  return p.split(/[\/]/).pop() ?? p;
-}
 function num(e: Event): number {
   return Number((e.target as HTMLInputElement).value);
 }
@@ -150,12 +221,55 @@ function currentPlate() {
   return Object.keys(p).length ? p : null;
 }
 
+/** 適用していない変更を黙って捨てない。 */
+function askClose() {
+  if (dirty.value && !confirm("適用していない変更があります。閉じますか？")) return;
+  open.value = false;
+}
+
+function onKey(e: KeyboardEvent) {
+  if (e.key === "Escape") askClose();
+}
+watch(open, (v) => {
+  if (v) window.addEventListener("keydown", onKey);
+  else window.removeEventListener("keydown", onKey);
+});
+onUnmounted(() => window.removeEventListener("keydown", onKey));
+
+/**
+ * 保存済みの上書きをつまみへ戻す (rev21)。**開き直したときにつまみが実効値を指すため。**
+ * 従来は毎回 null (= 既定) から始まり、適用済みの run を開き直すと
+ * 絵には自分の値が焼かれているのにスライダーは既定を指していた (傾きの 0° と同じ型の嘘)。
+ */
+function loadSaved() {
+  const promo = store.result?.promo;
+  const c = promo?.caption_overrides?.[props.sceneId];
+  if (c) {
+    if (c.position) position.value = c.position;
+    if (c.size_ratio != null) sizeRatio.value = c.size_ratio;
+    if (c.color) color.value = c.color;
+    capY.value = c.y_ratio ?? null;
+    if (c.font_path) fontKey.value = `${c.font_path}#${c.font_index ?? 0}`;
+  }
+  const p = promo?.plate_overrides?.[props.sceneId];
+  yaw.value = p?.yaw_degrees ?? null;
+  pitch.value = p?.pitch_degrees ?? null;
+  ratio.value = p?.screen_ratio ?? null;
+  dx.value = p?.x_offset_ratio ?? null;
+  dy.value = p?.y_offset_ratio ?? null;
+  snapIndex.value = p?.snapshot_index ?? null;
+}
+
 async function toggle() {
   open.value = !open.value;
-  if (open.value && !fonts.value.length) {
+  if (!open.value) return;
+  loadSaved();
+  dirty.value = false;
+  // **毎回**取りに行く (実効の傾きが要るので、フォントを読み込み済みでも省かない)。
+  refreshQuad();
+  if (!fonts.value.length) {
     try {
       fonts.value = await invoke<FontEntry[]>("list_fonts");
-      refreshQuad();
     } catch (e) {
       store.push("error", `フォント一覧を取れません: ${e}`);
     }
@@ -224,139 +338,216 @@ function restoreCopy() {
       :title="hasText || isProduct ? '' : 'このシーンには copy_text も、はめ込むスクショもありません'"
       @click="toggle"
     >
-      {{ hasText ? (isProduct ? "見出し / はめ込み" : "見出し") : "はめ込み" }} {{ open ? "▲" : "▼" }}
+      {{ hasText ? (isProduct ? "見出し / はめ込み" : "見出し") : "はめ込み" }}…
     </button>
-    <div v-if="open" class="panel-in">
-      <label class="field">
-        <span>コピー文 (画像に焼かれ、scenes.md にも出ます)</span>
-        <textarea v-model="copy" rows="2" placeholder="空にすると見出しを焼きません" @input="touch()" />
-      </label>
-      <div v-if="originalCopy !== null && copy !== originalCopy" class="row" style="gap: 4px">
-        <button class="btn small" @click="restoreCopy">最初の文に戻す</button>
-        <span class="muted" style="font-size: 11px">元: {{ originalCopy }}</span>
-      </div>
-
-      <template v-if="copy.trim()">
-      <p v-if="!fonts.length" class="muted note">フォント一覧を読み込み中…</p>
-      <div class="row">
-        <label class="field" style="flex: 2">
-          <span>フォント</span>
-          <select v-model="fontKey" @change="touch()">
-            <option v-for="f in fonts" :key="f.path + f.index" :value="`${f.path}#${f.index}`">
-              {{ f.has_japanese ? "🇯🇵 " : "" }}{{ f.family }}
-            </option>
-          </select>
-        </label>
-        <label class="field" style="flex: 1">
-          <span>位置</span>
-          <select v-model="position" @change="touch()">
-            <option value="top">上</option>
-            <option value="bottom">下</option>
-          </select>
-        </label>
-      </div>
-      <div class="row">
-        <label class="field" style="flex: 1">
-          <span>大きさ <b class="mono">{{ sizeRatio.toFixed(3) }}</b></span>
-          <input v-model.number="sizeRatio" type="range" min="0.02" max="0.2" step="0.005" @input="touch()" />
-        </label>
-        <label class="field" style="flex: 1">
-          <span>色</span>
-          <input v-model="color" type="color" @change="touch()" />
-        </label>
-      </div>
-      <label class="field">
-        <span>見出しの縦位置 <b class="mono">{{ show(capY) }}</b></span>
-        <input :value="capY ?? (position === 'top' ? 0.06 : 0.85)" type="range" min="0" max="0.95" step="0.01"
-               @input="capY = num($event); touch()" />
-      </label>
-      </template>
-      <template v-if="isProduct">
-        <h4 class="sub" style="margin: 4px 0 0">はめ込み</h4>
-        <label v-if="snapshots.length > 1" class="field">
-          <span>使うスナップショット</span>
-          <select :value="snapIndex ?? ''" @change="snapIndex = pickSnap($event); touch()">
-            <option value="">LLM の選択のまま ({{ (llmSnapshot ?? 0) + 1 }} 枚目)</option>
-            <option v-for="(sp, i) in snapshots" :key="sp" :value="i">{{ i + 1 }} 枚目 — {{ baseName(sp) }}</option>
-          </select>
-        </label>
-        <div v-if="store.imageUrls[sceneId]" class="stage">
-          <img
-            ref="preview"
-            class="preview"
-            :src="store.imageUrls[sceneId]"
-            :alt="`scene ${sceneId}`"
-            title="ドラッグで位置を動かす"
-            @pointerdown.prevent="onDown"
-            @pointermove="onMove"
-            @pointerup="onUp"
-            @pointercancel="onUp"
-          />
-          <!-- 予定位置。座標は backend の plate_quad (合成と同じ関数) から来る。 -->
-          <svg v-if="quadPoints && dirty" class="ghost" viewBox="0 0 100 100" preserveAspectRatio="none">
-            <polygon :points="quadPoints" />
-          </svg>
-        </div>
-        <label class="field">
-          <span>左右の傾き <b class="mono">{{ show(yaw, "°") }}</b></span>
-          <input :value="yaw ?? 0" type="range" min="-35" max="35" step="1" @input="yaw = num($event); touch()" />
-        </label>
-        <label class="field">
-          <span>上下の傾き <b class="mono">{{ show(pitch, "°") }}</b></span>
-          <input :value="pitch ?? 0" type="range" min="-35" max="35" step="1" @input="pitch = num($event); touch()" />
-        </label>
-        <label class="field">
-          <span>大きさ <b class="mono">{{ show(ratio) }}</b></span>
-          <input :value="ratio ?? 0.78" type="range" min="0.2" max="0.95" step="0.01" @input="ratio = num($event); touch()" />
-        </label>
-        <label class="field">
-          <span>横位置 <b class="mono">{{ show(dx) }}</b></span>
-          <input :value="dx ?? 0" type="range" min="-0.4" max="0.4" step="0.01" @input="dx = num($event); touch()" />
-        </label>
-        <label class="field">
-          <span>縦位置 <b class="mono">{{ show(dy) }}</b></span>
-          <input :value="dy ?? 0" type="range" min="-0.4" max="0.4" step="0.01" @input="dy = num($event); touch()" />
-        </label>
-        <p class="muted note">
-いじっている間は<b>予定位置を枠で重ねます</b> (適用すると消えます)。
-          スライダーとドラッグは<b>値を変えるだけ</b>です。絵が変わるのは「適用」を押した時だけ
-          (再合成は原寸で 0.6 秒ほどかかるため)。<b>縦位置を動かすと見出しの帯のずらしを置き換えます。</b>
-        </p>
-      </template>
-
-      <div class="row" style="gap: 4px">
-        <button class="btn small" :class="{ on: dirty }" :disabled="busy" @click="apply">
-          {{ busy ? "焼き直し中…" : dirty ? "適用 (未反映)" : "適用" }}
-        </button>
-        <button class="btn small" :disabled="busy" @click="reset">既定に戻す</button>
-        <button v-if="hasText" class="btn small" :disabled="busy" @click="clear">見出しを消す</button>
-      </div>
-      <p class="muted note">
-        背景から合成をやり直すので、何度変えても劣化しません。生成の費用もかかりません。
-      </p>
-    </div>
   </div>
+
+  <!-- 結果ペインは overflow: auto の列なので、ダイアログは body へ出す。 -->
+  <Teleport to="body">
+    <div v-if="open" class="backdrop" @click.self="askClose">
+      <div class="dlg panel">
+        <div class="row" style="justify-content: space-between">
+          <b>
+            シーン {{ sceneId }} — {{ hasText ? (isProduct ? "見出し / はめ込み" : "見出し") : "はめ込み" }}
+            <span class="muted" style="font-weight: 400">({{ isProduct ? "product" : "mood" }})</span>
+          </b>
+          <button class="btn small" @click="askClose">閉じる</button>
+        </div>
+
+        <div class="cols">
+          <!-- 左: 絵。ここを大きく取るためにダイアログにした (rev16)。 -->
+          <div class="stage-col">
+            <div v-if="store.imageUrls[sceneId]" class="stage">
+              <img
+                ref="preview"
+                class="preview"
+                :class="{ draggable: isProduct }"
+                :src="store.imageUrls[sceneId]"
+                :alt="`scene ${sceneId}`"
+                :title="isProduct ? 'ドラッグで位置を動かす' : ''"
+                @pointerdown.prevent="onDown"
+                @pointermove="onMove"
+                @pointerup="onUp"
+                @pointercancel="onUp"
+              />
+              <!-- 予定位置。座標は backend の plate_quad / caption_layout (合成・焼き込みと同じ関数) から来る。 -->
+              <svg v-if="dirty && (quadPoints || captionRects.length)" class="ghost" viewBox="0 0 100 100" preserveAspectRatio="none">
+                <polygon v-if="quadPoints" :points="quadPoints" />
+                <rect v-for="(r, i) in captionRects" :key="i" class="cap-box" :x="r.x" :y="r.y" :width="r.w" :height="r.h" />
+              </svg>
+            </div>
+            <p v-else class="muted note">このシーンにはまだ画像がありません。</p>
+            <p class="muted note">
+              出ているのは<b>焼き上がり</b>です。<b>絵が変わるのは「適用」を押した時だけ</b>
+              (再合成は原寸で 0.6 秒ほどかかるので、スライダーとドラッグは値を変えるだけ)。
+              いじっている間は<b>予定位置を枠で重ねます</b> — 見出しは行ごとの枠<template v-if="isProduct">、面は台形</template> (適用すると消えます)。
+            </p>
+          </div>
+
+          <!-- 右: つまみ。縦に長いのでここだけスクロールさせる。 -->
+          <div class="ctl-col">
+            <label class="field">
+              <span>コピー文 (画像に焼かれ、scenes.md にも出ます)</span>
+              <textarea v-model="copy" rows="2" placeholder="空にすると見出しを焼きません" @input="touch()" />
+            </label>
+            <div v-if="originalCopy !== null && copy !== originalCopy" class="row" style="gap: 4px">
+              <button class="btn small" @click="restoreCopy">最初の文に戻す</button>
+              <span class="muted" style="font-size: 11px">元: {{ originalCopy }}</span>
+            </div>
+
+            <template v-if="copy.trim()">
+              <p v-if="!fonts.length" class="muted note">フォント一覧を読み込み中…</p>
+              <label class="field">
+                <span>フォント</span>
+                <select v-model="fontKey" @change="touch()">
+                  <option v-for="f in fonts" :key="f.path + f.index" :value="`${f.path}#${f.index}`">
+                    {{ f.has_japanese ? "🇯🇵 " : "" }}{{ f.family }}
+                  </option>
+                </select>
+              </label>
+              <div class="row">
+                <label class="field" style="flex: 1">
+                  <span>大きさ <b class="mono">{{ sizeRatio.toFixed(3) }}</b></span>
+                  <input v-model.number="sizeRatio" type="range" min="0.02" max="0.2" step="0.005" @input="touch()" />
+                </label>
+                <label class="field" style="flex: 1">
+                  <span>色</span>
+                  <input v-model="color" type="color" @change="touch()" />
+                </label>
+              </div>
+              <label class="field">
+                <span>見出しの縦位置 <b class="mono">{{ show(capY) }}</b></span>
+                <input
+                  :value="capY ?? (position === 'top' ? 0.06 : 0.85)"
+                  type="range"
+                  min="0"
+                  max="0.95"
+                  step="0.01"
+                  @input="capY = num($event); touch()"
+                />
+              </label>
+            </template>
+
+            <template v-if="isProduct">
+              <h4 class="sub" style="margin: 4px 0 0">はめ込み</h4>
+              <label class="field">
+                <span>使うスナップショット{{ copying ? " (取り込み中…)" : "" }}</span>
+                <select :value="chosen" :disabled="copying" @change="chooseSnapshot">
+                  <option value="">LLM の選択のまま ({{ (llmSnapshot ?? 0) + 1 }} 枚目)</option>
+                  <option v-for="(c, i) in choices" :key="c.path + i" :value="i">
+                    {{ c.inRun ? `${(c.index ?? 0) + 1} 枚目` : "入力に追加" }} — {{ fileName(c.path) }}
+                  </option>
+                </select>
+              </label>
+              <p class="muted note">
+                左の<b>スナップショット</b>に足した画像もここに出ます (「入力に追加」)。選ぶとこの run に写します。
+              </p>
+              <label class="field">
+                <span>左右の傾き <b class="mono">{{ tiltLabel(yaw, baseTilt[0]) }}</b></span>
+                <input :value="tiltValue(yaw, baseTilt[0])" type="range" min="-35" max="35" step="1"
+                       @input="yaw = num($event); touch()" />
+              </label>
+              <label class="field">
+                <span>上下の傾き <b class="mono">{{ tiltLabel(pitch, baseTilt[1]) }}</b></span>
+                <input :value="tiltValue(pitch, baseTilt[1])" type="range" min="-35" max="35" step="1"
+                       @input="pitch = num($event); touch()" />
+              </label>
+              <label class="field">
+                <span>大きさ <b class="mono">{{ show(ratio) }}</b></span>
+                <input :value="ratio ?? 0.78" type="range" min="0.2" max="0.95" step="0.01" @input="ratio = num($event); touch()" />
+              </label>
+              <label class="field">
+                <span>横位置 <b class="mono">{{ show(dx) }}</b></span>
+                <input :value="dx ?? 0" type="range" min="-0.4" max="0.4" step="0.01" @input="dx = num($event); touch()" />
+              </label>
+              <label class="field">
+                <span>縦位置 <b class="mono">{{ show(dy) }}</b></span>
+                <input :value="dy ?? 0" type="range" min="-0.4" max="0.4" step="0.01" @input="dy = num($event); touch()" />
+              </label>
+              <p class="muted note"><b>縦位置を動かすと見出しの帯のずらしを置き換えます。</b></p>
+            </template>
+          </div>
+        </div>
+
+        <div class="row foot">
+          <button class="btn small" :class="{ on: dirty }" :disabled="busy" @click="apply">
+            {{ busy ? "焼き直し中…" : dirty ? "適用 (未反映)" : "適用" }}
+          </button>
+          <button class="btn small" :disabled="busy" @click="reset">既定に戻す</button>
+          <button v-if="hasText" class="btn small" :disabled="busy" @click="clear">見出しを消す</button>
+          <span class="muted note" style="margin-left: auto">
+            背景から合成をやり直すので、何度変えても劣化しません。生成の費用もかかりません。
+          </span>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
 .cap {
   margin-top: 4px;
 }
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 履歴・設定 (40) の上。この画面からしか開かない。 */
+  z-index: 45;
+}
+.dlg {
+  width: min(1400px, 96vw);
+  max-height: 92vh;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cols {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  /* 絵に幅を寄せる。つまみは読める最小幅で足りる。 */
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 12px;
+}
+.stage-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-start;
+}
+.ctl-col {
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 4px;
+}
+.foot {
+  gap: 4px;
+  align-items: center;
+}
 .stage {
   position: relative;
   line-height: 0;
-  /* 枠を画像にぴったり重ねるため、要素の箱を画像そのものにする。
-     object-fit: contain だとレターボックスのぶんだけ枠がズレる。 */
-  width: 100%;
-  max-width: 420px;
-  margin: 0 auto;
+  /* 枠を画像にぴったり重ねるため、箱を画像そのものに縮める
+     (object-fit: contain だとレターボックスのぶんだけ枠がズレる)。 */
+  display: inline-block;
+  max-width: 100%;
 }
 .ghost {
   position: absolute;
   top: 0;
   left: 0;
   /* SVG は置換要素なので inset: 0 だけでは伸びず、固有サイズ (既定 300x150) で描かれる。
-     幅と高さを明示しないとポリゴンの座標が画像の箱に乗らない (実測 2026-09-09)。 */
+     幅と高さを明示しないとポリゴンの座標が画像の箱に乗らない (実測 2026-09-09、failures #17)。 */
   width: 100%;
   height: 100%;
   pointer-events: none;
@@ -367,25 +558,42 @@ function restoreCopy() {
   stroke-width: 0.4;
   vector-effect: non-scaling-stroke;
 }
+/* 見出しは面と別の色にする (どちらの枠を見ているか迷わせない)。 */
+.ghost .cap-box {
+  fill: rgb(255 210 120 / 0.14);
+  stroke: #ffd278;
+  stroke-width: 0.4;
+  vector-effect: non-scaling-stroke;
+}
 .preview {
-  width: 100%;
-  height: auto;
   display: block;
+  max-width: 100%;
+  /* ダイアログの高さから見出し・注記・操作列のぶんを引いた残り。 */
+  max-height: calc(92vh - 190px);
+  width: auto;
+  height: auto;
   border-radius: 6px;
-  cursor: grab;
   touch-action: none;
   user-select: none;
 }
-.preview:active {
+.preview.draggable {
+  cursor: grab;
+}
+.preview.draggable:active {
   cursor: grabbing;
 }
-.panel-in {
-  margin-top: 6px;
-  padding: 8px;
-  border: 1px solid var(--line, rgb(255 255 255 / 0.1));
-  border-radius: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+
+/* 幅が足りない画面では 1 列に落として、絵を上に置く。 */
+@media (max-width: 1000px) {
+  .cols {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: auto;
+  }
+  .ctl-col {
+    overflow: visible;
+  }
+  .preview {
+    max-height: 50vh;
+  }
 }
 </style>

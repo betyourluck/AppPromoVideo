@@ -99,17 +99,45 @@ pub fn caption_top(canvas_h: u32, block_h: f32, cap: &Caption<'_>) -> f32 {
     }
 }
 
-pub fn burn_caption(png: &[u8], cap: &Caption<'_>) -> Result<Vec<u8>, String> {
+/// 1 行の版組み (canvas 座標)。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LaidOutLine {
+    pub text: String,
+    /// 左端 (中央揃えの結果)。
+    pub x: f32,
+    pub width: f32,
+    /// 上端。高さは [`CaptionLayout::line_h`]。
+    pub top: f32,
+}
+
+/// 見出しの版組み (契約 `caption_layout`、rev18)。**焼き込みとプレビューはこの 1 つの結果を共有する。**
+/// `plate_quad` と同じ作法 — 数式を TS 側へ写すと必ず食い違うので、寸法は Rust が出す。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CaptionLayout {
+    /// 自動縮小の後に実際に使う文字の高さ (px)。
+    pub px: f32,
+    pub line_h: f32,
+    /// 文字ブロックの上端。
+    pub top: f32,
+    pub block_h: f32,
+    pub lines: Vec<LaidOutLine>,
+}
+
+/// 版組みだけを計算する (**画素を触らない**ので速い — フォントの幅送りを測るだけ)。
+///
+/// 空文字・空行だけなら `None`。`burn_caption` はこの結果をそのまま描くので、
+/// ここが返す矩形は**焼き上がりの文字の位置と大きさそのもの**である
+/// (グリフの墨は矩形よりわずかに内側に入る。行の高さは字面ではなく行送り)。
+pub fn caption_layout(canvas_w: u32, canvas_h: u32, cap: &Caption<'_>) -> Result<Option<CaptionLayout>, String> {
     if cap.text.trim().is_empty() {
-        return Ok(png.to_vec());
+        return Ok(None);
     }
     let font = FontRef::try_from_slice_and_index(cap.font_data, cap.font_index).map_err(|e| format!("フォントを読めません: {e}"))?;
-    let mut img = image::load_from_memory(png).map_err(|e| format!("画像を読めません: {e}"))?.to_rgba8();
-    let (w, h) = img.dimensions();
     let lines: Vec<&str> = cap.text.lines().filter(|l| !l.trim().is_empty()).collect();
     if lines.is_empty() {
-        return Ok(png.to_vec());
+        return Ok(None);
     }
+    let (w, h) = (canvas_w, canvas_h);
     let max_w = w as f32 * 0.9;
     // 幅に収まるまで縮める (下限は canvas 高さの 2%)。
     let mut px = (h as f32 * cap.size_ratio).max(8.0);
@@ -125,23 +153,33 @@ pub fn burn_caption(png: &[u8], cap: &Caption<'_>) -> Result<Vec<u8>, String> {
     let f = scaled_at(px);
     let line_h = px * 1.3;
     let block_h = line_h * lines.len() as f32;
-    let margin = h as f32 * cap.margin_ratio;
-    let top = match cap.y_ratio {
-        // rev14: 直接指定。文字ブロックが canvas からはみ出さないよう端で丸める。
-        Some(r) => (h as f32 * r).clamp(0.0, (h as f32 - block_h).max(0.0)),
-        None => match cap.position {
-            CaptionPosition::Top => margin,
-            CaptionPosition::Bottom => h as f32 - margin - block_h,
-        },
+    let top = caption_top(h, block_h, cap);
+    let laid = lines
+        .iter()
+        .enumerate()
+        .map(|(i, line)| {
+            let width = line_width(&f, line);
+            LaidOutLine { text: (*line).to_string(), x: (w as f32 - width) / 2.0, width, top: top + line_h * i as f32 }
+        })
+        .collect();
+    Ok(Some(CaptionLayout { px, line_h, top, block_h, lines: laid }))
+}
+
+pub fn burn_caption(png: &[u8], cap: &Caption<'_>) -> Result<Vec<u8>, String> {
+    let mut img = image::load_from_memory(png).map_err(|e| format!("画像を読めません: {e}"))?.to_rgba8();
+    let (w, h) = img.dimensions();
+    // 版組みはプレビューと同じ関数から取る (数式の写しを持たない)。
+    let Some(layout) = caption_layout(w, h, cap)? else {
+        return Ok(png.to_vec());
     };
+    let font = FontRef::try_from_slice_and_index(cap.font_data, cap.font_index).map_err(|e| format!("フォントを読めません: {e}"))?;
+    let f = font.as_scaled(PxScale::from(layout.px));
     let shadow = [0, 0, 0, 190];
-    let shadow_off = (px * 0.05).max(1.5);
-    for (i, line) in lines.iter().enumerate() {
-        let lw = line_width(&f, line);
-        let x0 = (w as f32 - lw) / 2.0;
-        let baseline = top + line_h * i as f32 + f.ascent();
-        draw_line(&mut img, &f, line, x0 + shadow_off, baseline + shadow_off, shadow);
-        draw_line(&mut img, &f, line, x0, baseline, cap.color);
+    let shadow_off = (layout.px * 0.05).max(1.5);
+    for l in &layout.lines {
+        let baseline = l.top + f.ascent();
+        draw_line(&mut img, &f, &l.text, l.x + shadow_off, baseline + shadow_off, shadow);
+        draw_line(&mut img, &f, &l.text, l.x, baseline, cap.color);
     }
     let mut out = std::io::Cursor::new(Vec::new());
     DynamicImage::ImageRgba8(img).write_to(&mut out, image::ImageFormat::Png).map_err(|e| e.to_string())?;
@@ -153,7 +191,7 @@ mod tests {
     use super::*;
     use crate::fonts::{FontSource, describe_font_file, system_font_dirs};
 
-    fn find_font() -> Option<(Vec<u8>, u32)> {
+    pub(super) fn find_font() -> Option<(Vec<u8>, u32)> {
         let dir = system_font_dirs().into_iter().find(|d| d.is_dir())?;
         for c in ["BIZ-UDGothicB.ttc", "YuGothM.ttc", "meiryo.ttc", "msgothic.ttc", "arial.ttf", "DejaVuSans.ttf"] {
             let p = dir.join(c);
@@ -166,7 +204,7 @@ mod tests {
         None
     }
 
-    fn solid(w: u32, h: u32) -> Vec<u8> {
+    pub(super) fn solid(w: u32, h: u32) -> Vec<u8> {
         crate::compose::solid_backdrop(w, h, [30, 30, 40])
     }
 
@@ -199,5 +237,80 @@ mod tests {
         let out2 = image::load_from_memory(&burn_caption(&png, &cap2).unwrap()).unwrap().to_rgba8();
         let edge = (0..450).filter(|&y| out2.get_pixel(799, y)[0] > 200 || out2.get_pixel(0, y)[0] > 200).count();
         assert_eq!(edge, 0);
+    }
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::tests::{find_font, solid};
+    use super::*;
+
+    fn cap_with<'a>(text: &'a str, font: &'a [u8], index: u32) -> Caption<'a> {
+        let mut c = Caption::new(text, font, index);
+        c.size_ratio = 0.12;
+        c
+    }
+
+    /// **版組みは焼き上がりと一致していなければ意味がない** (枠の用途はそれだけ)。
+    /// 焼いた墨の外接矩形が、返した矩形の中に収まることを見る。
+    #[test]
+    fn the_box_contains_the_ink_it_promises() {
+        let Some((font, index)) = find_font() else {
+            eprintln!("システムフォントが見つからないので飛ばします");
+            return;
+        };
+        let png = solid(400, 300);
+        let mut cap = cap_with("Ag", &font, index);
+        cap.y_ratio = Some(0.30);
+        let l = caption_layout(400, 300, &cap).unwrap().unwrap();
+        let line = &l.lines[0];
+
+        let burned = burn_caption(&png, &cap).unwrap();
+        let img = image::load_from_memory(&burned).unwrap().to_rgba8();
+        let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0u32, 0u32);
+        for (x, y, p) in img.enumerate_pixels() {
+            // 落ち影も含めた「元の背景ではない画素」。
+            if *p != image::Rgba([30, 30, 40, 255]) {
+                x0 = x0.min(x);
+                y0 = y0.min(y);
+                x1 = x1.max(x);
+                y1 = y1.max(y);
+            }
+        }
+        assert!(x1 > x0, "何か焼かれている");
+        // 落ち影のぶん右下にはみ出すので、そのぶんだけ緩める。
+        let slack = (l.px * 0.05).max(1.5) + 1.0;
+        assert!(x0 as f32 >= line.x - 1.0, "左: 墨 {x0} vs 枠 {}", line.x);
+        assert!(x1 as f32 <= line.x + line.width + slack, "右: 墨 {x1} vs 枠 {}", line.x + line.width);
+        assert!(y0 as f32 >= line.top - 1.0, "上: 墨 {y0} vs 枠 {}", line.top);
+        assert!(y1 as f32 <= line.top + l.line_h + slack, "下: 墨 {y1} vs 枠 {}", line.top + l.line_h);
+    }
+
+    /// 縦位置を動かすと枠も動く (焼き込みと同じ `caption_top` を通っている証拠)。
+    #[test]
+    fn the_box_follows_y_ratio() {
+        let Some((font, index)) = find_font() else { return };
+        let mut cap = cap_with("A", &font, index);
+        cap.y_ratio = Some(0.10);
+        let high = caption_layout(400, 300, &cap).unwrap().unwrap();
+        cap.y_ratio = Some(0.70);
+        let low = caption_layout(400, 300, &cap).unwrap().unwrap();
+        assert!(high.top < low.top);
+        assert_eq!(high.px, low.px, "縦位置は大きさに影響しない");
+    }
+
+    /// 幅からはみ出す行は縮む。**縮んだ後の値**が返る (指定値をそのまま返すと枠が嘘をつく)。
+    #[test]
+    fn a_long_line_shrinks_and_the_box_reports_the_shrunk_size() {
+        let Some((font, index)) = find_font() else { return };
+        let short = caption_layout(400, 300, &cap_with("A", &font, index)).unwrap().unwrap();
+        let long = caption_layout(400, 300, &cap_with(&"A".repeat(60), &font, index)).unwrap().unwrap();
+        assert!(long.px < short.px, "はみ出す行は縮む");
+        assert!(long.lines[0].width <= 400.0 * 0.9 + 1.0, "縮んだ後は 90% に収まる");
+    }
+
+    #[test]
+    fn empty_text_has_no_layout() {
+        assert!(caption_layout(400, 300, &Caption::new("  \n ", b"not a font", 0)).unwrap().is_none());
     }
 }

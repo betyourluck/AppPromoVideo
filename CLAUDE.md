@@ -72,40 +72,48 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 ## 現状 (2026-09-09)
 
-- **spec 01 は Phase 0〜E 着地、rev14 まで反映済み。** crates 132 green / vitest 19 / backend 8 green・clippy clean。
+- **spec 01 は Phase 0〜E 着地、rev21 まで反映済み。** crates 150 green / vitest 30 / backend 10 green・clippy clean。
 - コミットは Initial `a75c3bc` の上に 25 本、`origin/main` に push 済み (private。**週末に public 予定**)。
 - 通し (解析 → 構成 → 参照画像 → 合成) は **4 リポジトリで live 成功** (Kataribe / Verificator /
   AppPromoVideo 自身 / Fuseforks)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
 - **GUI は再ビルドしてから触る**。rev13 で dev プロファイルを変えた (debug の画像処理が 71 倍遅かった)。
 
-**編集できるもの (rev9〜14、結果ペインの各シーン)**
+**編集できるもの (rev9〜21、各シーンの「見出し / はめ込み…」ボタン → ダイアログ)**
 
 | | |
 |---|---|
 | コピー文 | 書き換え + 「最初の文に戻す」(`original_copy` に LLM の初出を控えてある) |
-| 見出し | フォント / 上下 / 大きさ / 色 / **縦位置を数値で** (`y_ratio`) |
-| はめ込み | 傾き (yaw・pitch) / 大きさ / 横位置 / 縦位置 / **使うスナップショットの選び直し** |
+| 見出し | フォント / 大きさ / 色 / **縦位置を数値で** (`y_ratio`)。上下の選択は rev18 で撤去 (縦位置が上位互換。面が避ける側は `effective_position` が `y_ratio` から導く) |
+| はめ込み | **傾き (yaw・pitch) — つまみは実効値を指す** (`0° (正面)` / `18° (LLM)` / `18°`。rev21) / 大きさ / 横位置 / 縦位置 / **使うスナップショットの選び直し** — 一覧には左の入力ペインに**後から足した画像も出る** (選ぶとその run に写す、rev20)。取り込み口は入力ペイン 1 つ |
 
 やり直しは `<run>/base/` の**素材**(product は背景 / mood は絵) から**合成ごと**行う。
 **生成 API は呼ばない** = 無料・無劣化。焼き直しは「適用」を押した時だけ (実測 debug 0.64 s / release 0.25 s)。
-いじっている間は予定位置を枠で重ねる (座標は合成と同じ `plate_quad` から取る)。
+つまみと枠は**実効値**を指す (`tilt_of` / `caption_layout` / `plate_quad` — 合成が使う関数から取る)。
+いじっている間は予定位置を枠で重ねる — **見出し** (行ごと) と **面** (台形)。
+どちらも合成・焼き込みと同じ関数から座標を取る。
+**編集はダイアログ** (rev16、左が絵・右がつまみ)。絵を大きく見るためで、mood カットにも出る。
+未適用のまま閉じようとすると確認が出る。
 
 **開いている判断**
 
 1. **`PlateMode` の既定** — perspective (面を傾ける) と frontal (正対固定) を両方実装済み。
    等倍の対を MiniMax i2v に通した結果待ち。**今セッションでは進んでいない。**
+2. **frontal が高い理由** — rev15 で再生成の回数と種別を残すようにした (`RunStats`、正本は
+   `<run>/promo.json`。索引と GUI の「再生成」列はその写し)。**live の記録はまだ 0 件**なので、
+   1.5 倍の説明は依然として推測。数えるには同一リポジトリ・同一スナップショットで
+   perspective / frontal を各数本走らせる必要がある (LLM 費用がかかる)。
+   過去の 3 行は遡って埋められない — 当時どこにも残していないため。
 
-**次の候補**: 見出しの文字位置も枠に含める (今はプレートだけ) / 傾きと可読性の境目 /
+**次の候補**: 傾きと可読性の境目 /
 mood カットのモチーフ一貫性 / `motion_prompt` の粒度 / ComfyUI と OpenAI の live /
-Unix の `tree_kill` / `--add-dir` 外 Read の拒否確認 / `RunRecord` に attempts と違反種別
-(frontal の run だけ 1.5 倍高い理由が推測のまま)。
+Unix の `tree_kill` / `--add-dir` 外 Read の拒否確認。
 
 **未整理**: `README_en.md` と `briefs/readme_en_translation.md` (会話の外で作られたもの) を
 rev14 のコミット `5929f93` に巻き込んだ。実害は無いが粒度が嘘になっている。分離するかは未判断。
 
 ## 再開の手順
 
-1. `cargo test --workspace` (132 green) と `cd app && npx vitest run` (19 green) で足場を確認。
+1. `cargo test --workspace` (150 green) と `cd app && npx vitest run` (30 green) で足場を確認。
 2. `git log --oneline -5` で直前の着地を見る。詳しい経緯は `history.md`。
 3. 上の「開いている判断」に答えが来ていないか確認してから着手する。

@@ -26,6 +26,53 @@ pub struct PromoJson {
     /// 傾きを効かせるかがこれで決まる — 索引 (app_data) に頼らず promo.json 自身が持つ。
     #[serde(default)]
     pub plate_mode: crate::plan::PlateMode,
+    /// 生成時の再生成ループの記録 (rev15)。**`None` = 記録が無い** (rev14 以前の run)。
+    /// 索引 (`app_data/runs.json`) は消えうるキャッシュなので、正本である promo.json 自身が持つ
+    /// (`plate_mode` と同じ理由)。CLI (`promo run`) と GUI の両方が書く。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_stats: Option<RunStats>,
+}
+
+/// 再生成ループが何回で通り、途中でどの検査に引っかかったか (契約 `RunStats`、rev15)。
+///
+/// **なぜ残すか**: 2026-09-08 の実測で frontal の run だけ費用が約 1.5 倍 (1.422 USD 対 0.919 / 0.944)
+/// だったが、attempts も違反種別も永続化していなかったため
+/// 「`ProductBackdropAngled` で再生成が発火した」という推測を確認できなかった。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RunStats {
+    /// シーン構成が検査を通るまでにかかった回数。1 = 一発で通った。
+    pub plan_attempts: usize,
+    /// 途中で出た違反の**種別** (`violation_kind`) を重複なく整列したもの。
+    /// 人が読む文ではなく種別を持つのは、scene_id や語が混ざると数えられないため。
+    #[serde(default)]
+    pub violation_kinds: Vec<String>,
+    /// analyze + plan の合計 (USD)。再生成が費用に効いたかを promo.json だけで見るために添える。
+    pub cost_usd: f64,
+}
+
+impl RunStats {
+    pub fn new(plan_attempts: usize, violations_per_attempt: &[Vec<crate::plan::PlanViolation>], cost_usd: f64) -> Self {
+        let mut kinds: Vec<String> = violations_per_attempt
+            .iter()
+            .flatten()
+            .map(|v| crate::plan::violation_kind(v).to_string())
+            .collect();
+        kinds.sort();
+        kinds.dedup();
+        RunStats { plan_attempts, violation_kinds: kinds, cost_usd }
+    }
+}
+
+/// run に写したスナップショットの名前の**前半** (契約: `snapshot_paths[i]` ↔ `snapshots/snapshot_{i+1:02}.*`)。
+/// 拡張子は元のファイル次第なので、読む側はこの前方一致で探す。
+pub fn snapshot_prefix(index: usize) -> String {
+    format!("snapshot_{:02}.", index + 1)
+}
+
+/// 同上のファイル名。**書き出し・読み出し・追加はすべてこの 2 つを通す** —
+/// 同じ式を 3 箇所に写していると、片方だけ直して別の画像を貼ることになる (failures #18)。
+pub fn snapshot_file_name(index: usize, ext: &str) -> String {
+    format!("{}{}", snapshot_prefix(index), ext)
 }
 
 /// 1 シーンぶんの見出しの上書き (契約 `caption.per_scene`)。**省略したフィールドは既定に落ちる。**
@@ -221,7 +268,7 @@ mod tests {
         }
     }
 
-    fn promo_with_overrides() -> PromoJson {
+    pub(super) fn promo_with_overrides() -> PromoJson {
         PromoJson {
             project_path: "D:/p".into(),
             snapshot_paths: vec![],
@@ -240,6 +287,7 @@ mod tests {
             plate_overrides: Default::default(),
             original_copy: Default::default(),
             plate_mode: Default::default(),
+            run_stats: None,
         }
     }
     use crate::plan::{Aspect, Scene, VisualIdentity};
@@ -356,5 +404,87 @@ mod tests {
         assert!(md.contains("```\nCinematic desk shot.\n```"));
         assert!(md.contains("**Aspect**: 16:9"));
         assert!(!md.contains("--ar"));
+    }
+}
+
+#[cfg(test)]
+mod run_stats_tests {
+    use super::tests::promo_with_overrides;
+    use super::*;
+    use crate::plan::PlanViolation;
+
+    #[test]
+    fn kinds_are_deduped_and_sorted_across_attempts() {
+        let per_attempt = vec![
+            vec![
+                PlanViolation::ProductBackdropAngled { scene_id: 1, word: "three-quarter" },
+                PlanViolation::ProductBackdropAngled { scene_id: 4, word: "low angle" },
+                PlanViolation::MotionPromptEmpty { scene_id: 2 },
+            ],
+            vec![PlanViolation::ProductBackdropAngled { scene_id: 4, word: "tilted" }],
+            vec![],
+        ];
+        let s = RunStats::new(3, &per_attempt, 1.42);
+        assert_eq!(s.plan_attempts, 3);
+        assert_eq!(s.violation_kinds, vec!["motion_prompt_empty", "product_backdrop_angled"], "重複なし・整列");
+        assert!((s.cost_usd - 1.42).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_run_that_passed_first_try_records_no_kinds() {
+        let s = RunStats::new(1, &[vec![]], 0.92);
+        assert_eq!(s.plan_attempts, 1);
+        assert!(s.violation_kinds.is_empty(), "一発で通った run は違反ゼロ");
+    }
+
+    /// rev14 以前の promo.json には `run_stats` が無い。**読めること**と、
+    /// **無いことが `None` (記録なし) として残ること**の両方を要求する。
+    /// ここを `Default` (= attempts 1) に落とすと、過去の run が「一発で通った」と嘘をつく。
+    #[test]
+    fn an_older_promo_json_loads_with_no_stats_and_does_not_claim_one_attempt() {
+        let mut p = promo_with_overrides();
+        p.run_stats = None;
+        let json = serde_json::to_string(&p).unwrap();
+        assert!(!json.contains("run_stats"), "None なら書き出さない (既存の promo.json を汚さない)");
+        let back: PromoJson = serde_json::from_str(&json).unwrap();
+        assert!(back.run_stats.is_none(), "記録が無いことは 1 回ではない");
+    }
+
+    #[test]
+    fn run_stats_round_trips() {
+        let mut p = promo_with_overrides();
+        p.run_stats = Some(RunStats {
+            plan_attempts: 2,
+            violation_kinds: vec!["product_backdrop_angled".into()],
+            cost_usd: 1.422,
+        });
+        let back: PromoJson = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        assert_eq!(back.run_stats, p.run_stats);
+    }
+}
+
+#[cfg(test)]
+mod snapshot_name_tests {
+    use super::*;
+
+    /// **契約**: `PromoJson.snapshot_paths[i]` ↔ `<run>/snapshots/snapshot_{i+1:02}.*`。
+    /// ここが崩れると `PlateOverride.snapshot_index` が**別の画像**を指す。
+    /// 書き出し (write_package) / 読み出し (read_run_snapshot) / 追加 (add_run_snapshot) の
+    /// 3 箇所が同じ式を持っていたので 1 箇所にした (failures #18 の処方の一般形)。
+    #[test]
+    fn the_index_and_the_file_name_agree() {
+        assert_eq!(snapshot_file_name(0, "png"), "snapshot_01.png");
+        assert_eq!(snapshot_file_name(1, "jpg"), "snapshot_02.jpg");
+        assert_eq!(snapshot_prefix(0), "snapshot_01.");
+        assert!(snapshot_file_name(0, "png").starts_with(&snapshot_prefix(0)));
+    }
+
+    /// 100 枚目以降も桁が伸びるだけで、前方一致は保たれる (`{:02}` は切り捨てない)。
+    #[test]
+    fn beyond_two_digits_the_prefix_still_matches() {
+        assert_eq!(snapshot_file_name(99, "png"), "snapshot_100.png");
+        assert!(snapshot_file_name(99, "png").starts_with(&snapshot_prefix(99)));
+        // 09 の前方一致が 090 を巻き込まない (点で切れている)。
+        assert!(!snapshot_file_name(89, "png").starts_with(&snapshot_prefix(8)));
     }
 }

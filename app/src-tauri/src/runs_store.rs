@@ -35,6 +35,13 @@ pub struct RunRecord {
     pub image_provider: Option<String>,
     #[serde(default)]
     pub image_count: usize,
+    /// シーン構成が検査を通るまでの回数 (rev15)。**0 = 記録なし** (rev14 以前の行)。1 = 一発。
+    /// 正本は `run_dir/promo.json` の `run_stats` で、ここはその写し (一覧で並べて数えるため)。
+    #[serde(default)]
+    pub plan_attempts: usize,
+    /// 途中で出た違反の種別 (`promo_core::violation_kind`)。重複なく整列済み。
+    #[serde(default)]
+    pub violation_kinds: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,7 +110,7 @@ pub fn forget(index: &mut RunIndex, run_dir: &str) -> bool {
 mod tests {
     use super::*;
 
-    fn rec(id: &str, at: i64) -> RunRecord {
+    pub(super) fn rec(id: &str, at: i64) -> RunRecord {
         RunRecord {
             id: id.into(),
             created_at: at,
@@ -119,6 +126,8 @@ mod tests {
             cost_usd: 0.5,
             image_provider: None,
             image_count: 0,
+            plan_attempts: 1,
+            violation_kinds: vec![],
         }
     }
 
@@ -167,5 +176,49 @@ mod tests {
         save(&p, &idx).unwrap();
         assert_eq!(load(&p).runs, idx.runs);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod attempts_tests {
+    use super::tests::rec;
+    use super::*;
+
+    /// rev14 以前の runs.json には attempts が無い。読めることと、**無いことが 0 (記録なし) として
+    /// 残ること**の両方を要求する。ここを 1 に落とすと過去の 3 行が「一発で通った」と嘘をつき、
+    /// 「このモードは再生成が起きやすいか」の集計に偽の分母が混ざる。
+    #[test]
+    fn an_older_index_loads_with_no_attempts_and_does_not_claim_one() {
+        let old = r#"{"version":1,"runs":[{
+            "id":"20260908-215200","created_at":100,"app_name":"Fuseforks","project_path":"D:/p",
+            "package_dir":"D:/o/P","run_dir":"D:/o/P/runs/20260908-215200","seconds":30,
+            "aspect":"16:9","language":"ja","plate_mode":"frontal","scene_count":4,
+            "cost_usd":1.422,"image_provider":"gemini","image_count":4}]}"#;
+        let idx: RunIndex = serde_json::from_str(old).unwrap();
+        let r = &idx.runs[0];
+        assert_eq!(r.plan_attempts, 0, "記録が無いことは 1 回ではない");
+        assert!(r.violation_kinds.is_empty());
+        assert_eq!(r.cost_usd, 1.422, "既存の列は壊れない");
+    }
+
+    /// 画像の枚数を後から書き足す `upsert` で、attempts を消さない
+    /// (`update_run_images` は run 直後の記録を作り直さず差し替えるため)。
+    #[test]
+    fn attempts_survive_the_image_upsert() {
+        let mut idx = RunIndex::default();
+        let mut first = rec("20260909-100000", 100);
+        first.plan_attempts = 2;
+        first.violation_kinds = vec!["product_backdrop_angled".into()];
+        upsert(&mut idx, first.clone());
+
+        let mut with_images = first.clone();
+        with_images.image_provider = Some("gemini".into());
+        with_images.image_count = 4;
+        upsert(&mut idx, with_images);
+
+        let got = &idx.runs[0];
+        assert_eq!(got.plan_attempts, 2);
+        assert_eq!(got.violation_kinds, vec!["product_backdrop_angled"]);
+        assert_eq!(got.image_count, 4);
     }
 }

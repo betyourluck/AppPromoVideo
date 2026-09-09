@@ -5,7 +5,7 @@
 import { defineStore } from "pinia";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { BriefPreview, CliCheck, FontEntry, ImagesResult, OpenedRun, Progress, RunListItem, RunResult, SnapshotMeta } from "./types";
+import type { BriefPreview, CliCheck, FontEntry, ImagesResult, OpenedRun, Progress, PromoJson, RunListItem, RunResult, SnapshotMeta } from "./types";
 import { mergePaths } from "./snapshots";
 import {
   KEYS,
@@ -306,16 +306,33 @@ export const useStore = defineStore("main", {
       const runDir = this.result?.package_dir;
       if (!runDir) return;
       try {
-        const url = await invoke<string>("reburn_caption", { runDir, sceneId, spec, plate, newCopy });
-        this.imageUrls[sceneId] = url;
-        // コピー文を書き換えたら手元の plan も揃える (scenes.md / クリップボードが食い違わないように)。
-        if (newCopy !== null && this.result) {
-          const sc = this.result.promo.plan.scenes.find((s) => s.scene_id === sceneId);
-          if (sc) sc.copy_text = newCopy;
-        }
+        const res = await invoke<{ url: string; promo: PromoJson }>("reburn_caption", { runDir, sceneId, spec, plate, newCopy });
+        this.imageUrls[sceneId] = res.url;
+        // rev21: 書き換えた後の promo をそのまま受け取る。上書き (caption_overrides / plate_overrides) と
+        // copy_text を書くのは backend なので、手元で真似ると食い違う。開き直した時に
+        // つまみが実効値を指すのはこの値が根拠。
+        if (this.result) this.result = { ...this.result, promo: res.promo };
       } catch (e) {
         this.error = String(e);
         this.push("error", String(e));
+      }
+    },
+    /**
+     * 開いている run に**スナップショットを足す** (rev19)。
+     * コピー文に合う画面が run に無いとき、撮り直して貼るための経路。
+     * 生成はやり直さない — 足した画像ははめ込みの材料になるだけ。
+     */
+    async addRunSnapshot(path: string): Promise<number | null> {
+      const runDir = this.result?.package_dir;
+      if (!runDir) return null;
+      try {
+        const r = await invoke<{ index: number; snapshot_paths: string[] }>("add_run_snapshot", { runDir, path });
+        if (this.result) this.result.promo.snapshot_paths = r.snapshot_paths;
+        return r.index;
+      } catch (e) {
+        this.error = String(e);
+        this.push("error", `スナップショットを足せません: ${e}`);
+        return null;
       }
     },
     async makeImages() {

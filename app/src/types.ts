@@ -49,6 +49,30 @@ export interface PromoJson {
   plan: ScenePlan;
   /** scene_id → LLM が最初に書いたコピー文 (rev12)。書き換えても戻せるように。 */
   original_copy?: Record<number, string>;
+  /** scene_id → 見出しの上書き (rev9)。**開き直した時につまみへ戻すため** frontend も読む (rev21)。 */
+  caption_overrides?: Record<number, CaptionOverride>;
+  /** scene_id → はめ込みの上書き (rev11)。同上。 */
+  plate_overrides?: Record<number, PlateOverride>;
+}
+
+/** 契約 `CaptionOverride`。省略したフィールドは既定に落ちる。 */
+export interface CaptionOverride {
+  font_path?: string | null;
+  font_index?: number | null;
+  size_ratio?: number | null;
+  position?: "top" | "bottom" | null;
+  color?: string | null;
+  y_ratio?: number | null;
+}
+
+/** 契約 `PlateOverride`。product カットのみ。 */
+export interface PlateOverride {
+  yaw_degrees?: number | null;
+  pitch_degrees?: number | null;
+  screen_ratio?: number | null;
+  x_offset_ratio?: number | null;
+  y_offset_ratio?: number | null;
+  snapshot_index?: number | null;
 }
 
 export interface StageInfo {
@@ -132,6 +156,8 @@ export interface CaptionSpec {
   font_index: number;
   size_ratio: number;
   position: "top" | "bottom";
+  /** 縦位置 (canvas 高さ比、rev14)。null = position + 余白の既定どおり。 */
+  y_ratio?: number | null;
 }
 
 /** 履歴の 1 行 (契約 RunRecord + 実在フラグ、rev7)。 */
@@ -150,6 +176,10 @@ export interface RunListItem {
   cost_usd: number;
   image_provider: string | null;
   image_count: number;
+  /** シーン構成が通るまでの回数 (rev15)。**0 = 記録なし** (rev14 以前の行)。 */
+  plan_attempts: number;
+  /** 途中で出た違反の種別 (重複なく整列済み)。 */
+  violation_kinds: string[];
   /** run_dir/promo.json が実在するか。false でも索引からは消さない。 */
   exists: boolean;
 }

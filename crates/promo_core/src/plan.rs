@@ -198,6 +198,31 @@ pub enum PlanViolation {
     },
 }
 
+/// 違反の**種別**だけを返す (契約 `RunStats.violation_kinds`、rev15)。
+///
+/// `describe_violation` は LLM と人に返す文なので scene_id や語が埋まっており、同じ種類の違反でも
+/// 文字列が変わる。「このモードは再生成が起きやすいか」を数えるには畳めるキーが要るので別に持つ。
+/// **この文字列は promo.json に残る = 契約**。変えたら data_contract と過去の run の両方に響く。
+pub fn violation_kind(v: &PlanViolation) -> &'static str {
+    match v {
+        PlanViolation::SceneCount { .. } => "scene_count",
+        PlanViolation::TotalSeconds { .. } => "total_seconds",
+        PlanViolation::SceneIdNotSequential { .. } => "scene_id_not_sequential",
+        PlanViolation::DurationOutOfRange { .. } => "duration_out_of_range",
+        PlanViolation::EmptyField { .. } => "empty_field",
+        PlanViolation::VideoPromptNotEnglish { .. } => "video_prompt_not_english",
+        PlanViolation::VideoPromptHasAspectFlag { .. } => "video_prompt_has_aspect_flag",
+        PlanViolation::ImagePromptMentionsInput { .. } => "image_prompt_mentions_input",
+        PlanViolation::NoProductCut => "no_product_cut",
+        PlanViolation::SnapshotIndexInvalid { .. } => "snapshot_index_invalid",
+        PlanViolation::ProductBackdropDrawsScreen { .. } => "product_backdrop_draws_screen",
+        PlanViolation::MotionPromptEmpty { .. } => "motion_prompt_empty",
+        PlanViolation::MotionPromptNotEnglish { .. } => "motion_prompt_not_english",
+        PlanViolation::PlateTiltOutOfRange { .. } => "plate_tilt_out_of_range",
+        PlanViolation::ProductBackdropAngled { .. } => "product_backdrop_angled",
+    }
+}
+
 /// product カットのスクショ面の貼り方 (契約 `PlateMode`、rev5)。設定で切り替える。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -701,5 +726,61 @@ mod tests {
         assert!(text.contains("\"aspect\":\"16:9\""));
         let back: ScenePlan = serde_json::from_str(&text).unwrap();
         assert_eq!(back, plan());
+    }
+}
+
+#[cfg(test)]
+mod violation_kind_tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    /// 全 variant の見本 (新しい variant を足したらここにも足す — 網羅の番人)。
+    fn every_variant() -> Vec<PlanViolation> {
+        vec![
+            PlanViolation::SceneCount { got: 2 },
+            PlanViolation::TotalSeconds { got: 20 },
+            PlanViolation::SceneIdNotSequential { index: 1, got: 5 },
+            PlanViolation::DurationOutOfRange { scene_id: 1, got: 99 },
+            PlanViolation::EmptyField { scene_id: 1, field: "copy_text" },
+            PlanViolation::VideoPromptNotEnglish { scene_id: 1 },
+            PlanViolation::VideoPromptHasAspectFlag { scene_id: 1 },
+            PlanViolation::ImagePromptMentionsInput { scene_id: 1, word: "screenshot" },
+            PlanViolation::NoProductCut,
+            PlanViolation::SnapshotIndexInvalid { scene_id: 1, got: None, count: 2 },
+            PlanViolation::ProductBackdropDrawsScreen { scene_id: 1, word: "screen" },
+            PlanViolation::MotionPromptEmpty { scene_id: 1 },
+            PlanViolation::MotionPromptNotEnglish { scene_id: 1 },
+            PlanViolation::PlateTiltOutOfRange { scene_id: 1, yaw: 40.0, pitch: 0.0 },
+            PlanViolation::ProductBackdropAngled { scene_id: 1, word: "three-quarter" },
+        ]
+    }
+
+    #[test]
+    fn kind_is_snake_case_and_unique_per_variant() {
+        let kinds: Vec<&str> = every_variant().iter().map(violation_kind).collect();
+        let uniq: BTreeSet<&&str> = kinds.iter().collect();
+        assert_eq!(uniq.len(), kinds.len(), "種別は variant ごとに別の文字列でなければ数えられない");
+        for k in &kinds {
+            assert!(
+                k.chars().all(|c| c.is_ascii_lowercase() || c == '_'),
+                "契約の表記は snake_case: {k}"
+            );
+        }
+        assert_eq!(violation_kind(&PlanViolation::ProductBackdropAngled { scene_id: 1, word: "x" }), "product_backdrop_angled");
+        assert_eq!(violation_kind(&PlanViolation::NoProductCut), "no_product_cut");
+    }
+
+    /// 種別は**中身に依らない**。scene_id や語が混ざると集計できなくなる
+    /// (`describe_violation` は人が読む文なので混ざる — 用途が違う)。
+    #[test]
+    fn kind_ignores_the_payload_but_the_prose_does_not() {
+        let a = PlanViolation::ProductBackdropAngled { scene_id: 1, word: "three-quarter" };
+        let b = PlanViolation::ProductBackdropAngled { scene_id: 4, word: "low angle" };
+        assert_eq!(violation_kind(&a), violation_kind(&b), "同じ種別は同じキーに畳む");
+        assert_ne!(
+            crate::describe_violation(&a),
+            crate::describe_violation(&b),
+            "人が読む文は畳まない (この差が集計を壊すので種別を別に持つ)"
+        );
     }
 }

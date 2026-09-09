@@ -9,6 +9,7 @@
 import { computed, onMounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../store";
+import { describeAttempts } from "../runs";
 
 const store = useStore();
 const emit = defineEmits<{ (e: "close"): void }>();
@@ -71,6 +72,7 @@ async function drop(dir: string, files: boolean) {
             <th>画像</th>
             <th>費用</th>
             <th>面</th>
+            <th title="シーン構成が検査を通るまでにかかった回数">再生成</th>
             <th></th>
           </tr>
         </thead>
@@ -91,6 +93,9 @@ async function drop(dir: string, files: boolean) {
             <td>{{ r.image_count }}<span v-if="r.image_provider" class="muted"> / {{ r.image_provider }}</span></td>
             <td class="mono">{{ r.cost_usd ? r.cost_usd.toFixed(3) : "—" }}</td>
             <td class="muted">{{ r.plate_mode }}</td>
+            <td class="mono" :class="{ retried: describeAttempts(r.plan_attempts, r.violation_kinds).retried }" :title="describeAttempts(r.plan_attempts, r.violation_kinds).title">
+              {{ describeAttempts(r.plan_attempts, r.violation_kinds).text }}
+            </td>
             <td class="row" style="gap: 4px; justify-content: flex-end">
               <button class="btn small" :disabled="!r.exists" @click="store.openRun(r.run_dir)">開く</button>
               <button class="btn small" :disabled="!r.exists" @click="reveal(r.run_dir)">フォルダ</button>
@@ -167,6 +172,11 @@ async function drop(dir: string, files: boolean) {
 }
 .runs tr.gone {
   opacity: 0.45;
+}
+/* 2 回以上かかった run。ここを見るために列を足したので、目に入る強さにする。 */
+.runs td.retried {
+  color: var(--warn, #e0a33e);
+  font-weight: 600;
 }
 .cmp {
   display: grid;

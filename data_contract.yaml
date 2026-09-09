@@ -216,7 +216,15 @@ ImageGenConfig:                     # (Kataribe) provider / base_url / model / s
     comfy:  { api_max: 3, kataribe_live: 1, default_send: 3, note: "%ref_1..3%。ワークフローに差し込み口が無ければ沈黙する (Kataribe #83) → 設定タブで %ref_1% 不在を警告" }
     rule: "送る枚数 = min(ユーザー選択 or default_send, api_max, 手持ち枚数)。先頭から (ユーザーの並び順)。切り詰めたら Truncated{total, sent, limit_by} を UI に『N 枚のうち先頭 M 枚』と出す (沈黙させない)"
   caption:                          # 見出し (copy_text) の焼き込み。**既定 ON** (rev8、2026-09-08 ユーザー判断で OFF → ON)
-    spec: "CaptionSpec { font_path, font_index, size_ratio 0.055, position top|bottom, color '#RRGGBB' (rev9、省略で白) }"
+    spec: "CaptionSpec { font_path, font_index, size_ratio 0.055, position top|bottom, color '#RRGGBB' (rev9、省略で白), y_ratio (rev14) }"
+    to_caption: |
+      **`CaptionSpec::to_caption` が `Caption` を組み立てる唯一の場所** (rev17)。生成も焼き直しもここを通る。
+      rev14 で `y_ratio` を足したとき、同じ組み立てが 2 箇所にあり焼き直し側だけ落ちていた
+      (縦位置スライダーが promo.json には残るのに絵が動かない、failures #18)。フィールドを足すならここだけ直す。
+    effective_position: |
+      **面が避ける側は `y_ratio` から導く** (rev18)。上半分 (< 0.5) なら Top、下半分なら Bottom、
+      `y_ratio` が無ければ設定の `position`。UI から「位置」の選択を外した (縦位置スライダーが上位互換、
+      ユーザー判断 2026-09-09) ので、これが無いと見出しを上へ動かしても面が下の帯を避け続ける。
     per_scene:                      # rev9 (2026-09-08 ユーザー要望「1 枚ごとに位置を決めたい」)
       why: |
         見出しは**生成時に焼き込まれ、完成品の 1 枚しか残らなかった**。焼く行為そのものはアプリ内で無料だが、
@@ -253,7 +261,48 @@ PlateOverride:                      # rev11 (2026-09-09 ユーザー要望「傾
     `layout_for` + `compose::plate_quad` (合成と同じ関数) から出す。**射影の数式を TS に写さない**。
     画像は作らないので速い (ヘッダから寸法を読むだけ)。枠を画像にぴったり重ねるため、
     プレビューの要素は object-fit を使わず画像そのものの箱にする (contain だとレターボックス分ズレる)。
+    rev16: 編集は結果ペインの折り畳みではなく**ダイアログ** (左が絵・右がつまみ)。絵を大きく見るため。
+    rev21: **つまみは実効値を指す**。`plate_preview` が `tilt: [yaw, pitch]` (合成が使う `tilt_of` の値) を返し、
+    スライダーの基準にする。`0` に置くと絵が傾いているのにつまみが 0° を指す嘘になる (failures #19)。
+    表示は `plate.ts::tiltValue`/`tiltLabel` — `0° (正面)` / `18° (LLM)` / `18°` の 3 通りで**出どころまで出す**。
+    開いたときに `promo.json` の `caption_overrides` / `plate_overrides` をつまみへ戻す。
+    そのため `reburn_caption` は data URL だけでなく**書き換えた後の `promo`** も返す
+    (上書きを書くのは backend。frontend が手元で真似ると食い違う)。
+    rev18: 枠に**見出しも含む** — `plate_preview` は `caption_lines: Vec<[x,y,w,h]>` (1 行 1 枠、canvas 座標) も返す。
+    出所は `image_gen::caption_layout` で、**焼き込み (`burn_caption`) がそのまま描くのと同じ結果**。
+    `quad` は Option (mood カットには面が無い)。編集中のコピー文は引数 `copy` で渡す (promo.json はまだ古い)。
+    フォントは数 MB〜数十 MB あるので直前の 1 つだけ持ち回す (打鍵ごとに読み直さない)。
   caption_y: "rev14: `CaptionSpec.y_ratio` / `CaptionOverride.y_ratio` (canvas 高さ比 = 文字ブロックの上端)。指定すると position + 余白より優先。canvas からはみ出す値は端で丸める"
+
+RunSnapshots:                       # run に写したスナップショット。**run は自己完結する** (元のパスは動きうる)
+  naming: "**契約**: PromoJson.snapshot_paths[i] ↔ <run>/snapshots/snapshot_{i+1:02}.*。拡張子は元のファイル次第なので読む側は前方一致"
+  where: "promo_core::snapshot_prefix / snapshot_file_name が**唯一の場所**。書き出し (write_package) / 読み出し (read_run_snapshot) / 追加 (add_run_snapshot) が通る"
+  why_one_place: "同じ式が 3 箇所にあると、片方だけ直したとき snapshot_index が別の画像を指す (failures #18 の型)"
+  add:                              # rev19 (2026-09-09 ユーザー要望「コピーにあった画像が無いときに撮り直して貼りたい」)
+    command: "add_run_snapshot(run_dir, path) → { index, snapshot_paths }。生成はやり直さない — 足した画像ははめ込みの材料になるだけ"
+    numbering: "新しい番号は**一覧の長さ**で決める。ファイルを数えない (欠番や孤児があると番号がずれ、snapshot_index が別の画像を指す)"
+    orphan: "同じ番号のファイルが既にあれば**拡張子を問わず先に消す**。残すと read_run_snapshot の前方一致がどちらを拾うか決まらない"
+    validation: "入力ペインと同じ snapshot_meta のヘッダ検証を通す (壊れた画像を run に入れない)"
+    no_dedup: "同じパスを 2 度足せる。**撮り直しは同じパスで中身が変わる**ので、パスでの重複排除は新しい画像を拒むことになる"
+    intake: |
+      **取り込み口は入力ペインの一覧 1 つだけ** (rev20、ユーザー判断)。ドロップ / 貼り付け / ファイル選択は
+      そこに揃っているので、編集ダイアログには**取り込み口を持たせない** (持たせると同じ機能が 2 箇所になり、
+      貼り付けの所有権のような調停が要る)。ダイアログは選ぶだけで、run に無いものが選ばれた時に写す。
+    choices: |
+      `snapshots.ts::snapshotChoices(runPaths, inputPaths)` (純関数) が一覧を組む。
+      run の番号順が先、入力ペインで後から足したぶんが下。**入力ペインから外されても run のぶんは消さない**
+      (run は自己完結していて、入力の一覧はこの run の履歴ではない)。
+      `index: null` = まだ run に写していない → 選ばれた時に `add_run_snapshot` で写して番号を得る。
+
+CaptionLayout:                      # rev18。見出しの版組み。**焼き込みとプレビューが共有する唯一の結果**
+  why: "枠は「焼き上がりがどこに来るか」を見せるためのもの。数式が 2 つあると枠が嘘をつく (plate_quad と同じ作法)"
+  where: "image_gen::caption_layout(canvas_w, canvas_h, &Caption) -> Option<CaptionLayout>。**画素を触らない** (幅送りを測るだけ)"
+  px: f32                           # 自動縮小の**後**の文字の高さ。指定値をそのまま返すと枠が嘘になる
+  line_h: f32                       # px * 1.3
+  top: f32                          # ブロック上端 (caption_top と同じ)
+  block_h: f32
+  lines: "Vec<LaidOutLine { text, x, width, top }>。x は中央揃えの結果"
+  fidelity: "枠は行送りの箱。**グリフの墨は枠よりわずかに内側**に入り、落ち影のぶんだけ右下にはみ出す (PoC で許容幅を固定)"
 
 # PromoJson.original_copy (rev12): scene_id → LLM が最初に書いたコピー文。生成時に 1 度だけ入れて以後触らない。
 # コピー文の書き換えは `scene.copy_text` を**その場で**書き換える — scenes.md もクリップボードも plan を
@@ -351,12 +400,32 @@ RunRecord:
   cost_usd: f64                     # analyze + plan の合計
   image_provider: Option<String>    # 参照画像を作ったなら "gemini" 等
   image_count: usize                # 生成できた枚数
+  plan_attempts: usize              # rev15。PromoJson.run_stats.plan_attempts の写し。**0 = 記録なし** (rev14 以前の行)
+  violation_kinds: Vec<String>      # rev15。同上。種別のみ・重複なく整列
+
+RunStats:                           # rev15。生成時の再生成ループの記録。**正本は run_dir/promo.json**、RunRecord はその写し
+  why: |
+    2026-09-08 の実測で frontal の run だけ費用が約 1.5 倍 (1.422 USD 対 0.919 / 0.944) だったが、attempts も
+    違反種別も永続化していなかったため「ProductBackdropAngled で再生成が発火した」という推測を確認できなかった。
+    索引 (app_data/runs.json) はキャッシュで消えうるうえ、CLI (`promo run`) には索引が無いので、
+    正本である promo.json 自身に持たせる (plate_mode が rev10 で同じ判断をしている)。
+  plan_attempts: usize              # シーン構成が検査を通るまでの回数。1 = 一発。**analyze は常に 1 なので持たない**
+  violation_kinds: "Vec<String>。promo_core::violation_kind の値を重複なく整列。**この文字列は契約**"
+  cost_usd: f64                     # analyze + plan の合計。再生成が費用に効いたかを promo.json だけで見るため
+  absent: "PromoJson.run_stats は Option。**None = 記録なし** であって「1 回で通った」ではない (rev14 以前の run)"
+  violation_kind_values: |
+    scene_count / total_seconds / scene_id_not_sequential / duration_out_of_range / empty_field /
+    video_prompt_not_english / video_prompt_has_aspect_flag / image_prompt_mentions_input / no_product_cut /
+    snapshot_index_invalid / product_backdrop_draws_screen / motion_prompt_empty / motion_prompt_not_english /
+    plate_tilt_out_of_range / product_backdrop_angled
+    (PlanViolation の variant と 1:1。**describe_violation とは用途が違う** — あちらは scene_id や語が埋まる
+     人と LLM 向けの文で、同じ種類でも文字列が変わるので数えられない)
 
 # ---------------------------------------------------------------------------
 # デスクトップ殻 (spec 01 Phase D、2026-09-08)
 # ---------------------------------------------------------------------------
 DesktopUi:                          # app/ = Tauri 2 + Vue 3 + Pinia。Tailwind は使わず CSS 変数 (data-theme dark/light)
-  layout: "3 ペイン: 左 InputPane (リポジトリ / スナップショット / 世界観 / 尺・比率・言語 / 出力先 / 実行・中断) / 中 ScenePanel (要約・シーン表・参照画像・コピー・export) / 右 LogPanel (event promo-progress)。TitleBar は decorations:false のカスタム (Kataribe 縮約)"
+  layout: "3 ペイン: 左 InputPane (リポジトリ / スナップショット / 世界観 / 尺・比率・言語 / 出力先 / 実行・中断) / 中 ScenePanel (要約・シーン表・参照画像・コピー・export。シーンごとの編集は rev16 から CaptionEditor ダイアログ) / 右 LogPanel (event promo-progress)。TitleBar は decorations:false のカスタム (Kataribe 縮約)"
   commands:                         # app/src-tauri/src/lib.rs。HTTP とプロセスは全部 backend
     load_ui_settings / save_ui_settings: "settings.json ミラー (接頭辞 apppromo.)"
     pick_directory / pick_images: "rfd (plugin 不使用、追加権限ゼロ)"
