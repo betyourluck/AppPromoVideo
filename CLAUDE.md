@@ -80,7 +80,8 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 **直近の追加 (rev9→rev10)**: 見出しを 1 枚ごとに変えられる。`<run>/base/` に**素材**を残し
 (product は背景 / mood は絵)、結果ペインの各シーンから位置・フォント・色・大きさを変えて
 **合成からやり直す** (`reburn_caption`。生成 API は呼ばないので無料・無劣化)。
-**rev11 では傾き・大きさ・はめ込み位置も同じ経路で変えられる** (`PromoJson.plate_overrides`、product のみ)。
+**rev11〜12 では傾き・大きさ・はめ込み位置 (スライダー + ドラッグ)、コピー文そのものも同じ経路で変えられる**
+(`PromoJson.plate_overrides` / `original_copy`)。焼き直しはスライダーを**離した時だけ**走る。
 帯は `layout_for` が**効いている位置**から毎回決める — 合成画像を残していた rev9 では帯が焼き込まれていて
 位置を変えると重なった (failures #15)。設定側は全シーンの既定。上書きは `PromoJson.caption_overrides`。
 

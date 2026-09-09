@@ -247,6 +247,11 @@ PlateOverride:                      # rev11 (2026-09-09 ユーザー要望「傾
   y_offset_ratio: Option<f32>       # ±0.4。縦ずらし (正 = 下)。**指定すると見出しの帯のずらしを置き換える**
   resolution: "上書き → 無ければ帯と scene.plate_tilt から決まる既定。フィールド単位で落ちる"
   clamp: "範囲外は Rust 側で丸める (UI の入力を信用しない)"
+  ui: "rev12: スライダー + プレビューのドラッグ。**離した時だけ**焼き直す (ドラッグ中は走らせない)"
+
+# PromoJson.original_copy (rev12): scene_id → LLM が最初に書いたコピー文。生成時に 1 度だけ入れて以後触らない。
+# コピー文の書き換えは `scene.copy_text` を**その場で**書き換える — scenes.md もクリップボードも plan を
+# 読むので自動で揃う。書き換えたら reburn が scenes.md も書き直す (パッケージの中で食い違わせない)。
     default_font: |
       既定 ON にすると「ON なのにフォント未選択で何も焼かれない」が無言で起きるので、実行直前に
       `pickCaptionFont` (frontend の純関数) が自動で選ぶ。規律は 4 つ:

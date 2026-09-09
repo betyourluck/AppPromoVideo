@@ -18,6 +18,10 @@ pub struct PromoJson {
     /// scene_id → はめ込みの上書き (rev11)。product カットのみ。
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub plate_overrides: std::collections::BTreeMap<u32, PlateOverride>,
+    /// scene_id → **LLM が最初に書いたコピー文** (rev12)。人が書き換えても元へ戻せるように、
+    /// 生成時に 1 度だけ入れて以後は触らない。`scene.copy_text` の方が「今の文」。
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub original_copy: std::collections::BTreeMap<u32, String>,
     /// この run がどちらのモードで合成されたか (rev10)。焼き直しで合成をやり直すとき、
     /// 傾きを効かせるかがこれで決まる — 索引 (app_data) に頼らず promo.json 自身が持つ。
     #[serde(default)]
@@ -40,6 +44,15 @@ pub struct CaptionOverride {
     /// "#RRGGBB"
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+}
+
+/// 生成時のコピー文を控える (rev12、純粋)。空文字のシーンは入れない。
+pub fn capture_original_copy(plan: &ScenePlan) -> std::collections::BTreeMap<u32, String> {
+    plan.scenes
+        .iter()
+        .filter(|s| !s.copy_text.trim().is_empty())
+        .map(|s| (s.scene_id, s.copy_text.clone()))
+        .collect()
 }
 
 /// プレート (実スクショの面) の置き方の上書き (契約 `PlateOverride`、rev11)。
@@ -184,6 +197,22 @@ fn cell(s: &str) -> String {
 mod tests {
     use super::*;
 
+    fn scene_for_test(id: u32) -> Scene {
+        Scene {
+            scene_id: id,
+            cut_kind: crate::plan::CutKind::Mood,
+            snapshot_index: None,
+            plate_tilt: None,
+            motion_prompt: "m".into(),
+            duration_seconds: 5,
+            shot_type: "Wide".into(),
+            video_prompt: "v".into(),
+            copy_text: String::new(),
+            image_prompt: "i".into(),
+            reference_image: None,
+        }
+    }
+
     fn promo_with_overrides() -> PromoJson {
         PromoJson {
             project_path: "D:/p".into(),
@@ -201,6 +230,7 @@ mod tests {
             plan: ScenePlan { total_seconds: 15, aspect: Aspect::Square, scenes: vec![] },
             caption_overrides: Default::default(),
             plate_overrides: Default::default(),
+            original_copy: Default::default(),
             plate_mode: Default::default(),
         }
     }
@@ -251,6 +281,23 @@ mod tests {
         assert!(later > a, "{later} > {a}");
         // ファイル名に使えない文字を含まない。
         assert!(a.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '-'));
+    }
+
+    /// rev12: コピー文は**その場で書き換える** (scenes.md もクリップボードも plan を読むので自動で揃う)。
+    /// 元の文は `original_copy` に控えて、戻せるようにする。
+    #[test]
+    fn original_copy_keeps_only_non_empty_scenes() {
+        let mut plan = ScenePlan { total_seconds: 15, aspect: Aspect::Square, scenes: vec![] };
+        for (id, text) in [(1u32, "一行目"), (2, "   "), (3, "三行目")] {
+            let mut sc = scene_for_test(id);
+            sc.copy_text = text.into();
+            plan.scenes.push(sc);
+        }
+        let orig = capture_original_copy(&plan);
+        assert_eq!(orig.len(), 2, "空白だけのシーンは控えない");
+        assert_eq!(orig[&1], "一行目");
+        assert_eq!(orig[&3], "三行目");
+        assert!(!orig.contains_key(&2));
     }
 
     #[test]

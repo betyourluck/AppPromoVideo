@@ -297,12 +297,22 @@ export const useStore = defineStore("main", {
      * base/ に残した焼く前の合成から焼くので、何度やっても劣化せず、お金もかからない。
      * `spec` が null なら見出しを消す。
      */
-    async reburnCaption(sceneId: number, spec: ReturnType<typeof toBackendCaption>, plate: Record<string, number> | null = null) {
+    async reburnCaption(
+      sceneId: number,
+      spec: ReturnType<typeof toBackendCaption>,
+      plate: Record<string, number> | null = null,
+      newCopy: string | null = null,
+    ) {
       const runDir = this.result?.package_dir;
       if (!runDir) return;
       try {
-        const url = await invoke<string>("reburn_caption", { runDir, sceneId, spec, plate });
+        const url = await invoke<string>("reburn_caption", { runDir, sceneId, spec, plate, newCopy });
         this.imageUrls[sceneId] = url;
+        // コピー文を書き換えたら手元の plan も揃える (scenes.md / クリップボードが食い違わないように)。
+        if (newCopy !== null && this.result) {
+          const sc = this.result.promo.plan.scenes.find((s) => s.scene_id === sceneId);
+          if (sc) sc.copy_text = newCopy;
+        }
       } catch (e) {
         this.error = String(e);
         this.push("error", String(e));

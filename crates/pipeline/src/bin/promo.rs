@@ -395,10 +395,11 @@ async fn run(a: &Args) -> Result<(), String> {
         project_path: a.target.to_string_lossy().to_string(),
         snapshot_paths: a.snapshots.iter().map(|p| p.to_string_lossy().to_string()).collect(),
         video_concept: a.concept.clone(),
+        original_copy: promo_core::export::capture_original_copy(&plan),
         summary,
         plan,
         caption_overrides: Default::default(),
-            plate_overrides: Default::default(),
+        plate_overrides: Default::default(),
         plate_mode: a.plate_mode,
     };
     // rev7: run ごとに隔離する。既存の id を見てから採番 (同じ秒に 2 本走っても衝突しない)。

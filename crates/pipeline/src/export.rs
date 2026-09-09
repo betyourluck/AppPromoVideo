@@ -60,6 +60,7 @@ mod tests {
             video_concept: "calm".into(),
             caption_overrides: Default::default(),
             plate_overrides: Default::default(),
+            original_copy: Default::default(),
             plate_mode: Default::default(),
             summary: AnalyzedSummary {
                 app_name: "Task Flow".into(),

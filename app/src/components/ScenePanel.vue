@@ -151,7 +151,8 @@ function openRef(sceneId: number) {
               </template>
               <template v-else>参照画像なし</template>
             </div>
-            <CaptionEditor v-if="store.imageUrls[s.scene_id]" :scene-id="s.scene_id" :has-text="!!s.copy_text.trim()" :is-product="s.cut_kind === 'product'" />
+            <CaptionEditor v-if="store.imageUrls[s.scene_id]" :scene-id="s.scene_id" :has-text="!!s.copy_text.trim()" :is-product="s.cut_kind === 'product'"
+              :copy-text="s.copy_text" :original-copy="promo.original_copy?.[s.scene_id] ?? null" />
             <details class="muted" style="font-size: 11px">
               <summary>{{ s.cut_kind === 'product' ? 'backdrop prompt' : 'image prompt' }}</summary>
               <pre class="block mono">{{ s.image_prompt }}</pre>

@@ -47,6 +47,8 @@ export interface PromoJson {
   video_concept: string;
   summary: AnalyzedSummary;
   plan: ScenePlan;
+  /** scene_id → LLM が最初に書いたコピー文 (rev12)。書き換えても戻せるように。 */
+  original_copy?: Record<number, string>;
 }
 
 export interface StageInfo {

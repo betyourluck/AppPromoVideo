@@ -388,10 +388,11 @@ async fn run_inner(app: &AppHandle, cancel: watch::Receiver<bool>, req: RunReque
         project_path: req.project_path.clone(),
         snapshot_paths: req.snapshot_paths.clone(),
         video_concept: req.concept.clone(),
+        original_copy: promo_core::export::capture_original_copy(&plan),
         summary,
         plan,
         caption_overrides: Default::default(),
-            plate_overrides: Default::default(),
+        plate_overrides: Default::default(),
         plate_mode: req.plate_mode,
     };
     // rev7: run ごとに隔離する。以前は同じパッケージを上書きして過去の出力を消していた。
@@ -676,6 +677,8 @@ fn reburn_caption(
     scene_id: u32,
     spec: Option<CaptionSpec>,
     plate: Option<promo_core::export::PlateOverride>,
+    new_copy: Option<String>, // コピー文の書き換え (rev12)。None なら今の文のまま
+
 ) -> Result<String, String> {
     let dir = PathBuf::from(&run_dir);
     let text = std::fs::read_to_string(dir.join("promo.json")).map_err(|e| format!("promo.json を読めません: {e}"))?;
@@ -683,9 +686,13 @@ fn reburn_caption(
     let scene = promo
         .plan
         .scenes
-        .iter()
+        .iter_mut()
         .find(|s| s.scene_id == scene_id)
         .ok_or_else(|| format!("scene {scene_id} がありません"))?;
+    // rev12: コピー文はその場で書き換える。scenes.md もクリップボードも plan を読むので揃う。
+    if let Some(t) = &new_copy {
+        scene.copy_text = t.clone();
+    }
     let copy_text = scene.copy_text.clone();
     let scene_kind = scene.cut_kind;
     let snapshot_index = scene.snapshot_index;
@@ -754,6 +761,10 @@ fn reburn_caption(
     }
     let json = serde_json::to_string_pretty(&promo).map_err(|e| e.to_string())?;
     write_atomic(&dir.join("promo.json"), json.as_bytes())?;
+    // コピー文を書き換えたら scenes.md も揃える (パッケージの中で食い違わせない)。
+    if new_copy.is_some() {
+        write_atomic(&dir.join("scenes.md"), scenes_markdown(&promo.summary, &promo.plan).as_bytes())?;
+    }
     Ok(image_gen::provider::data_url("image/png", &out))
 }
 

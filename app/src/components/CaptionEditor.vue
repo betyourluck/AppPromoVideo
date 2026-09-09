@@ -5,12 +5,12 @@
  * 設定の値が**既定**で、ここで変えたぶんだけがその scene に効く。やり直しは `base/` の
  * **素材** (product は背景 / mood は絵) から合成し直すので、**生成 API は呼ばず、劣化しない**。
  */
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../store";
 import type { FontEntry } from "../types";
 
-const props = defineProps<{ sceneId: number; hasText: boolean; isProduct: boolean }>();
+const props = defineProps<{ sceneId: number; hasText: boolean; isProduct: boolean; copyText: string; originalCopy: string | null }>();
 const store = useStore();
 
 const open = ref(false);
@@ -28,11 +28,53 @@ const fontKey = ref(`${base.value.fontPath}#${base.value.fontIndex}`);
  * はめ込み (product のみ、rev11)。空欄 = 既定に従う。
  * 傾きの既定は LLM が書いた `scene.plate_tilt`、大きさとずらしの既定は見出しの帯が決める。
  */
+/** コピー文 (rev12)。画像に焼かれ、scenes.md とクリップボードにも出る文そのもの。 */
+const copy = ref(props.copyText);
+watch(
+  () => props.copyText,
+  (v) => (copy.value = v),
+);
+const copyChanged = computed(() => copy.value !== props.copyText);
+
 const yaw = ref<number | null>(null);
 const pitch = ref<number | null>(null);
 const ratio = ref<number | null>(null);
 const dx = ref<number | null>(null);
 const dy = ref<number | null>(null);
+
+/**
+ * プレビューのドラッグではめ込み位置を動かす (rev12)。
+ * ずらしは canvas 幅・高さに対する比なので、表示サイズの比に直せばそのまま使える。
+ */
+const preview = ref<HTMLImageElement | null>(null);
+let drag: { x: number; y: number; dx: number; dy: number } | null = null;
+
+function onDown(e: PointerEvent) {
+  if (!props.isProduct || !preview.value) return;
+  drag = { x: e.clientX, y: e.clientY, dx: dx.value ?? 0, dy: dy.value ?? 0 };
+  (e.target as HTMLElement).setPointerCapture(e.pointerId);
+}
+function onMove(e: PointerEvent) {
+  if (!drag || !preview.value) return;
+  const r = preview.value.getBoundingClientRect();
+  const clamp = (v: number) => Math.max(-0.4, Math.min(0.4, v));
+  dx.value = clamp(drag.dx + (e.clientX - drag.x) / r.width);
+  dy.value = clamp(drag.dy + (e.clientY - drag.y) / r.height);
+}
+function onUp(e: PointerEvent) {
+  if (!drag) return;
+  drag = null;
+  (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+  apply(); // 離した時だけ焼き直す (ドラッグ中に走らせない)
+}
+
+/** スライダーの値 (`null` = 未指定 = 既定のまま)。 */
+function show(v: number | null, unit = ""): string {
+  return v === null ? "既定" : `${v}${unit}`;
+}
+function num(e: Event): number {
+  return Number((e.target as HTMLInputElement).value);
+}
 
 /** 触ったフィールドだけ送る。null は「既定のまま」。 */
 function currentPlate() {
@@ -70,7 +112,7 @@ function currentSpec() {
 async function apply() {
   busy.value = true;
   try {
-    await store.reburnCaption(props.sceneId, props.hasText ? currentSpec() : null, currentPlate());
+    await store.reburnCaption(props.sceneId, copy.value.trim() ? currentSpec() : null, currentPlate(), copyChanged.value ? copy.value : null);
   } finally {
     busy.value = false;
   }
@@ -80,7 +122,7 @@ async function apply() {
 async function clear() {
   busy.value = true;
   try {
-    await store.reburnCaption(props.sceneId, null, currentPlate());
+    await store.reburnCaption(props.sceneId, null, currentPlate(), null);
   } finally {
     busy.value = false;
   }
@@ -98,6 +140,11 @@ function reset() {
   dx.value = null;
   dy.value = null;
 }
+
+/** LLM が最初に書いた文へ戻す。 */
+function restoreCopy() {
+  if (props.originalCopy !== null) copy.value = props.originalCopy;
+}
 </script>
 
 <template>
@@ -111,7 +158,16 @@ function reset() {
       {{ hasText ? (isProduct ? "見出し / はめ込み" : "見出し") : "はめ込み" }} {{ open ? "▲" : "▼" }}
     </button>
     <div v-if="open" class="panel-in">
-      <template v-if="hasText">
+      <label class="field">
+        <span>コピー文 (画像に焼かれ、scenes.md にも出ます)</span>
+        <textarea v-model="copy" rows="2" placeholder="空にすると見出しを焼きません" />
+      </label>
+      <div v-if="originalCopy !== null && copy !== originalCopy" class="row" style="gap: 4px">
+        <button class="btn small" @click="restoreCopy">最初の文に戻す</button>
+        <span class="muted" style="font-size: 11px">元: {{ originalCopy }}</span>
+      </div>
+
+      <template v-if="copy.trim()">
       <p v-if="!fonts.length" class="muted note">フォント一覧を読み込み中…</p>
       <div class="row">
         <label class="field" style="flex: 2">
@@ -132,8 +188,8 @@ function reset() {
       </div>
       <div class="row">
         <label class="field" style="flex: 1">
-          <span>大きさ</span>
-          <input v-model.number="sizeRatio" type="number" min="0.02" max="0.2" step="0.005" />
+          <span>大きさ <b class="mono">{{ sizeRatio.toFixed(3) }}</b></span>
+          <input v-model.number="sizeRatio" type="range" min="0.02" max="0.2" step="0.005" @change="apply" />
         </label>
         <label class="field" style="flex: 1">
           <span>色</span>
@@ -142,34 +198,42 @@ function reset() {
       </div>
       </template>
       <template v-if="isProduct">
-        <h4 class="sub" style="margin: 4px 0 0">はめ込み (空欄 = 既定のまま)</h4>
-        <div class="row">
-          <label class="field" style="flex: 1">
-            <span>左右の傾き</span>
-            <input v-model.number="yaw" type="number" min="-35" max="35" step="1" placeholder="既定" />
-          </label>
-          <label class="field" style="flex: 1">
-            <span>上下の傾き</span>
-            <input v-model.number="pitch" type="number" min="-35" max="35" step="1" placeholder="既定" />
-          </label>
-          <label class="field" style="flex: 1">
-            <span>大きさ</span>
-            <input v-model.number="ratio" type="number" min="0.2" max="0.95" step="0.02" placeholder="既定" />
-          </label>
-        </div>
-        <div class="row">
-          <label class="field" style="flex: 1">
-            <span>横位置</span>
-            <input v-model.number="dx" type="number" min="-0.4" max="0.4" step="0.02" placeholder="中央" />
-          </label>
-          <label class="field" style="flex: 1">
-            <span>縦位置</span>
-            <input v-model.number="dy" type="number" min="-0.4" max="0.4" step="0.02" placeholder="既定" />
-          </label>
-        </div>
+        <h4 class="sub" style="margin: 4px 0 0">はめ込み</h4>
+        <img
+          v-if="store.imageUrls[sceneId]"
+          ref="preview"
+          class="preview"
+          :src="store.imageUrls[sceneId]"
+          :alt="`scene ${sceneId}`"
+          title="ドラッグで位置を動かす"
+          @pointerdown.prevent="onDown"
+          @pointermove="onMove"
+          @pointerup="onUp"
+          @pointercancel="onUp"
+        />
+        <label class="field">
+          <span>左右の傾き <b class="mono">{{ show(yaw, "°") }}</b></span>
+          <input :value="yaw ?? 0" type="range" min="-35" max="35" step="1" @input="yaw = num($event)" @change="apply" />
+        </label>
+        <label class="field">
+          <span>上下の傾き <b class="mono">{{ show(pitch, "°") }}</b></span>
+          <input :value="pitch ?? 0" type="range" min="-35" max="35" step="1" @input="pitch = num($event)" @change="apply" />
+        </label>
+        <label class="field">
+          <span>大きさ <b class="mono">{{ show(ratio) }}</b></span>
+          <input :value="ratio ?? 0.78" type="range" min="0.2" max="0.95" step="0.01" @input="ratio = num($event)" @change="apply" />
+        </label>
+        <label class="field">
+          <span>横位置 <b class="mono">{{ show(dx) }}</b></span>
+          <input :value="dx ?? 0" type="range" min="-0.4" max="0.4" step="0.01" @input="dx = num($event)" @change="apply" />
+        </label>
+        <label class="field">
+          <span>縦位置 <b class="mono">{{ show(dy) }}</b></span>
+          <input :value="dy ?? 0" type="range" min="-0.4" max="0.4" step="0.01" @input="dy = num($event)" @change="apply" />
+        </label>
         <p class="muted note">
-          傾きは度、大きさは canvas に占める比、位置は中央からのずらし (canvas 比、正 = 右 / 下)。
-          <b>縦位置を入れると見出しの帯のずらしを置き換えます。</b>
+          スライダーは<b>離した時に</b>焼き直します (途中では走らせません)。
+          画像を<b>ドラッグ</b>しても位置を動かせます。<b>縦位置を動かすと見出しの帯のずらしを置き換えます。</b>
         </p>
       </template>
 
@@ -188,6 +252,18 @@ function reset() {
 <style scoped>
 .cap {
   margin-top: 4px;
+}
+.preview {
+  width: 100%;
+  max-height: 32vh;
+  object-fit: contain;
+  border-radius: 6px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.preview:active {
+  cursor: grabbing;
 }
 .panel-in {
   margin-top: 6px;
