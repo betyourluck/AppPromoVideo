@@ -55,6 +55,11 @@ export const useStore = defineStore("main", {
     compare: [] as string[],
     /** 比較用に読んだ run の画像 URL: run_dir → (scene_id → data URL)。 */
     compareUrls: {} as Record<string, Record<number, string>>,
+    /**
+     * **写した後に中身が変わった元のパス** (rev23、撮り直し)。撮り直しはアプリの外で起きるので
+     * 見る直前に数える。空でない = そのパスは一覧に**もう一度**出る (run の写しとは別物として)。
+     */
+    staleSnapshots: [] as string[],
   }),
   actions: {
     persist() {
@@ -322,12 +327,36 @@ export const useStore = defineStore("main", {
      * コピー文に合う画面が run に無いとき、撮り直して貼るための経路。
      * 生成はやり直さない — 足した画像ははめ込みの材料になるだけ。
      */
+    /**
+     * 撮り直しを数え直す (rev23)。**編集ダイアログを開く直前**に呼ぶ。
+     * ついでに古いサムネイルを捨てる — 入力ペインが撮り直し前の絵を出したままだと、
+     * 「変わっていない」と読めてしまう (同じ欠陥の表示側の面)。
+     */
+    async refreshStaleSnapshots() {
+      const runDir = this.result?.package_dir;
+      if (!runDir) {
+        this.staleSnapshots = [];
+        return;
+      }
+      try {
+        this.staleSnapshots = await invoke<string[]>("stale_snapshots", { runDir });
+      } catch (e) {
+        // 数えられないだけで編集はできる。黙って古い一覧を出すよりは報せる。
+        this.push("error", `撮り直しを数えられません: ${e}`);
+        this.staleSnapshots = [];
+        return;
+      }
+      for (const p of this.staleSnapshots) delete this.snapshotUrls[p];
+      await this.loadSnapshotUrls();
+    },
     async addRunSnapshot(path: string): Promise<number | null> {
       const runDir = this.result?.package_dir;
       if (!runDir) return null;
       try {
         const r = await invoke<{ index: number; snapshot_paths: string[] }>("add_run_snapshot", { runDir, path });
         if (this.result) this.result.promo.snapshot_paths = r.snapshot_paths;
+        // 写した時点でそのパスは済んだ状態になる (新しいバイト列が run の中にある)。
+        this.staleSnapshots = this.staleSnapshots.filter((p) => p !== path);
         return r.index;
       } catch (e) {
         this.error = String(e);

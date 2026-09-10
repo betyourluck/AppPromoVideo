@@ -59,8 +59,13 @@ const snapIndex = ref<number | null>(null);
 /**
  * 選べる一覧 (rev20) = run に写してあるもの + **入力ペインで後から足したもの**。
  * 取り込み口は入力ペインの 1 つだけ (ドロップ / 貼り付け / ファイル選択)。ここは選ぶだけ。
+ *
+ * rev23: **撮り直し** (同じパスで中身が変わったもの) も下に出す。run の写しは古いまま残るので、
+ * 同じファイル名が 2 行並ぶ — 上が run の中の古い写し、下が今のファイル。
  */
-const choices = computed(() => snapshotChoices(props.snapshots, store.project.snapshots));
+const choices = computed(() =>
+  snapshotChoices(props.snapshots, store.project.snapshots, store.staleSnapshots),
+);
 const copying = ref(false);
 
 /**
@@ -91,6 +96,14 @@ async function chooseSnapshot(e: Event) {
   } finally {
     copying.value = false;
   }
+}
+
+/**
+ * 一覧に出す肩書き。run に無いものは「入力に追加」だが、**同じパスが run にも居る**なら
+ * それは撮り直しなので、そう名乗る (同じファイル名が 2 行並ぶ理由を出す)。
+ */
+function choiceLabel(path: string): string {
+  return props.snapshots.includes(path) ? "撮り直し" : "入力に追加";
 }
 
 /** 選択中が一覧の何番目か (run の番号ではなく表示上の位置)。 */
@@ -267,6 +280,8 @@ async function toggle() {
   dirty.value = false;
   // **毎回**取りに行く (実効の傾きが要るので、フォントを読み込み済みでも省かない)。
   refreshQuad();
+  // 撮り直しはアプリの外で起きる。開く直前に数えないと古い写しが選ばれ続ける (rev23)。
+  if (props.isProduct) store.refreshStaleSnapshots();
   if (!fonts.value.length) {
     try {
       fonts.value = await invoke<FontEntry[]>("list_fonts");
@@ -435,12 +450,13 @@ function restoreCopy() {
                 <select :value="chosen" :disabled="copying" @change="chooseSnapshot">
                   <option value="">LLM の選択のまま ({{ (llmSnapshot ?? 0) + 1 }} 枚目)</option>
                   <option v-for="(c, i) in choices" :key="c.path + i" :value="i">
-                    {{ c.inRun ? `${(c.index ?? 0) + 1} 枚目` : "入力に追加" }} — {{ fileName(c.path) }}
+                    {{ c.inRun ? `${(c.index ?? 0) + 1} 枚目` : choiceLabel(c.path) }} — {{ fileName(c.path) }}
                   </option>
                 </select>
               </label>
               <p class="muted note">
                 左の<b>スナップショット</b>に足した画像もここに出ます (「入力に追加」)。選ぶとこの run に写します。
+                <b>撮り直し</b>は同じ名前で 2 行並びます — 上が run に写した時のもの、下が今のファイル。
               </p>
               <label class="field">
                 <span>左右の傾き <b class="mono">{{ tiltLabel(yaw, baseTilt[0]) }}</b></span>

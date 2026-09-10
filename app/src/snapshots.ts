@@ -64,9 +64,20 @@ export interface SnapshotChoice {
  * 並びは **run の番号順が先**で、入力ペインで後から足したぶんが下に付く。
  * **入力ペインから外されても run のぶんは消さない** — run は自己完結していて (rev10)、
  * 入力の一覧はこの run の履歴ではないから。
+ *
+ * rev23: `staleRunPaths` = **写した後に中身が変わった元のパス** (撮り直し)。パスが同じでも
+ * バイト列が違えば別の画像なので、入力ペイン側をもう一度選べるようにする。
+ * data_contract `RunSnapshots.add.no_dedup`「撮り直しは同じパスで中身が変わるので、パスでの
+ * 重複排除は新しい画像を拒むことになる」— rev20 のここがその重複排除そのものだった (failures #20)。
+ * run の写しは**古いまま残す** (rev10 の自己完結。過去の run が黙って変わってはいけない)。
  */
-export function snapshotChoices(runPaths: string[], inputPaths: string[]): SnapshotChoice[] {
-  const inRun = new Set(runPaths);
+export function snapshotChoices(
+  runPaths: string[],
+  inputPaths: string[],
+  staleRunPaths: string[] = [],
+): SnapshotChoice[] {
+  const stale = new Set(staleRunPaths);
+  const inRun = new Set(runPaths.filter((p) => !stale.has(p)));
   return [
     ...runPaths.map((path, index) => ({ index, path, inRun: true })),
     ...inputPaths.filter((p) => !inRun.has(p)).map((path) => ({ index: null, path, inRun: false })),

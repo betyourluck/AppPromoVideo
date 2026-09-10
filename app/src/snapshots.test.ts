@@ -47,4 +47,21 @@ describe("snapshotChoices", () => {
   it("入力ペインが空でも run の一覧はそのまま出る", () => {
     expect(snapshotChoices(["a.png"], [])).toEqual([{ index: 0, path: "a.png", inRun: true }]);
   });
+
+  it("撮り直し (同じパスで中身が変わった) は入力ペイン側からもう一度選べる", () => {
+    // data_contract RunSnapshots.add.no_dedup:
+    // 「撮り直しは同じパスで中身が変わるので、パスでの重複排除は新しい画像を拒むことになる」
+    // run の写しは古いバイト列のまま残す (rev10 の自己完結)。新しいほうは別の枠として足せる。
+    const got = snapshotChoices(["a.png", "b.png"], ["a.png", "b.png"], ["a.png"]);
+    expect(got).toEqual([
+      { index: 0, path: "a.png", inRun: true },
+      { index: 1, path: "b.png", inRun: true },
+      { index: null, path: "a.png", inRun: false },
+    ]);
+  });
+
+  it("中身が変わっていない同じパスは二重に出さない", () => {
+    const got = snapshotChoices(["a.png"], ["a.png"], []);
+    expect(got).toEqual([{ index: 0, path: "a.png", inRun: true }]);
+  });
 });

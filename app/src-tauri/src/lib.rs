@@ -933,17 +933,69 @@ fn add_run_snapshot(run_dir: String, path: String) -> Result<AddedSnapshot, Stri
     Ok(AddedSnapshot { index, snapshot_paths: promo.snapshot_paths })
 }
 
+/// **撮り直しを見つける** (rev23)。返すのは `promo.snapshot_paths` のうち、写した後で元の
+/// ファイルの中身が変わったもの。一覧の重複排除から外す材料で、run 自体は書き換えない。
+///
+/// 呼ぶのは編集ダイアログを開いた時 — 撮り直しはアプリの外で起きるので、見る直前に数えるしかない。
+#[tauri::command]
+fn stale_snapshots(run_dir: String) -> Result<Vec<String>, String> {
+    let dir = PathBuf::from(&run_dir);
+    let text = std::fs::read_to_string(dir.join("promo.json")).map_err(|e| format!("promo.json を読めません: {e}"))?;
+    let promo: PromoJson = serde_json::from_str(&text).map_err(|e| format!("promo.json の形が違います: {e}"))?;
+    Ok(stale_run_snapshots(&dir, &promo.snapshot_paths))
+}
+
+/// run に写した後で**元のファイルの中身が変わった**元のパスを返す (rev23、撮り直し)。
+///
+/// 判定は「今の元ファイルのバイト列が、**同じパスで写したどの写しとも一致しない**」。
+/// パスは 2 度足せる (data_contract `RunSnapshots.add.no_dedup`) ので、照合は index 単位ではなく
+/// 同じパスの写し全部に対して行う — 撮り直しを足した後は一致するものが現れて済んだ状態になる。
+///
+/// **黙るのは 2 つの場合**: 元ファイルが読めない (消された / 移された) 時と、写しが無い時。
+/// どちらも run は自己完結していて焼き直せる (rev10)、または別のエラーで既に報せている。
+/// ここで報せるのは「新しい画像が選べないまま埋もれている」という一点だけ。
+fn stale_run_snapshots(run_dir: &Path, snapshot_paths: &[String]) -> Vec<String> {
+    let mut seen: Vec<&str> = Vec::new();
+    let mut stale = Vec::new();
+    for path in snapshot_paths {
+        if seen.contains(&path.as_str()) {
+            continue;
+        }
+        seen.push(path.as_str());
+        let Ok(current) = std::fs::read(path) else { continue };
+        let copies = snapshot_paths.iter().enumerate().filter(|(_, p)| p.as_str() == path.as_str());
+        let fresh = copies.clone().any(|(i, _)| {
+            // 先に大きさで弾く (撮り直しはたいてい長さが違う)。同じ長さの時だけ読んで照合する。
+            run_snapshot_file(run_dir, i)
+                .and_then(|f| std::fs::metadata(&f).ok().map(|m| (f, m.len())))
+                .is_some_and(|(f, len)| len == current.len() as u64 && std::fs::read(&f).is_ok_and(|c| c == current))
+        });
+        // 写しが 1 つも見つからない run では黙る (焼き直せない旨は read_run_snapshot が別に出す)。
+        let has_copy = copies.clone().any(|(i, _)| run_snapshot_file(run_dir, i).is_some());
+        if has_copy && !fresh {
+            stale.push(path.clone());
+        }
+    }
+    stale
+}
+
+/// `snapshots/snapshot_{idx+1:02}.*` の実体。**前方一致はここだけ** (拡張子は元のファイル次第)。
+fn run_snapshot_file(run_dir: &Path, idx: usize) -> Option<PathBuf> {
+    let want = promo_core::snapshot_prefix(idx);
+    std::fs::read_dir(run_dir.join("snapshots"))
+        .ok()?
+        .filter_map(|e| e.ok())
+        .find(|e| e.file_name().to_string_lossy().starts_with(&want))
+        .map(|e| e.path())
+}
+
 /// run に写したスナップショット (rev10)。**元のパスではなく run の写しを読む** — 元は移動されうるし、
 /// run は自己完結しているべきなので。
 fn read_run_snapshot(run_dir: &Path, idx: usize) -> Result<Vec<u8>, String> {
-    let dir = run_dir.join("snapshots");
     let want = promo_core::snapshot_prefix(idx);
-    let entry = std::fs::read_dir(&dir)
-        .map_err(|e| format!("snapshots/ を読めません: {e}"))?
-        .filter_map(|e| e.ok())
-        .find(|e| e.file_name().to_string_lossy().starts_with(&want))
+    let file = run_snapshot_file(run_dir, idx)
         .ok_or_else(|| format!("snapshots/{want}* がありません (この run は焼き直せません)"))?;
-    std::fs::read(entry.path()).map_err(|e| format!("スナップショットを読めません: {e}"))
+    std::fs::read(file).map_err(|e| format!("スナップショットを読めません: {e}"))
 }
 
 /// 表示用 data URL (CSP: img-src に data: あり。ローカルファイルを WebView に直接見せない)。
@@ -1123,6 +1175,7 @@ pub fn run() {
             reburn_caption,
             plate_preview,
             add_run_snapshot,
+            stale_snapshots,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -1161,3 +1214,83 @@ mod wire_tests {
     }
 }
 
+#[cfg(test)]
+mod stale_snapshot_tests {
+    use super::stale_run_snapshots;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    fn tmp() -> PathBuf {
+        let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let d = std::env::temp_dir().join(format!("apppromo_stale_{}_{}", std::process::id(), n));
+        fs::create_dir_all(d.join("snapshots")).unwrap();
+        d
+    }
+
+    /// `snapshot_paths[i]` ↔ `snapshots/snapshot_{i+1:02}.*` の写しを置く。
+    fn put_copy(run: &Path, index: usize, bytes: &[u8]) {
+        let name = promo_core::snapshot_file_name(index, "png");
+        fs::write(run.join("snapshots").join(name), bytes).unwrap();
+    }
+
+    #[test]
+    fn a_reshoot_at_the_same_path_is_stale() {
+        // data_contract RunSnapshots.add.no_dedup: 撮り直しは同じパスで中身が変わる。
+        let run = tmp();
+        let a = run.join("a.png");
+        let b = run.join("b.png");
+        fs::write(&a, b"AAA").unwrap();
+        fs::write(&b, b"BBB").unwrap();
+        put_copy(&run, 0, b"AAA");
+        put_copy(&run, 1, b"BBB");
+        let paths = vec![a.to_string_lossy().to_string(), b.to_string_lossy().to_string()];
+        // まだ誰も撮り直していない。
+        assert!(stale_run_snapshots(&run, &paths).is_empty());
+        // b.png だけ撮り直した (パスは同じ、中身が変わった)。
+        fs::write(&b, b"ZZZZ").unwrap();
+        assert_eq!(stale_run_snapshots(&run, &paths), vec![b.to_string_lossy().to_string()]);
+    }
+
+    #[test]
+    fn a_reshoot_of_the_same_length_is_still_stale() {
+        // 長さで弾く近道だけでは落ちない場合。ここが**バイト照合そのもの**を固定する 1 本。
+        let run = tmp();
+        let a = run.join("a.png");
+        fs::write(&a, b"AAA").unwrap();
+        put_copy(&run, 0, b"BBB");
+        let paths = vec![a.to_string_lossy().to_string()];
+        assert_eq!(stale_run_snapshots(&run, &paths), paths);
+    }
+
+    #[test]
+    fn a_missing_source_is_not_stale() {
+        // run は自己完結する (rev10)。元が消えても焼き直せるので、撮り直し扱いにはしない。
+        let run = tmp();
+        let a = run.join("gone.png");
+        put_copy(&run, 0, b"AAA");
+        let paths = vec![a.to_string_lossy().to_string()];
+        assert!(stale_run_snapshots(&run, &paths).is_empty());
+    }
+
+    #[test]
+    fn the_same_path_added_twice_is_fresh_once_the_new_bytes_are_in() {
+        // 撮り直しを足すと同じパスが 2 度並ぶ (no_dedup)。今の中身がどれかの写しと一致すれば済んでいる。
+        let run = tmp();
+        let a = run.join("a.png");
+        fs::write(&a, b"NEW").unwrap();
+        put_copy(&run, 0, b"OLD");
+        put_copy(&run, 1, b"NEW");
+        let p = a.to_string_lossy().to_string();
+        assert!(stale_run_snapshots(&run, &[p.clone(), p]).is_empty());
+    }
+
+    #[test]
+    fn a_run_without_the_copy_is_not_reported() {
+        // 写しが無い run は焼き直せない (read_run_snapshot が別に Err を出す)。ここでは黙る。
+        let run = tmp();
+        let a = run.join("a.png");
+        fs::write(&a, b"AAA").unwrap();
+        let paths = vec![a.to_string_lossy().to_string()];
+        assert!(stale_run_snapshots(&run, &paths).is_empty());
+    }
+}
