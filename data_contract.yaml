@@ -478,12 +478,20 @@ DesktopUi:                          # app/ = Tauri 2 + Vue 3 + Pinia。Tailwind 
   typography:                       # rev27 (2026-09-11 ユーザー「文字を少しだけ大きく」)
     tokens: "main.css の :root に --fs-xs / sm / md / base / lg / xl = (11 / 12 / 13 / 14 / 15 / 19 px) × **--fs-scale** (項目、rev29 で 1.25)。**部品は font-size を px で直に書かずトークンを参照する**。例外は Lightbox の矢印 (文字ではなく記号、40px)"
     headings: "rev29: 見出しは --fs-h-md / h-lg / h-xl = (13 / 15 / 19 px) × **--fs-scale-heading** (1.5)。対象 = .panel h2 (入力・結果・進捗) / 結果のアプリ名 .app とキャッチ .hook / メッセージボックス .mb-title / 設定の小見出し .sub の 5 か所。ユーザー「見出しはこれくらい、中の項目はちょっと小さく」で倍率を 2 本に分けた"
-    chrome: "rev29: ウィンドウ枠 (タイトルバーのアプリ名 .brand) は文字の試行の対象外。--font-chrome (Segoe UI → Noto Sans JP → system-ui) / --fs-chrome 12px / --fw-chrome 700 で試行前の値に固定し、倍率も掛けない。ユーザー「ウィンドウタイトルバーのアプリタイトルのフォントと大きさは変えなくていい」。中の「実行中」の chip は .chip のまま (項目の倍率が掛かる)"
-    font: "rev28: --font-ui = \"IBM Plex Sans JP\", \"Segoe UI\", \"Noto Sans JP\", system-ui。**同梱していない** — 入っていない環境では Segoe UI に落ちる。等幅 (.mono) は Consolas のまま"
-    weight: "rev28: --fw-base (本文) / --fw-semi (旧 600) / --fw-bold (旧 700) を全部 700。本文だけ Bold にすると見出し・ボタンの SemiBold が本文より細く見えて逆転するため。補足の「(mood)」は意図した 400 のまま。rev29: --fw-medium (500) を追加"
+    chrome: "rev29: ウィンドウ枠 (タイトルバーのアプリ名 .brand) は文字の試行の対象外。--font-chrome / --fs-chrome / --fw-chrome を参照し、倍率は掛けない。ユーザー「ウィンドウタイトルバーのアプリタイトルのフォントと大きさは変えなくていい」。rev29 の値 (Segoe UI / 12px / 700) は、rev30 のデザイン修正 (ユーザー) で Inter Variable / 14px / 600。中の「実行中」の chip は .chip のまま (項目の倍率が掛かる)"
+    font: "rev30: --font-ui = \"Inter Variable\", \"Noto Sans JP Variable\", \"Noto Sans JP\", \"BIZ UDPGothic\", \"Yu Gothic UI\", system-ui …。**同梱する** — @fontsource-variable/inter と @fontsource-variable/noto-sans-jp (5.3.0、OFL-1.1) を main.ts で import。**先頭はパッケージの宣言名** (Inter と書くと手元に入っていない限り当たらない)。**外部 (Google Fonts) から読まない** — tauri.conf.json の CSP は style-src に外部を含まず font-src 未指定 (= default-src 'self')。woff2 を data: にインライン化させない (同じ理由で読めない)。rev28 の IBM Plex Sans JP (未同梱) は rev30 のデザイン修正で置き換わった"
+    weight: "rev28: --fw-base (本文) / --fw-semi (旧 600) / --fw-bold (旧 700) を全部 700。本文だけ Bold にすると見出し・ボタンの SemiBold が本文より細く見えて逆転するため。rev29: --fw-medium (500) を追加。rev30 のデザイン修正 (ユーザー): 本文 500 / semi 600 / bold 700 / --fw-regular 400 を追加"
+    guard: "rev30: cssTokens.test.ts = フォールバックの無い var(--x) は src のどこかで定義されていること (定義を消すと宣言ごと無効になり黙って親の値に落ちる)。fonts.test.ts = index.html が外部の CSS・フォントを読まない / main.ts が同梱フォントを import / --font-ui と --font-chrome の先頭がパッケージの宣言名。vitest は既定で CSS を空にするので vite.config.ts の test.css.include (ID にクエリ ?raw が付くので /\\.css(?:\\?|$)/) で通す"
     secondary: "rev29: .muted (説明文と補足、47 か所) は Medium (--fw-medium) で小さめ (--fs-sm)。ユーザー「説明文は bold でなく medium で小さめ」。説明文以外の薄い文字 (ログの時刻 / 表の plate_mode 列 / コピー先のラベル / Lightbox の番号など) も同じになる。中の <b> は bolder で Bold に戻る。設定ダイアログの .note も --fs-sm に揃えた"
     log: "rev29: 進捗ログは等幅 (Consolas、Medium が無い) をやめて UI の書体の Medium・本文の大きさ (--fs-base)。時刻の桁は font-variant-numeric: tabular-nums で揃える。ユーザー「進捗のログも medium で普通サイズ」"
     why: "旧値 10 / 11 / 12 / 13 / 14 / 18 px が 37 か所に直書きされていた。基準 (body) だけ上げてもラベルや補足 (11〜12px 固定) が変わらないので、トークンにまとめて全段 +1px。次の調整は main.css の 1 か所で済む"
+  i18n:                             # rev30 (2026-09-11、ユーザーが多言語化 → 残りを回収)
+    langs: "ja (正本) / en / zh-CN。localStorage apppromo.ui_lang、既定 ja。**コピー言語 (project.lang = LLM に書かせる言語) とは別物**"
+    dict: "app/src/i18n.ts。ja の as const からキー型 MessageKey を取り、en / zh-CN は Record<MessageKey, string> — キーの欠け (TS2740) も余り (TS2353) も型検査で落ちる。キー集合の一致は i18n.test.ts でも見る"
+    rule: "**画面に出る文言をコードに直書きしない**。網 noHardcodedJapanese.test.ts (コメント以外の日本語を落とす)。対象外 = i18n.ts / settings.ts (見出しフォントの照合に使う実機のフォント名) / console.*。backend (Rust) 由来の進捗ログ・エラー文言はこの契約の外 (日本語のまま)"
+    params: "t(key, params) の {name} は 1 回の走査で差し込む。値を置換パターンとして解釈しない ($& がパスやエラー文言に入りうる) / 差し込んだ値の中の {…} を再び拾わない / params に無い名前はそのまま残す"
+    rich: "強調と等幅は文言の中に <b>…</b> / <mono>…</mono> と書き、components/Rich.vue で出す (解析は rich.ts)。**v-html は使わない** — 認める印以外の < は文字として出る。閉じ忘れは文末まで、対の無い閉じ印は無視 (文字を落とさない)"
+    ja_wording: "rev30 の移行で日本語の文言は変えていない (移行前の日本語断片 275 個を辞書と突き合わせた)。ソースの改行で画面に出ていた空白 1 つも残した"
   panes:                            # rev27 (ユーザー「入力、結果、進捗の枠をなくしてみたい」、試行)
     frameless: "3 つの列の直下の .panel は背景・枠線・角丸を持たない (App.vue の scoped + :deep)。**共通の .panel はダイアログ (設定 / 履歴 / シーン編集 / メッセージボックス) が使うので変えない**"
   dialogs:                          # rev26 (2026-09-11 ユーザー報告、スクリーンショットつき)

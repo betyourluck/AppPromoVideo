@@ -76,7 +76,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey, true));
 .mb-backdrop {
   position: fixed;
   inset: 0;
-  background: rgb(0 0 0 / 0.5);
+  background: var(--backdrop, rgb(0 0 0 / 0.65));
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -84,11 +85,13 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey, true));
   z-index: 70;
 }
 .mb {
-  width: min(420px, 92vw);
+  width: min(440px, 92vw);
+  padding: 24px;
+  border-radius: var(--radius-dialog);
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  box-shadow: 0 12px 40px rgb(0 0 0 / 0.45);
+  gap: 14px;
+  box-shadow: var(--shadow-lg);
 }
 .mb-title {
   font-size: var(--fs-h-lg);

@@ -9,6 +9,8 @@
  * `PlateMode::Frontal` や `plate_tilt` 無しでは 0 が来る = 本当に正面。
  */
 
+import { t } from "./i18n";
+
 /** スライダーに置く値。未指定なら実効値 (LLM の傾き)。 */
 export function tiltValue(override: number | null, fallback: number): number {
   return override ?? fallback;
@@ -20,6 +22,6 @@ export function tiltValue(override: number | null, fallback: number): number {
  */
 export function tiltLabel(override: number | null, fallback: number): string {
   const v = tiltValue(override, fallback);
-  if (v === 0) return "0° (正面)";
+  if (v === 0) return t("plate.frontal");
   return override === null ? `${v}° (LLM)` : `${v}°`;
 }

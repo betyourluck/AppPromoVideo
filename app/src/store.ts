@@ -7,6 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { BriefPreview, CliCheck, FontEntry, ImagesResult, OpenedRun, Progress, PromoJson, RunListItem, RunResult, SnapshotMeta } from "./types";
 import { mergePaths } from "./snapshots";
+import { t } from "./i18n";
 import {
   KEYS,
   loadCliSettings,
@@ -92,14 +93,14 @@ export const useStore = defineStore("main", {
         try {
           this.snapshotUrls[p] = await invoke<string>("image_data_url", { path: p });
         } catch (e) {
-          this.push("error", `サムネイルを読めません ${p}: ${e}`);
+          this.push("error", t("store.thumbFailed", { path: p, error: String(e) }));
         }
       }
     },
     /** パス列を検証して足す (ドロップとダイアログの共通経路)。画像以外・壊れたものはログに出して飛ばす。 */
     async addSnapshotPaths(paths: string[]) {
       const { next, skipped } = mergePaths(this.project.snapshots, paths);
-      for (const s of skipped) this.push("error", `画像ではないので飛ばしました: ${s}`);
+      for (const s of skipped) this.push("error", t("store.notImageSkipped", { path: s }));
       const added = next.filter((p) => !this.project.snapshots.includes(p));
       for (const p of added) {
         try {
@@ -111,7 +112,7 @@ export const useStore = defineStore("main", {
       }
       this.persist();
       await this.loadSnapshotUrls();
-      if (added.length) this.showToast(`スナップショット ${added.length} 枚を追加`);
+      if (added.length) this.showToast(t("store.snapshotsAdded", { n: added.length }));
     },
     async pickSnapshots() {
       const files = await invoke<string[]>("pick_images");
@@ -123,7 +124,7 @@ export const useStore = defineStore("main", {
         const meta = await invoke<SnapshotMeta>("save_clipboard_image", { base64, mime });
         await this.addSnapshotPaths([meta.path]);
       } catch (e) {
-        this.push("error", `貼り付けに失敗: ${e}`);
+        this.push("error", t("store.pasteFailed", { error: String(e) }));
       }
     },
     removeSnapshot(i: number) {
@@ -164,7 +165,7 @@ export const useStore = defineStore("main", {
       this.imageUrls = {};
       this.persist();
       this.running = true;
-      this.push("ui", "実行開始");
+      this.push("ui", t("store.runStarted"));
       try {
         const res = await invoke<RunResult>("run_pipeline", {
           req: {
@@ -180,7 +181,7 @@ export const useStore = defineStore("main", {
           },
         });
         this.result = res;
-        this.showToast(`完了: ${res.plan.attempts} 回目で通過、${(res.analyze.cost_usd + res.plan.cost_usd).toFixed(3)} USD`);
+        this.showToast(t("store.runDone", { n: res.plan.attempts, cost: (res.analyze.cost_usd + res.plan.cost_usd).toFixed(3) }));
         if (this.image.enabled) await this.makeImages();
         await this.loadRuns();
       } catch (e) {
@@ -193,7 +194,7 @@ export const useStore = defineStore("main", {
     async cancel() {
       try {
         const ok = await invoke<boolean>("cancel_run");
-        this.push("ui", ok ? "中断を要求しました" : "実行中の処理はありません");
+        this.push("ui", ok ? t("store.cancelRequested") : t("store.nothingRunning"));
       } catch (e) {
         this.push("error", String(e));
       }
@@ -202,7 +203,7 @@ export const useStore = defineStore("main", {
       try {
         this.runs = await invoke<RunListItem[]>("list_runs");
       } catch (e) {
-        this.push("error", `履歴を読めません: ${e}`);
+        this.push("error", t("store.runsLoadFailed", { error: String(e) }));
       }
     },
     /** 過去の run を結果ペインに戻す。正本は run_dir/promo.json (索引ではない)。 */
@@ -227,7 +228,7 @@ export const useStore = defineStore("main", {
             }
           }
         }
-        this.showToast(`${r.promo.summary.app_name} の run を開きました`);
+        this.showToast(t("store.runOpened", { app: r.promo.summary.app_name }));
       } catch (e) {
         this.error = String(e);
         this.push("error", String(e));
@@ -259,7 +260,7 @@ export const useStore = defineStore("main", {
         }
         this.compareUrls[runDir] = urls;
       } catch (e) {
-        this.push("error", `比較用に読めません: ${e}`);
+        this.push("error", t("store.compareLoadFailed", { error: String(e) }));
       }
     },
     async forgetRun(runDir: string, deleteFiles: boolean) {
@@ -268,7 +269,7 @@ export const useStore = defineStore("main", {
         this.compare = this.compare.filter((d) => d !== runDir);
         delete this.compareUrls[runDir];
         await this.loadRuns();
-        this.showToast(deleteFiles ? "run を削除しました" : "履歴から外しました");
+        this.showToast(deleteFiles ? t("store.runDeleted") : t("store.runForgotten"));
       } catch (e) {
         this.error = String(e);
         this.push("error", String(e));
@@ -286,15 +287,15 @@ export const useStore = defineStore("main", {
         const fonts = await invoke<FontEntry[]>("list_fonts");
         const pick = pickCaptionFont(fonts);
         if (!pick) {
-          this.push("images", "日本語のフォントが見つからないので見出しは焼きません (設定 → 画像 で選べます)");
+          this.push("images", t("store.noJpFont"));
           return;
         }
         c.fontPath = pick.path;
         c.fontIndex = pick.index;
         this.persist();
-        this.push("images", `見出しのフォントを自動選択: ${pick.family}`);
+        this.push("images", t("store.fontAutoPicked", { family: pick.family }));
       } catch (e) {
-        this.push("images", `フォント一覧を取れないので見出しは焼きません: ${e}`);
+        this.push("images", t("store.fontListFailedNoCaption", { error: String(e) }));
       }
     },
     /**
@@ -342,7 +343,7 @@ export const useStore = defineStore("main", {
         this.staleSnapshots = await invoke<string[]>("stale_snapshots", { runDir });
       } catch (e) {
         // 数えられないだけで編集はできる。黙って古い一覧を出すよりは報せる。
-        this.push("error", `撮り直しを数えられません: ${e}`);
+        this.push("error", t("store.staleCountFailed", { error: String(e) }));
         this.staleSnapshots = [];
         return;
       }
@@ -360,7 +361,7 @@ export const useStore = defineStore("main", {
         return r.index;
       } catch (e) {
         this.error = String(e);
-        this.push("error", `スナップショットを足せません: ${e}`);
+        this.push("error", t("store.addRunSnapshotFailed", { error: String(e) }));
         return null;
       }
     },
@@ -390,12 +391,12 @@ export const useStore = defineStore("main", {
             try {
               this.imageUrls[r.scene_id] = await invoke<string>("image_data_url", { path: r.path });
             } catch (e) {
-              this.push("error", `表示できません ${r.path}: ${e}`);
+              this.push("error", t("store.imageShowFailed", { path: r.path, error: String(e) }));
             }
           }
         }
         const ok = res.results.filter((r) => r.ok).length;
-        this.showToast(`参照画像 ${ok}/${res.results.length} 枚`);
+        this.showToast(t("store.imagesDone", { ok, total: res.results.length }));
       } catch (e) {
         this.error = String(e);
         this.push("error", String(e));

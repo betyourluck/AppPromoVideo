@@ -11,6 +11,7 @@ import InputPane from "./components/InputPane.vue";
 import ScenePanel from "./components/ScenePanel.vue";
 import LogPanel from "./components/LogPanel.vue";
 import MessageBox from "./components/MessageBox.vue";
+import Icon from "./components/Icon.vue";
 import { useStore } from "./store";
 
 const store = useStore();
@@ -39,7 +40,10 @@ onMounted(() => {
     </div>
     <SettingsDialog v-if="settingsOpen" @close="settingsOpen = false" />
     <RunsDialog v-if="runsOpen" @close="runsOpen = false" />
-    <div v-if="store.toast" class="toast">{{ store.toast }}</div>
+    <div v-if="store.toast" class="toast">
+      <Icon name="check" :size="16" />
+      <span>{{ store.toast }}</span>
+    </div>
     <!-- rev26: 確認はアプリ内のメッセージボックス 1 つに集める (ブラウザ標準は URL が出る)。 -->
     <MessageBox />
   </div>
@@ -55,12 +59,20 @@ onMounted(() => {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 340px 1fr 320px;
-  gap: 10px;
-  padding: 10px;
+  grid-template-columns: 390px 1fr 320px;
+  gap: 16px;
+  padding: 12px 16px;
 }
-.left,
-.center,
+.left {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 16px;
+  border-right: 1px solid rgb(var(--line));
+}
+.center {
+  min-height: 0;
+  overflow: auto;
+}
 .right {
   min-height: 0;
   overflow: auto;

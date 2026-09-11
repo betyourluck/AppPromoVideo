@@ -1,6 +1,9 @@
 import { createApp } from "vue";
 import { createPinia } from "pinia";
 import App from "./App.vue";
+// UI の書体は同梱する (rev30)。CSP が外部フォントを通さず、オフラインでも同じ見た目にするため。
+import "@fontsource-variable/inter";
+import "@fontsource-variable/noto-sans-jp";
 import "./assets/main.css";
 import { applyTheme } from "./theme";
 import { initSettingsMirror } from "./settingsMirror";

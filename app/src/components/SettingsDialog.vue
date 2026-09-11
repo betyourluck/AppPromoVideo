@@ -8,6 +8,9 @@ import { computed, onMounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../store";
 import type { FontEntry } from "../types";
+import { t } from "../i18n";
+import Icon from "./Icon.vue";
+import Rich from "./Rich.vue";
 import {
   DEFAULT_BASE_URL,
   DEFAULT_CLI_EXE,
@@ -70,14 +73,14 @@ async function previewCaption() {
   captionMsg.value = "";
   const c = toBackendCaption({ ...store.image.caption, enabled: true });
   if (!c) {
-    captionMsg.value = "フォントを選んでください";
+    captionMsg.value = t("settings.pickFont");
     return;
   }
   try {
     captionPreview.value = await invoke<string>("caption_preview", {
       req: {
         image_path: store.project.snapshots[0] ?? null,
-        text: store.result?.promo.summary.hook_copy || "整理するほど、時間は増える。",
+        text: store.result?.promo.summary.hook_copy || t("settings.captionSample"),
         caption: c,
       },
     });
@@ -118,7 +121,7 @@ async function saveKey() {
     await invoke("set_image_api_key", { provider: provider.value, key: keyInput.value });
     keyInput.value = "";
     await refreshKeys();
-    store.showToast("API キーを保存しました (app_data/.env)");
+    store.showToast(t("settings.keySaved"));
   } catch (e) {
     probeMsg.value = String(e);
   }
@@ -139,8 +142,8 @@ async function probe() {
 const workflowWarn = computed(() => {
   if (provider.value !== "comfy") return "";
   const wf = slot.value.workflowJson;
-  if (!wf.trim()) return "ワークフロー JSON (API 形式) が空です。ComfyUI で『Save (API Format)』したものを貼ってください。";
-  if (store.project.snapshots.length > 0 && !workflowAcceptsRefs(wf)) return "%ref_1% が無いので、スナップショットは送っても使われません。";
+  if (!wf.trim()) return t("settings.workflowEmpty");
+  if (store.project.snapshots.length > 0 && !workflowAcceptsRefs(wf)) return t("settings.workflowNoRefs");
   return "";
 });
 
@@ -155,150 +158,156 @@ function close() {
     <div class="dlg panel">
       <div class="row" style="justify-content: space-between">
         <div class="tabs">
-          <button class="btn small" :class="{ on: tab === 'llm' }" @click="tab = 'llm'">LLM (CLI)</button>
-          <button class="btn small" :class="{ on: tab === 'image' }" @click="tab = 'image'">画像生成 (API キー)</button>
+          <button class="btn small" :class="{ on: tab === 'llm' }" @click="tab = 'llm'">
+            <Icon name="terminal" :size="13" />
+            <span>LLM (CLI)</span>
+          </button>
+          <button class="btn small" :class="{ on: tab === 'image' }" @click="tab = 'image'">
+            <Icon name="sparkles" :size="13" />
+            <span>{{ t('settings.imageTabLabel') }}</span>
+          </button>
         </div>
-        <button class="btn small" @click="close">閉じる</button>
+        <button class="btn small" :title="t('common.close')" @click="close">
+          <Icon name="x" :size="14" />
+          <span>{{ t('common.close') }}</span>
+        </button>
       </div>
 
       <!-- ===== LLM ===== -->
       <section v-if="tab === 'llm'">
-        <p class="muted note">
-          テキスト解析はローカルの CLI をサブプロセスで実行します。<b>キーはこのアプリでは持ちません</b> — CLI 側のログイン
-          (claude は <span class="mono">claude auth login</span>、または環境変数 ANTHROPIC_API_KEY) に委ねます。
-          対象リポジトリの hook や MCP 設定は読み込みません (作業ディレクトリは app 側)。
-        </p>
+        <p class="muted note"><Rich :text="t('settings.llmNote')" /></p>
         <label class="field">
-          <span>CLI の種類</span>
+          <span>{{ t('settings.cliKind') }}</span>
           <select :value="store.cli.kind" @change="onKindChange(($event.target as HTMLSelectElement).value as CliKind)">
-            <option value="claude">Claude Code (claude -p、構造化出力・リポジトリ走査あり)</option>
-            <option value="aider">aider (--message-file、走査なし)</option>
-            <option value="custom">カスタム (stdin に本文、stdout を読む)</option>
+            <option value="claude">{{ t('settings.cliClaude') }}</option>
+            <option value="aider">{{ t('settings.cliAider') }}</option>
+            <option value="custom">{{ t('settings.cliCustom') }}</option>
           </select>
         </label>
         <label class="field">
-          <span>実行ファイル (パス or PATH 上の名前)</span>
+          <span>{{ t('settings.executable') }}</span>
           <div class="row">
             <input v-model="store.cli.executable" @change="store.persist(); store.checkCli()" />
             <span class="chip" :class="store.cliCheck ? (store.cliCheck.found ? 'ok' : 'warn') : ''">
-              {{ store.cliCheck ? (store.cliCheck.found ? store.cliCheck.version || 'OK' : '見つかりません') : '…' }}
+              {{ store.cliCheck ? (store.cliCheck.found ? store.cliCheck.version || 'OK' : t('input.llmNotFound')) : '…' }}
             </span>
           </div>
         </label>
         <label class="field">
-          <span>モデル (空 = CLI の既定)</span>
+          <span>{{ t('settings.cliModel') }}</span>
           <input v-model="store.cli.model" placeholder="sonnet / haiku / opus" @change="store.persist()" />
         </label>
         <div class="row">
           <label class="field" style="flex: 1">
-            <span>タイムアウト (秒、最小 30)</span>
+            <span>{{ t('settings.timeout') }}</span>
             <input v-model.number="store.cli.timeoutSecs" type="number" min="30" @change="store.persist()" />
           </label>
           <label class="field" style="flex: 1">
-            <span>最大ターン (走査の深掘り回数)</span>
+            <span>{{ t('settings.maxTurns') }}</span>
             <input v-model.number="store.cli.maxTurns" type="number" min="1" @change="store.persist()" />
           </label>
         </div>
         <label class="field row" style="gap: 8px">
           <input v-model="store.cli.oauthOnly" type="checkbox" style="width: auto" @change="store.persist()" />
-          <span style="margin: 0">OAuth ログインを使う — 環境変数の ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN を子 CLI に渡さない (端末の鍵が古い・無効なときの回避)</span>
+          <span style="margin: 0">{{ t('settings.oauthOnly') }}</span>
         </label>
         <label class="field">
-          <span>追加引数 (空白区切り。既定では付けない: --dangerously-skip-permissions 等)</span>
+          <span>{{ t('settings.extraArgs') }}</span>
           <input v-model="store.cli.extraArgs" class="mono" @change="store.persist()" />
         </label>
         <div v-if="store.cliCheck" class="authbox mono">
-          <div><b>子 CLI が使う認証 (このアプリのプロセス環境)</b></div>
+          <div><b>{{ t('settings.authTitle') }}</b></div>
           <div>
             ANTHROPIC_API_KEY:
             <span :class="store.cliCheck.auth.api_key_present ? 'ok' : 'muted'">
-              {{ store.cliCheck.auth.api_key_present ? `あり (len ${store.cliCheck.auth.api_key_len}, fp ${store.cliCheck.auth.api_key_fingerprint})` : 'なし' }}
+              {{ store.cliCheck.auth.api_key_present ? t('settings.presentKey', { len: store.cliCheck.auth.api_key_len, fp: store.cliCheck.auth.api_key_fingerprint }) : t('settings.absent') }}
             </span>
-            <span class="muted"> — あれば OAuth ログインより優先されます</span>
+            <span class="muted"> {{ t('settings.apiKeyPrecedence') }}</span>
           </div>
-          <div>ANTHROPIC_AUTH_TOKEN: {{ store.cliCheck.auth.auth_token_present ? 'あり' : 'なし' }} · base_url: {{ store.cliCheck.auth.base_url || '既定' }}</div>
+          <div>ANTHROPIC_AUTH_TOKEN: {{ store.cliCheck.auth.auth_token_present ? t('settings.present') : t('settings.absent') }} · base_url: {{ store.cliCheck.auth.base_url || t('settings.default') }}</div>
           <div>
             claude auth status:
-            <span v-if="store.cliCheck.auth.oauth_logged_in === null" class="muted">不明</span>
-            <span v-else :class="store.cliCheck.auth.oauth_logged_in ? 'ok' : 'warn'">{{ store.cliCheck.auth.oauth_logged_in ? 'ログイン済み' : '未ログイン' }} ({{ store.cliCheck.auth.oauth_method || '-' }})</span>
+            <span v-if="store.cliCheck.auth.oauth_logged_in === null" class="muted">{{ t('settings.unknown') }}</span>
+            <span v-else :class="store.cliCheck.auth.oauth_logged_in ? 'ok' : 'warn'">{{ store.cliCheck.auth.oauth_logged_in ? t('settings.loggedIn') : t('settings.notLoggedIn') }} ({{ store.cliCheck.auth.oauth_method || '-' }})</span>
           </div>
-          <div class="muted">子に渡さない変数: {{ store.cliCheck.auth.scrubbed.length ? store.cliCheck.auth.scrubbed.join(', ') : 'なし' }}</div>
-          <button class="btn small" style="margin-top: 4px" @click="store.checkCli()">再検査</button>
+          <div class="muted">{{ t('settings.scrubbed', { vars: store.cliCheck.auth.scrubbed.length ? store.cliCheck.auth.scrubbed.join(', ') : t('settings.absent') }) }}</div>
+          <button class="btn small" style="margin-top: 6px" @click="store.checkCli()">
+            <Icon name="refresh" :size="13" />
+            <span>{{ t('settings.recheck') }}</span>
+          </button>
         </div>
-        <p class="muted note">
-          claude には Read / Glob / Grep だけを許可し、対象リポジトリは --add-dir で読み取り専用に渡します。Write / Edit / Bash は許可しません。
-        </p>
+        <p class="muted note">{{ t('settings.toolsNote') }}</p>
       </section>
 
       <!-- ===== 画像 ===== -->
       <section v-else>
-        <p class="muted note">
-          参照画像の生成は HTTP で画像 API を呼びます。<b>OpenAI / Gemini は API キーが必要</b>、ComfyUI (ローカル) はキー不要。
-          キーは app_data/.env に保存され、画面には有無だけ表示します。
-        </p>
+        <p class="muted note"><Rich :text="t('settings.imageNote')" /></p>
         <label class="field row" style="gap: 8px">
           <input v-model="store.image.enabled" type="checkbox" style="width: auto" @change="store.persist()" />
-          <span style="margin: 0">解析のあと参照画像も自動で作る</span>
+          <span style="margin: 0">{{ t('settings.autoImages') }}</span>
         </label>
         <label class="field">
-          <span>プロバイダ (設定はプロバイダごとに保持)</span>
+          <span>{{ t('settings.provider') }}</span>
           <select :value="provider" @change="setProvider(($event.target as HTMLSelectElement).value as ImageProvider)">
-            <option value="gemini">Gemini (Nano Banana) — キー必要</option>
-            <option value="openai">OpenAI Images — キー必要</option>
-            <option value="comfy">ComfyUI — ローカル、キー不要</option>
+            <option value="gemini">{{ t('settings.providerGemini') }}</option>
+            <option value="openai">{{ t('settings.providerOpenai') }}</option>
+            <option value="comfy">{{ t('settings.providerComfy') }}</option>
           </select>
         </label>
 
         <div v-if="provider !== 'comfy'" class="keybox">
-          <span class="chip" :class="keys[provider] ? 'ok' : 'warn'">{{ keys[provider] ? 'キー設定済み' : 'キー未設定' }}</span>
-          <input v-model="keyInput" type="password" placeholder="API キーを貼って保存 (値は再表示されません)" style="flex: 1" />
-          <button class="btn small" :disabled="!keyInput.trim()" @click="saveKey">保存</button>
+          <span class="chip" :class="keys[provider] ? 'ok' : 'warn'">{{ keys[provider] ? t('settings.keySet') : t('settings.keyNotSet') }}</span>
+          <input v-model="keyInput" type="password" :placeholder="t('settings.keyPlaceholder')" style="flex: 1" />
+          <button class="btn small" :disabled="!keyInput.trim()" @click="saveKey">
+            <Icon name="check" :size="13" />
+            <span>{{ t('settings.save') }}</span>
+          </button>
         </div>
 
         <label class="field">
-          <span>サーバー URL</span>
+          <span>{{ t('settings.serverUrl') }}</span>
           <input v-model="slot.baseUrl" :placeholder="DEFAULT_BASE_URL[provider]" @change="store.persist()" />
         </label>
         <label class="field">
-          <span>モデル {{ provider === 'comfy' ? '(ComfyUI はワークフロー側で決まる)' : '' }}</span>
+          <span>{{ t('settings.model') }} {{ provider === 'comfy' ? t('settings.modelComfy') : '' }}</span>
           <input v-model="slot.model" :placeholder="DEFAULT_MODEL[provider]" :disabled="provider === 'comfy'" @change="store.persist()" />
         </label>
         <div class="row">
           <label class="field" style="flex: 1">
-            <span>解像度段</span>
+            <span>{{ t('settings.detail') }}</span>
             <select v-model="store.image.detail" @change="store.persist()">
-              <option value="standard">標準</option>
-              <option value="high">高</option>
-              <option value="highest">最高 (OpenAI のみ、高コスト)</option>
+              <option value="standard">{{ t('settings.detailStandard') }}</option>
+              <option value="high">{{ t('settings.detailHigh') }}</option>
+              <option value="highest">{{ t('settings.detailHighest') }}</option>
             </select>
           </label>
           <label class="field" style="flex: 1">
-            <span>先頭から何シーン (0 = 全部)</span>
+            <span>{{ t('settings.maxScenes') }}</span>
             <input v-model.number="store.image.maxScenes" type="number" min="0" @change="store.persist()" />
           </label>
           <label class="field" style="flex: 1">
-            <span>参照枚数 (0 = 既定: OpenAI 1 / 他 3)</span>
+            <span>{{ t('settings.requestedRefs') }}</span>
             <input v-model.number="store.image.requestedRefs" type="number" min="0" max="3" @change="store.persist()" />
           </label>
         </div>
         <label class="field">
-          <span>スタイル接頭辞 (空 = スナップショットの palette と解析結果から自動合成)</span>
+          <span>{{ t('settings.userPrefix') }}</span>
           <textarea v-model="store.image.userPrefix" rows="2" @change="store.persist()"></textarea>
         </label>
         <template v-if="provider === 'comfy'">
           <label class="field">
-            <span>ネガティブプロンプト</span>
+            <span>{{ t('settings.negative') }}</span>
             <input v-model="slot.negative" :disabled="!supportsNegative(provider)" @change="store.persist()" />
           </label>
           <label class="field">
-            <span>ワークフロー JSON (API 形式。%prompt% %negative% %seed% %width% %height% %ref_1..3% を差し替えます)</span>
+            <span>{{ t('settings.workflowJson') }}</span>
             <textarea v-model="slot.workflowJson" rows="8" class="mono" @change="store.persist()"></textarea>
           </label>
           <div v-if="workflowWarn" class="warn" style="font-size: var(--fs-sm)">{{ workflowWarn }}</div>
           <div class="row">
             <label class="field row" style="gap: 6px; flex: 1">
               <input v-model="store.image.lockSeed" type="checkbox" style="width: auto" @change="store.persist()" />
-              <span style="margin: 0">seed 固定</span>
+              <span style="margin: 0">{{ t('settings.lockSeed') }}</span>
             </label>
             <label class="field" style="flex: 1">
               <span>seed</span>
@@ -307,73 +316,72 @@ function close() {
           </div>
         </template>
         <div class="row" style="margin-top: 6px">
-          <button class="btn small" :disabled="probing" @click="probe">{{ probing ? '接続テスト中…' : '接続テスト' }}</button>
+          <button class="btn small" :disabled="probing" @click="probe">
+            <Icon :name="probing ? 'refresh' : 'sparkles'" :size="13" />
+            <span>{{ probing ? t('settings.testing') : t('settings.test') }}</span>
+          </button>
           <span class="muted" style="font-size: var(--fs-sm); white-space: pre-wrap">{{ probeMsg }}</span>
         </div>
 
-        <h3 class="sub">製品カットの画面の貼り方</h3>
-        <p class="muted note">
-          製品カットは、背景だけをモデルに描かせ、実スクリーンショットの画素をアプリが貼ります。背景にアングル (俯瞰・ローアングル) が
-          付いたとき、貼る面をどう扱うかを選びます。
-        </p>
+        <h3 class="sub">{{ t('settings.plateHeading') }}</h3>
+        <p class="muted note">{{ t('settings.plateNote') }}</p>
         <label class="field">
-          <span>面の扱い</span>
+          <span>{{ t('settings.plateMode') }}</span>
           <select v-model="store.image.plateMode" @change="store.persist()">
-            <option value="frontal">正面固定 — 背景も正対に保つ (既定)</option>
-            <option value="perspective">背景のパースに合わせて傾ける</option>
+            <option value="frontal">{{ t('settings.plateFrontal') }}</option>
+            <option value="perspective">{{ t('settings.platePerspective') }}</option>
           </select>
         </label>
         <p class="muted note">
-          <template v-if="store.image.plateMode === 'perspective'">
-            シーンごとに傾き (yaw / pitch、±35 度) を LLM が書き、アプリが射影変換で面を倒します。背景と噛み合いますが、
-            傾けた分だけ画面の文字は読みにくくなります。
-          </template>
-          <template v-else>
-            面は常に正対で貼り、背景の <span class="mono">low angle</span> / <span class="mono">top-down</span> といった
-            アングル指定は検査で弾いて再生成させます。不整合は原理的に出ませんが、絵の変化は乏しくなります。
-          </template>
+          <template v-if="store.image.plateMode === 'perspective'">{{ t('settings.perspectiveNote') }}</template>
+          <template v-else><Rich :text="t('settings.frontalNote')" /></template>
         </p>
 
-        <h3 class="sub">見出し (copy) の焼き込み — 任意</h3>
-        <p class="muted note">
-ここは**全シーンの既定**です。1 枚ごとの位置・フォント・色・大きさは、結果ペインの各シーンにある
-          「見出し」から変えられます (焼き直しは生成をやり直しません)。各カット画像に copy_text を焼き込みます。既定は OFF (動画側でテロップを載せる運用)。フォントはシステムにインストール済みのものと、
-          <span class="mono">app_data/fonts</span> に置いたファイルから選べます。
-        </p>
+        <h3 class="sub">{{ t('settings.captionHeading') }}</h3>
+        <p class="muted note"><Rich :text="t('settings.captionNote')" /></p>
         <label class="field row" style="gap: 8px">
           <input v-model="store.image.caption.enabled" type="checkbox" style="width: auto" @change="store.persist()" />
-          <span style="margin: 0">カット画像に見出しを焼き込む</span>
+          <span style="margin: 0">{{ t('settings.captionEnable') }}</span>
         </label>
         <label class="field">
-          <span>フォント ({{ fonts.length }} 件。JP = 日本語グリフあり)</span>
+          <span>{{ t('settings.fontCount', { n: fonts.length }) }}</span>
           <div class="row">
             <select v-model="fontKey" :disabled="fontsLoading">
-              <option value="#0" disabled>— 選択 —</option>
+              <option value="#0" disabled>{{ t('settings.selectPlaceholder') }}</option>
               <option v-for="f in fonts" :key="f.path + '#' + f.index" :value="f.path + '#' + f.index">
-                {{ f.has_japanese ? 'JP ' : '   ' }}{{ f.family }}{{ f.source === 'user' ? ' (自分のフォント)' : '' }}
+                {{ f.has_japanese ? 'JP ' : '   ' }}{{ f.family }}{{ f.source === 'user' ? t('settings.userFont') : '' }}
               </option>
             </select>
-            <button class="btn small" :disabled="fontsLoading" @click="loadFonts">再読込</button>
-            <button class="btn small" @click="openFontsFolder">フォントフォルダ</button>
+            <button class="btn small" :disabled="fontsLoading" @click="loadFonts">
+              <Icon :name="fontsLoading ? 'refresh' : 'refresh'" :size="13" />
+              <span>{{ t('settings.reload') }}</span>
+            </button>
+            <button class="btn small" @click="openFontsFolder">
+              <Icon name="folder" :size="13" />
+              <span>{{ t('settings.fontsFolder') }}</span>
+            </button>
           </div>
         </label>
         <div class="row">
           <label class="field" style="flex: 1">
-            <span>文字の高さ (canvas 比)</span>
+            <span>{{ t('settings.captionSize') }}</span>
             <input v-model.number="store.image.caption.sizeRatio" type="number" min="0.02" max="0.2" step="0.005" @change="store.persist()" />
           </label>
           <label class="field" style="flex: 1">
-            <span>色 (既定)</span>
+            <span>{{ t('settings.captionColor') }}</span>
             <input v-model="store.image.caption.color" type="color" @change="store.persist()" />
           </label>
           <label class="field" style="flex: 1">
-            <span>位置</span>
+            <span>{{ t('settings.captionPosition') }}</span>
             <select v-model="store.image.caption.position" @change="store.persist()">
-              <option value="bottom">下</option>
-              <option value="top">上</option>
+              <option value="bottom">{{ t('settings.bottom') }}</option>
+              <option value="top">{{ t('settings.top') }}</option>
             </select>
           </label>
-          <button class="btn small" style="align-self: flex-end; margin-bottom: 8px" @click="previewCaption">プレビュー</button>
+          <button class="btn small" style="align-self: flex-end; margin-bottom: 8px" @click="previewCaption">
+            <Icon name="image" :size="13" />
+            <span>{{ t('settings.preview') }}</span>
+          </button>
         </div>
         <div v-if="captionMsg" class="warn" style="font-size: var(--fs-sm)">{{ captionMsg }}</div>
         <img v-if="captionPreview" :src="captionPreview" alt="caption preview" class="preview" />
@@ -386,16 +394,20 @@ function close() {
 .backdrop {
   position: fixed;
   inset: 0;
-  background: rgb(0 0 0 / 0.5);
+  background: var(--backdrop, rgb(0 0 0 / 0.65));
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 40;
 }
 .dlg {
-  width: min(720px, 92vw);
+  width: min(760px, 94vw);
   max-height: 88vh;
   overflow: auto;
+  padding: 24px;
+  border-radius: var(--radius-dialog);
+  box-shadow: var(--shadow-lg);
 }
 .tabs {
   display: flex;

@@ -6,6 +6,8 @@
  * 「ProductBackdropAngled で再生成が発火した」という推測を確認できなかった。
  */
 
+import { t } from "./i18n";
+
 export interface AttemptsView {
   /** 表に出す文字。記録が無ければ "—"。 */
   text: string;
@@ -20,7 +22,7 @@ export interface AttemptsView {
  * rev14 以前の行を 1 と描くと、集計に偽の分母が混ざる。
  */
 export function describeAttempts(attempts: number, kinds: string[] = []): AttemptsView {
-  if (!attempts) return { text: "—", retried: false, title: "記録なし (rev14 以前の run)" };
+  if (!attempts) return { text: "—", retried: false, title: t("runs.noRecord") };
   const why = kinds.length ? ` — ${kinds.join(", ")}` : "";
-  return { text: String(attempts), retried: attempts > 1, title: `${attempts} 回目で通過${why}` };
+  return { text: String(attempts), retried: attempts > 1, title: t("runs.passedOn", { n: attempts, why }) };
 }

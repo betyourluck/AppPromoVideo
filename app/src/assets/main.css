@@ -11,10 +11,14 @@
  *   メッセージボックスのタイトル / 設定の小見出し)。**倍率を試す時はこの 2 つだけ変える**。
  * - ウィンドウ枠 (タイトルバーのアプリ名) は**試行の対象外** — `--*-chrome` で試行前の値に固定し、倍率も掛けない。
  *   rev29 ユーザー「ウィンドウタイトルバーのアプリタイトルのフォントと大きさは変えなくていい」。
- * - 書体: rev28 ユーザー「IBM Plex Sans JP の Bold に」。この機体ではユーザーごとのフォントとして入っている。
- *   **入っていない環境では Segoe UI に落ちる** (同梱はしていない)。
+ *   rev30 のデザイン修正 (ユーザー) で値は Inter / 14px / 600 に変わった (倍率を掛けないのは同じ)。
+ * - 書体: rev28 は IBM Plex Sans JP の Bold。rev30 のデザイン修正 (ユーザー) で Inter + Noto Sans JP に。
+ *   **同梱する** (@fontsource-variable、main.ts で import)。宣言名は `Inter Variable` / `Noto Sans JP Variable` —
+ *   `Inter` と書くと手元に入っていない限り当たらない。外 (Google Fonts) からは読まない: CSP で止まり、
+ *   オフラインでも読めない。網は fonts.test.ts。
  * - 太さ: 本文を Bold にすると、見出しやボタンの SemiBold (600) が本文より細く見えて逆転するので、
  *   段ごとのトークンにして一緒に引き上げた (旧: 本文 400 / semi 600 / bold 700)。
+ *   rev30 のデザイン修正 (ユーザー) で本文 500 / semi 600 / bold 700。
  *   rev29: ユーザー「説明文は bold でなく medium で小さめ」「進捗のログも medium で普通サイズ」→
  *   `--fw-medium` (500)。`.muted` (説明文と補足) と進捗ログが使う。
  */
@@ -30,37 +34,77 @@
   --fs-h-md: calc(13px * var(--fs-scale-heading));
   --fs-h-lg: calc(15px * var(--fs-scale-heading));
   --fs-h-xl: calc(19px * var(--fs-scale-heading));
-  --font-ui: "IBM Plex Sans JP", "Segoe UI", "Noto Sans JP", system-ui, sans-serif;
-  --fw-base: 700;
-  --fw-semi: 700;
+  --font-ui: "Inter Variable", "Noto Sans JP Variable", "Noto Sans JP", "BIZ UDPGothic", "Yu Gothic UI", system-ui, -apple-system, sans-serif;
+  --fw-base: 500;
+  --fw-semi: 600;
   --fw-bold: 700;
   --fw-medium: 500;
-  --font-chrome: "Segoe UI", "Noto Sans JP", system-ui, sans-serif;
-  --fs-chrome: 12px;
-  --fw-chrome: 700;
+  --fw-regular: 400;
+  --font-chrome: "Inter Variable", "Segoe UI", "Noto Sans JP Variable", "Noto Sans JP", system-ui, sans-serif;
+  --fs-chrome: 14px;
+  --fw-chrome: 600;
+
+  /* Material 3 Shapes & Metrics */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-dialog: 28px;
+  --radius-full: 9999px;
+  --btn-radius: var(--radius-full);
+  --btn-height: 40px;
+  --btn-height-sm: 32px;
+  --input-radius: 12px;
+  --input-height: 44px;
+  --chip-height: 32px;
+  --chip-radius: 8px;
+  --panel-radius: 20px;
+  --trans-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --trans-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
 :root,
 [data-theme="dark"] {
-  --bg: 18 16 24;
-  --panel: 28 25 38;
-  --line: 58 52 78;
-  --text: 232 226 240;
-  --muted: 160 152 180;
-  --accent: 217 138 74;
-  --accent2: 140 110 230;
-  --warn: 226 96 90;
-  --ok: 92 186 120;
+  --bg: 15 14 20;
+  --panel: 24 22 34;
+  --panel-hover: 32 29 44;
+  --line: 52 46 72;
+  --line-subtle: 38 34 54;
+  --text: 242 238 248;
+  --muted: 154 146 172;
+  --accent: 236 122 56;
+  --accent-hover: 248 138 72;
+  --accent-gradient: linear-gradient(135deg, rgb(240 128 60), rgb(220 90 40));
+  --accent2: 138 108 242;
+  --accent2-tint: rgb(138 108 242 / 0.15);
+  --warn: 235 88 88;
+  --ok: 74 204 122;
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.25);
+  --shadow-md: 0 6px 18px rgb(0 0 0 / 0.35);
+  --shadow-lg: 0 14px 40px rgb(0 0 0 / 0.5);
+  --backdrop: rgb(8 7 12 / 0.65);
 }
+
 [data-theme="light"] {
-  --bg: 246 243 238;
+  --bg: 246 248 252;
   --panel: 255 255 255;
-  --line: 214 206 196;
-  --text: 40 34 48;
-  --muted: 110 100 120;
-  --accent: 181 92 38;
-  --accent2: 98 70 190;
-  --warn: 188 62 46;
-  --ok: 40 140 80;
+  --panel-hover: 248 250 254;
+  --line: 220 225 236;
+  --line-subtle: 234 238 245;
+  --text: 28 32 44;
+  --muted: 104 114 132;
+  --accent: 218 92 36;
+  --accent-hover: 232 106 48;
+  --accent-gradient: linear-gradient(135deg, rgb(228 102 44), rgb(204 78 28));
+  --accent2: 106 74 216;
+  --accent2-tint: rgb(106 74 216 / 0.1);
+  --warn: 220 54 68;
+  --ok: 36 160 82;
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.06);
+  --shadow-md: 0 6px 18px rgb(0 0 0 / 0.08);
+  --shadow-lg: 0 16px 36px rgb(0 0 0 / 0.12);
+  --backdrop: rgb(18 20 28 / 0.45);
 }
 
 html,
@@ -69,17 +113,24 @@ body,
   height: 100%;
   margin: 0;
 }
+
 body {
   background: rgb(var(--bg));
   color: rgb(var(--text));
   font-family: var(--font-ui);
   font-weight: var(--fw-base);
   font-size: var(--fs-base);
+  letter-spacing: -0.01em;
+  text-rendering: optimizeLegibility;
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
 * {
   box-sizing: border-box;
 }
+
 button,
 input,
 select,
@@ -87,144 +138,292 @@ textarea {
   font: inherit;
   color: inherit;
 }
+
 input,
 select,
 textarea {
+  font-weight: var(--fw-medium);
   background: rgb(var(--bg));
   border: 1px solid rgb(var(--line));
-  border-radius: 6px;
-  padding: 6px 8px;
+  border-radius: var(--input-radius);
+  min-height: var(--input-height);
+  padding: 9px 14px;
   width: 100%;
+  font-size: var(--fs-xs);
+  transition: border-color var(--trans-fast), box-shadow var(--trans-fast), background var(--trans-fast);
 }
+
+select {
+  cursor: pointer;
+}
+
 input:focus,
 select:focus,
 textarea:focus {
-  outline: 2px solid rgb(var(--accent2) / 0.6);
-  outline-offset: 0;
+  border-color: rgb(var(--accent2));
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(var(--accent2) / 0.25);
 }
+
+input::placeholder,
+textarea::placeholder {
+  color: rgb(var(--muted) / 0.7);
+  font-weight: 400;
+}
+
 textarea {
   resize: vertical;
-  min-height: 72px;
+  min-height: 88px;
+  line-height: 1.6;
 }
+
 label.field {
   display: block;
-  margin: 8px 0;
+  margin: 14px 0 6px;
 }
+
 label.field > span {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: var(--fs-sm);
   color: rgb(var(--muted));
-  margin-bottom: 3px;
+  margin-bottom: 6px;
+  font-weight: var(--fw-semi);
 }
+
 .row {
   display: flex;
   gap: 8px;
   align-items: center;
 }
+
+/* ===== Material 3 ボタンスタイル (ピル型・ゆとりあるサイズ・心地よいフィードバック) ===== */
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--btn-height);
+  padding: 0 20px;
   background: rgb(var(--panel));
   border: 1px solid rgb(var(--line));
-  border-radius: 6px;
-  padding: 6px 12px;
+  border-radius: var(--btn-radius);
   cursor: pointer;
   white-space: nowrap;
+  font-weight: var(--fw-semi);
+  font-size: var(--fs-base);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--trans-fast);
+  user-select: none;
 }
+
 .btn:hover {
-  border-color: rgb(var(--accent2));
+  background: rgb(var(--panel-hover));
+  border-color: rgb(var(--accent2) / 0.8);
+  color: rgb(var(--text));
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
+
+.btn:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: var(--shadow-sm);
+}
+
 .btn:disabled {
   opacity: 0.45;
-  cursor: default;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
 }
+
+/* プライマリボタン (M3 Filled Button / FAB調グラデーション) */
 .btn.primary {
-  background: rgb(var(--accent));
+  background: var(--accent-gradient, rgb(var(--accent)));
   border-color: transparent;
-  color: #fff;
-  font-weight: var(--fw-semi);
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgb(var(--accent) / 0.35);
 }
+
+.btn.primary:hover {
+  filter: brightness(1.06);
+  box-shadow: 0 4px 18px rgb(var(--accent) / 0.45);
+}
+
+.btn.primary:active {
+  filter: brightness(0.96);
+}
+
+/* デンジャーボタン */
 .btn.danger {
-  border-color: rgb(var(--warn) / 0.6);
+  border-color: rgb(var(--warn) / 0.4);
+  color: rgb(var(--warn));
+  background: rgb(var(--warn) / 0.06);
+}
+
+.btn.danger:hover {
+  background: rgb(var(--warn) / 0.16);
+  border-color: rgb(var(--warn));
   color: rgb(var(--warn));
 }
+
+/* 小ボタン (M3 Small Button) */
 .btn.small {
-  padding: 3px 8px;
+  min-height: var(--btn-height-sm);
+  padding: 0 14px;
   font-size: var(--fs-sm);
+  border-radius: var(--btn-radius);
 }
+
+/* アイコン専用ボタン (M3 Icon Button) */
+.btn.icon-only {
+  width: var(--btn-height);
+  height: var(--btn-height);
+  min-height: var(--btn-height);
+  padding: 0;
+  border-radius: var(--radius-full);
+}
+
+.btn.icon-only.small {
+  width: var(--btn-height-sm);
+  height: var(--btn-height-sm);
+  min-height: var(--btn-height-sm);
+  padding: 0;
+  border-radius: var(--radius-full);
+}
+
+/* ===== パネル & カード (M3 Card & Surface) ===== */
 .panel {
   background: rgb(var(--panel));
   border: 1px solid rgb(var(--line));
-  border-radius: 10px;
-  padding: 12px;
+  border-radius: var(--panel-radius);
+  padding: 18px;
+  box-shadow: var(--shadow-sm);
 }
+
 .panel h2 {
-  margin: 0 0 8px;
+  margin: 0 0 12px;
   font-size: var(--fs-h-md);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: rgb(var(--muted));
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-/* 説明文と補足 (rev29)。本文 (Bold) より一段引かせる — Medium で小さめ。中の <b> は bolder で Bold に戻る。 */
+
+/* 説明文と補足 (rev29) */
 .muted {
   color: rgb(var(--muted));
   font-weight: var(--fw-medium);
   font-size: var(--fs-sm);
 }
+
 .warn {
   color: rgb(var(--warn));
 }
+
 .ok {
   color: rgb(var(--ok));
 }
+
 .mono {
-  font-family: Consolas, "Cascadia Mono", monospace;
-  font-size: var(--fs-md);
+  font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+  font-size: var(--fs-xs);
 }
+
+/* ===== チップ (M3 Chip: 32px高さ・8px角丸) ===== */
 .chip {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--chip-height);
   border: 1px solid rgb(var(--line));
-  border-radius: 999px;
-  padding: 1px 8px;
+  background: rgb(var(--text) / 0.04);
+  border-radius: var(--chip-radius);
+  padding: 0 12px;
   font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
   color: rgb(var(--muted));
+  line-height: 1;
 }
+
 .chip.accent {
-  border-color: rgb(var(--accent));
+  border-color: rgb(var(--accent) / 0.5);
+  background: rgb(var(--accent) / 0.1);
   color: rgb(var(--accent));
 }
+
 .chip.warn {
-  border-color: rgb(var(--warn));
+  border-color: rgb(var(--warn) / 0.5);
+  background: rgb(var(--warn) / 0.1);
   color: rgb(var(--warn));
 }
+
 .chip.ok {
-  border-color: rgb(var(--ok));
+  border-color: rgb(var(--ok) / 0.5);
+  background: rgb(var(--ok) / 0.1);
   color: rgb(var(--ok));
 }
+
 pre.block {
   background: rgb(var(--bg));
-  border: 1px solid rgb(var(--line));
-  border-radius: 6px;
-  padding: 8px;
+  border: 1px solid rgb(var(--line-subtle));
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: var(--fs-xs);
   white-space: pre-wrap;
   word-break: break-word;
-  margin: 4px 0;
+  margin: 6px 0;
+  line-height: 1.45;
 }
+
+/* ===== トースト通知 ===== */
 .toast {
   position: fixed;
-  bottom: 16px;
+  bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
   background: rgb(var(--panel));
   border: 1px solid rgb(var(--accent));
-  border-radius: 8px;
-  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  padding: 10px 18px;
   z-index: 50;
-  box-shadow: 0 6px 24px rgb(0 0 0 / 0.35);
+  box-shadow: var(--shadow-lg);
+  font-weight: var(--fw-semi);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: toastIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* ===== スクロールバー ===== */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
 }
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 ::-webkit-scrollbar-thumb {
   background: rgb(var(--line));
-  border-radius: 4px;
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--muted) / 0.6);
 }

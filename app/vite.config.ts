@@ -18,5 +18,7 @@ export default defineConfig(async () => ({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
+    // vitest は既定で CSS を空にする (`?raw` でも '' が返った)。cssTokens.test.ts が main.css の定義を読むため通す。
+    css: { include: [/\.css(?:\?|$)/] },
   },
 }));

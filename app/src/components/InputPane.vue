@@ -3,7 +3,9 @@
 import { computed } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../store";
+import { t } from "../i18n";
 import SnapshotStrip from "./SnapshotStrip.vue";
+import Icon from "./Icon.vue";
 
 const store = useStore();
 const emit = defineEmits<{ (e: "open-settings"): void }>();
@@ -29,73 +31,91 @@ const canRun = computed(
 </script>
 
 <template>
-  <div class="panel">
-    <h2>入力</h2>
+  <div class="panel input-pane">
+    <h2>{{ t('input.title') }}</h2>
 
     <label class="field">
-      <span>リポジトリ</span>
+      <span>{{ t('input.repo') }}</span>
       <div class="row">
-        <input v-model="store.project.projectPath" placeholder="D:\Github\my-app" @change="store.persist(); store.previewBrief()" />
-        <button class="btn" @click="pickRepo">参照</button>
+        <input v-model="store.project.projectPath" :disabled="store.running" :placeholder="t('input.repoPlaceholder')" @change="store.persist(); store.previewBrief()" />
+        <button class="btn" :disabled="store.running" :title="t('input.pickRepo')" @click="pickRepo">
+          <Icon name="folder" :size="15" />
+          <span>{{ t('common.browse') }}</span>
+        </button>
       </div>
     </label>
-    <div v-if="store.brief" class="muted" style="font-size: var(--fs-sm)">brief {{ store.brief.chars }} 字 / tree {{ store.brief.tree_lines }} 行</div>
+    <div v-if="store.brief" class="muted" style="font-size: var(--fs-sm)">{{ t('input.briefInfo', { chars: store.brief.chars, tree_lines: store.brief.tree_lines }) }}</div>
 
     <SnapshotStrip />
 
     <label class="field">
-      <span>動画イメージ / 世界観</span>
-      <textarea v-model="store.project.concept" rows="5" placeholder="ミニマリスト向けの生産性ツール。落ち着いたトーン、シネマティックなライティング、4K。" @change="store.persist()"></textarea>
+      <span>{{ t('input.concept') }}</span>
+      <textarea v-model="store.project.concept" :disabled="store.running" rows="5" :placeholder="t('input.conceptPlaceholder')" @change="store.persist()"></textarea>
     </label>
 
-    <div class="row">
+    <div class="row select-row">
       <label class="field" style="flex: 1">
-        <span>尺</span>
-        <select v-model.number="store.project.seconds" @change="store.persist()">
-          <option :value="15">15 秒</option>
-          <option :value="30">30 秒</option>
-          <option :value="60">60 秒</option>
+        <span>{{ t('input.duration') }}</span>
+        <select v-model.number="store.project.seconds" :disabled="store.running" @change="store.persist()">
+          <option :value="15">{{ t('input.seconds', { n: 15 }) }}</option>
+          <option :value="30">{{ t('input.seconds', { n: 30 }) }}</option>
+          <option :value="60">{{ t('input.seconds', { n: 60 }) }}</option>
         </select>
       </label>
       <label class="field" style="flex: 1">
-        <span>比率</span>
-        <select v-model="store.project.aspect" @change="store.persist()">
+        <span>{{ t('input.aspect') }}</span>
+        <select v-model="store.project.aspect" :disabled="store.running" @change="store.persist()">
           <option value="16:9">16:9</option>
           <option value="9:16">9:16</option>
           <option value="1:1">1:1</option>
         </select>
       </label>
       <label class="field" style="flex: 1">
-        <span>コピー言語</span>
-        <select v-model="store.project.lang" @change="store.persist()">
-          <option value="ja">日本語</option>
-          <option value="en">English</option>
+        <span>{{ t('input.copyLang') }}</span>
+        <select v-model="store.project.lang" :disabled="store.running" @change="store.persist()">
+          <option value="ja">{{ t('input.langJa') }}</option>
+          <option value="en">{{ t('input.langEn') }}</option>
         </select>
       </label>
     </div>
 
     <label class="field">
-      <span>出力先フォルダ</span>
+      <span>{{ t('input.exportDir') }}</span>
       <div class="row">
-        <input v-model="store.project.exportDir" placeholder="(未指定なら作業フォルダ)" @change="store.persist()" />
-        <button class="btn" @click="pickExport">参照</button>
+        <input v-model="store.project.exportDir" :disabled="store.running" :placeholder="t('input.exportDirPlaceholder')" @change="store.persist()" />
+        <button class="btn" :disabled="store.running" :title="t('input.pickExport')" @click="pickExport">
+          <Icon name="folder" :size="15" />
+          <span>{{ t('common.browse') }}</span>
+        </button>
       </div>
     </label>
 
     <div class="cli-line">
       <span class="chip" :class="store.cliCheck ? (store.cliCheck.found ? 'ok' : 'warn') : ''">
-        LLM: {{ store.cli.kind }} {{ store.cliCheck?.found ? store.cliCheck.version : store.cliCheck ? '見つかりません' : '検査中…' }}
+        <Icon name="terminal" :size="13" />
+        {{ t('input.llm') }} {{ store.cli.kind }} {{ store.cliCheck?.found ? store.cliCheck.version : store.cliCheck ? t('input.llmNotFound') : t('input.llmChecking') }}
       </span>
-      <span class="chip" :class="store.image.enabled ? 'accent' : ''">画像: {{ store.image.enabled ? store.image.provider : 'off' }}</span>
-      <button class="btn small" @click="emit('open-settings')">設定</button>
+      <span class="chip" :class="store.image.enabled ? 'accent' : ''">
+        <Icon name="image" :size="13" />
+        {{ t('input.image') }} {{ store.image.enabled ? store.image.provider : 'off' }}
+      </span>
+      <button class="btn small" :disabled="store.running" @click="emit('open-settings')">
+        <Icon name="settings" :size="13" />
+        <span>{{ t('common.settings') }}</span>
+      </button>
     </div>
     <div v-if="store.cliCheck && !store.cliCheck.found" class="warn" style="font-size: var(--fs-sm); margin-top: 4px">{{ store.cliCheck.error }}</div>
 
-    <div class="row" style="margin-top: 12px">
-      <button class="btn primary" :disabled="!canRun" @click="store.run()">
-        {{ store.running ? '実行中…' : '解析 → シーン構成' }}
+    <div class="row action-row" style="margin-top: 14px">
+      <!-- アプリ固有のコアボタン: テキスト「解析 → シーン構成」は維持 -->
+      <button class="btn primary run-btn" :disabled="!canRun" @click="store.run()">
+        <Icon :name="store.running ? 'refresh' : 'sparkles'" :size="16" />
+        <span>{{ store.running ? t('input.running') : t('input.run') }}</span>
       </button>
-      <button v-if="store.running" class="btn danger" @click="store.cancel()">中断</button>
+      <button v-if="store.running" class="btn danger" @click="store.cancel()">
+        <Icon name="stop" :size="14" />
+        <span>{{ t('input.cancel') }}</span>
+      </button>
     </div>
     <div v-if="store.error" class="warn" style="margin-top: 8px; white-space: pre-wrap">{{ store.error }}</div>
   </div>
@@ -107,6 +127,29 @@ const canRun = computed(
   gap: 6px;
   align-items: center;
   flex-wrap: wrap;
-  margin-top: 8px;
+  margin-top: 10px;
+}
+.select-row {
+  gap: 6px;
+}
+.select-row .field {
+  min-width: 0;
+}
+.select-row select {
+  font-size: var(--fs-xs);
+  padding: 6px 4px 6px 8px;
+  min-height: 38px;
+}
+.action-row {
+  width: 100%;
+  margin-top: 18px;
+}
+.run-btn {
+  flex: 1;
+  min-height: 48px;
+  padding: 0 24px;
+  font-size: var(--fs-base);
+  font-weight: var(--fw-bold);
+  border-radius: var(--radius-full);
 }
 </style>

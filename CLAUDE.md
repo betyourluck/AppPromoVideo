@@ -72,8 +72,8 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 ## 現状 (2026-09-11)
 
-- **spec 01 は Phase 0〜E 着地、rev29 (試行) まで反映済み。** crates 159 green / vitest 38 / backend 15 green・clippy clean。
-- コミットは Initial `a75c3bc` の上に 33 本。`origin/main` には rev26 まで push 済み — **rev27〜29 (UI の試行) は一時コミットで未 push** (private。**週末に public 予定**)。
+- **spec 01 は Phase 0〜E 着地、rev30 まで反映済み (rev27〜29 は試行)。** crates 159 green / vitest 60 / backend 15 green・clippy clean。
+- コミットは Initial `a75c3bc` の上に 34 本。`origin/main` には rev26 まで push 済み — **rev27〜29 (UI の試行、一時コミット) と rev30 (デザインの修正・多言語化) は未 push** (private。**週末に public 予定**)。
 - 通し (解析 → 構成 → 参照画像 → 合成) は **4 リポジトリで live 成功** (Kataribe / Verificator /
   AppPromoVideo 自身 / Fuseforks)。**出口まで到達** — MiniMax i2v の 15 秒が X に投稿された (2026-09-09)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
@@ -117,12 +117,21 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 **2026-09-11、ユーザーが最初の手を出した**: 文字を少し大きく (大きさをトークン化して +1px) と、3 つの列の枠を外す (rev27、試行中)。
 続けて書体を IBM Plex Sans JP の Bold に、文字を 1.5 倍に (rev28、試行中)。
 さらに見出し 1.5 倍・項目 1.25 倍に分け、説明文 (`.muted`) とログを Medium に (rev29、試行中)。
+**同日、ユーザーがデザインを修正し UI を多言語化した** (会話の外。書体 Inter + Noto Sans JP / 太さ 500・600・700 / 形のトークン / アイコン / ja・en・zh-CN)。
+こちらは差分を検めて回収した (rev30、spec 01 の 122〜127): 消えた `--fs-h-xl` / 書体の同梱 / 多言語化の残り / `<b>`・`<mono>` / キーの型 / `t()` の置換。
 **文字は `main.css` のトークンを参照する** — 大きさ 項目 `--fs-*` (倍率 `--fs-scale`) / 見出し `--fs-h-*` (倍率 `--fs-scale-heading`) / 太さ `--fw-*` / 書体 `--font-ui`。部品に直書きしない。
-**タイトルバーのアプリ名は試行の対象外** — `--font-chrome` / `--fs-chrome` / `--fw-chrome` で試行前の値に固定 (ユーザー判断)。
-**試行の未決 (2026-09-11 一時コミット時点)**: ①rev27〜29 の採否 ②Plex の同梱 (公開前に判断。今は入っていない環境で Segoe UI に落ちる)
-③WebView2 がユーザーごとにインストールしたフォントを拾えているか (未確認) ④`.muted` (47 か所) に巻き込まれた表の列・ラベルを戻すか
-⑤ログの「medium」を太さと解釈した件 ⑥タイトルバーの「実行中」chip の大きさ (項目の倍率のまま)。
-**Plex は同梱していない** (この機体にはユーザーごとのフォントとして入っている)。
+フォールバックの無い `var(--x)` には定義が要る (`cssTokens.test.ts`)。
+**タイトルバーのアプリ名は倍率の対象外** — `--font-chrome` / `--fs-chrome` / `--fw-chrome` (rev29 で試行前の値に固定、rev30 のデザイン修正で Inter / 14px / 600)。
+**書体は同梱する** (rev30、`@fontsource-variable` の Inter / Noto Sans JP を main.ts で import)。宣言名は `Inter Variable` / `Noto Sans JP Variable`。
+**外から読まない** — CSP が通さない (`fonts.test.ts` が網)。
+**画面の文言は `i18n.ts` の辞書を通す** — ja が正本、en / zh-CN は `Record<MessageKey, string>` で型で縛る。強調・等幅は文言に `<b>` / `<mono>` と書いて
+`Rich.vue` で出す (`v-html` は使わない)。コードに日本語を直書きしない (`noHardcodedJapanese.test.ts`。対象外は settings.ts のフォント名と `console.*`)。
+backend 由来のログ・エラーの文言は日本語のまま。
+**試行の未決 (2026-09-11 rev30 時点)**: ①rev27〜30 の採否 (rev30 は GUI 未目視 — 同梱の書体で出るか、英語で溢れないか)
+②en / zh-CN の訳は私が書いた (未査読) ③`.muted` (47 か所) に巻き込まれた表の列・ラベルを戻すか ④ログの「medium」を太さと解釈した件
+⑤タイトルバーの「実行中」chip の大きさ ⑥既存の文言の不具合 2 点を直すか (設定の説明が `**全シーンの既定**` のまま / 「既定は OFF」が実際の ON と違う)
+⑦ユーザーが先に作った未使用キー 17 個を消すか。
+旧 ②Plex の同梱 と旧 ③WebView2 がユーザーごとのフォントを拾うか は、rev30 で書体を同梱にしたので閉じた。
 現状の形は 3 ペイン + ダイアログ 3 種 (設定 / 履歴 / シーン編集) で、rev16〜21 で
 シーン編集の中身が増えた。**2026-09-11 に初めてメイン画面のスクリーンショットを見た** — 観察 3 点は
 `history.md` の同日エントリ (特に「`画像: off` と `参照画像を生成` が別ペインに離れている」は見本が無くても直せる)。
@@ -137,6 +146,6 @@ rev14 のコミット `5929f93` に巻き込んだ。実害は無いが粒度が
 
 ## 再開の手順
 
-1. `cargo test --workspace` (159 green) と `cd app && npx vitest run` (38 green) で足場を確認。
+1. `cargo test --workspace` (159 green) と `cd app && npx vitest run` (60 green) で足場を確認。
 2. `git log --oneline -5` で直前の着地を見る。詳しい経緯は `history.md`。
 3. 上の「開いている判断」に答えが来ていないか確認してから着手する。

@@ -4,6 +4,8 @@
  * 画像は data URL (backend の image_data_url)。
  */
 import { computed, onBeforeUnmount, onMounted } from "vue";
+import { t } from "../i18n";
+import Icon from "./Icon.vue";
 
 export interface LightboxItem {
   url: string;
@@ -35,18 +37,28 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 
 <template>
   <div class="lb" @click.self="emit('close')">
-    <button v-if="items.length > 1" class="nav left" title="前 (←)" @click="go(-1)">‹</button>
+    <button v-if="items.length > 1" class="nav left" :title="t('lightbox.prev')" @click="go(-1)">
+      <Icon name="chevron-left" :size="32" stroke-width="2.2" />
+    </button>
     <figure v-if="cur" class="fig">
       <img :src="cur.url" :alt="cur.title" />
       <figcaption>
         <span class="title">{{ cur.title }}</span>
         <span v-if="cur.subtitle" class="muted"> — {{ cur.subtitle }}</span>
         <span class="muted"> ({{ index + 1 }}/{{ items.length }})</span>
-        <button v-if="removable" class="btn small danger" style="margin-left: 10px" @click="emit('remove', cur.key)">この画像を外す</button>
-        <button class="btn small" style="margin-left: 6px" @click="emit('close')">閉じる (Esc)</button>
+        <button v-if="removable" class="btn small danger" style="margin-left: 10px" @click="emit('remove', cur.key)">
+          <Icon name="trash" :size="13" />
+          <span>{{ t('lightbox.removeThis') }}</span>
+        </button>
+        <button class="btn small" style="margin-left: 6px" @click="emit('close')">
+          <Icon name="x" :size="13" />
+          <span>{{ t('lightbox.close') }}</span>
+        </button>
       </figcaption>
     </figure>
-    <button v-if="items.length > 1" class="nav right" title="次 (→)" @click="go(1)">›</button>
+    <button v-if="items.length > 1" class="nav right" :title="t('lightbox.next')" @click="go(1)">
+      <Icon name="chevron-right" :size="32" stroke-width="2.2" />
+    </button>
   </div>
 </template>
 
@@ -54,11 +66,17 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 .lb {
   position: fixed;
   inset: 0;
-  background: rgb(0 0 0 / 0.78);
+  background: rgb(0 0 0 / 0.82);
+  backdrop-filter: blur(12px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 60;
+  animation: lbFade 0.15s ease-out;
+}
+@keyframes lbFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 .fig {
   margin: 0;
@@ -67,15 +85,16 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 .fig img {
   max-width: 92vw;
   max-height: 82vh;
   object-fit: contain;
-  border-radius: 8px;
-  box-shadow: 0 10px 40px rgb(0 0 0 / 0.6);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.65);
   background: #111;
+  border: 1px solid rgb(255 255 255 / 0.1);
 }
 figcaption {
   color: #eee;
@@ -84,6 +103,7 @@ figcaption {
   align-items: center;
   flex-wrap: wrap;
   justify-content: center;
+  gap: 4px;
 }
 .title {
   font-weight: var(--fw-semi);
@@ -92,17 +112,21 @@ figcaption {
   position: fixed;
   top: 50%;
   transform: translateY(-50%);
-  width: 48px;
-  height: 96px;
+  width: 44px;
+  height: 80px;
   border: none;
   background: rgb(255 255 255 / 0.08);
   color: #fff;
-  font-size: 40px;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--trans-fast);
 }
 .nav:hover {
-  background: rgb(255 255 255 / 0.2);
+  background: rgb(255 255 255 / 0.22);
+  transform: translateY(-50%) scale(1.05);
 }
 .left {
   left: 16px;

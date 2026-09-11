@@ -17,6 +17,9 @@ import type { FontEntry } from "../types";
 import { baseName as fileName, snapshotChoices } from "../snapshots";
 import { tiltLabel, tiltValue } from "../plate";
 import { ask, isMessageBoxOpen } from "../dialog";
+import { t } from "../i18n";
+import Icon from "./Icon.vue";
+import Rich from "./Rich.vue";
 
 const props = defineProps<{
   sceneId: number;
@@ -112,7 +115,7 @@ async function chooseSnapshot(e: Event) {
  * それは撮り直しなので、そう名乗る (同じファイル名が 2 行並ぶ理由を出す)。
  */
 function choiceLabel(path: string): string {
-  return props.snapshots.includes(path) ? "撮り直し" : "入力に追加";
+  return props.snapshots.includes(path) ? t("caption.retaken") : t("caption.addedFromInput");
 }
 
 /** 選択中が一覧の何番目か (run の番号ではなく表示上の位置)。 */
@@ -226,7 +229,7 @@ function onUp(e: PointerEvent) {
 
 /** スライダーの値 (`null` = 未指定 = 既定のまま)。 */
 function show(v: number | null, unit = ""): string {
-  return v === null ? "既定" : `${v}${unit}`;
+  return v === null ? t("caption.default") : `${v}${unit}`;
 }
 function num(e: Event): number {
   return Number((e.target as HTMLInputElement).value);
@@ -254,10 +257,10 @@ async function askClose() {
   if (
     dirty.value &&
     !(await ask({
-      title: "未適用の変更",
-      message: "適用していない変更があります。閉じますか？",
-      ok: "閉じる",
-      cancel: "編集に戻る",
+      title: t("caption.unsavedTitle"),
+      message: t("caption.unsavedMessage"),
+      ok: t("common.close"),
+      cancel: t("caption.backToEdit"),
     }))
   )
     return;
@@ -310,7 +313,7 @@ async function toggle() {
     try {
       fonts.value = await invoke<FontEntry[]>("list_fonts");
     } catch (e) {
-      store.push("error", `フォント一覧を取れません: ${e}`);
+      store.push("error", t("caption.fontListFailed", { error: String(e) }));
     }
   }
 }
@@ -371,8 +374,11 @@ function restoreCopy() {
 
 <template>
   <div class="cap">
-    <!-- rev24: mood にも面を足せるので、どのシーンも開ける (以前は文も面も無いと押せなかった)。 -->
-    <button class="btn small" @click="toggle">{{ hasText ? "見出し / はめ込み" : "はめ込み" }}…</button>
+    <!-- rev24: mood にも面を足せるので、どのシーンも開ける (以前は文も面も無いと押せなかった)。アプリ固有ボタンのためテキスト保持 -->
+    <button class="btn small" :disabled="store.running" @click="toggle">
+      <Icon name="edit" :size="13" />
+      <span>{{ hasText ? t('scene.captionAndPlate') : t('scene.plateOnly') }}</span>
+    </button>
   </div>
 
   <!-- 結果ペインは overflow: auto の列なので、ダイアログは body へ出す。 -->
@@ -381,10 +387,13 @@ function restoreCopy() {
       <div class="dlg panel">
         <div class="row" style="justify-content: space-between">
           <b>
-            シーン {{ sceneId }} — {{ hasText ? "見出し / はめ込み" : "はめ込み" }}
+            {{ t('caption.title', { id: sceneId }) }}
             <span class="muted" style="font-weight: 400">({{ isProduct ? "product" : "mood" }})</span>
           </b>
-          <button class="btn small" @click="askClose">閉じる</button>
+          <button class="btn small" :title="t('common.close')" @click="askClose">
+            <Icon name="x" :size="14" />
+            <span>{{ t('common.close') }}</span>
+          </button>
         </div>
 
         <div class="cols">
@@ -397,7 +406,7 @@ function restoreCopy() {
                 :class="{ draggable: hasPlate }"
                 :src="store.imageUrls[sceneId]"
                 :alt="`scene ${sceneId}`"
-                :title="hasPlate ? 'ドラッグで位置を動かす' : ''"
+                :title="hasPlate ? t('caption.dragHint') : ''"
                 @pointerdown.prevent="onDown"
                 @pointermove="onMove"
                 @pointerup="onUp"
@@ -409,29 +418,28 @@ function restoreCopy() {
                 <rect v-for="(r, i) in captionRects" :key="i" class="cap-box" :x="r.x" :y="r.y" :width="r.w" :height="r.h" />
               </svg>
             </div>
-            <p v-else class="muted note">このシーンにはまだ画像がありません。</p>
-            <p class="muted note">
-              出ているのは<b>焼き上がり</b>です。<b>絵が変わるのは「適用」を押した時だけ</b>
-              (再合成は原寸で 0.6 秒ほどかかるので、スライダーとドラッグは値を変えるだけ)。
-              いじっている間は<b>予定位置を枠で重ねます</b> — 見出しは行ごとの枠<template v-if="hasPlate">、面は台形</template> (適用すると消えます)。
-            </p>
+            <p v-else class="muted note">{{ t('caption.noImage') }}</p>
+            <p class="muted note"><Rich :text="t(hasPlate ? 'caption.stageNote' : 'caption.stageNoteNoPlate')" /></p>
           </div>
 
           <!-- 右: つまみ。縦に長いのでここだけスクロールさせる。 -->
           <div class="ctl-col">
             <label class="field">
-              <span>コピー文 (画像に焼かれ、scenes.md にも出ます)</span>
-              <textarea v-model="copy" rows="2" placeholder="空にすると見出しを焼きません" @input="touch()" />
+              <span>{{ t('caption.copyLabel') }}</span>
+              <textarea v-model="copy" rows="2" :placeholder="t('caption.copyPlaceholder')" @input="touch()" />
             </label>
             <div v-if="originalCopy !== null && copy !== originalCopy" class="row" style="gap: 4px">
-              <button class="btn small" @click="restoreCopy">最初の文に戻す</button>
-              <span class="muted" style="font-size: var(--fs-sm)">元: {{ originalCopy }}</span>
+              <button class="btn small" @click="restoreCopy">
+                <Icon name="undo" :size="12" />
+                <span>{{ t('caption.restoreFirst') }}</span>
+              </button>
+              <span class="muted" style="font-size: var(--fs-sm)">{{ t('caption.originalPrefix', { text: originalCopy ?? '' }) }}</span>
             </div>
 
             <template v-if="copy.trim()">
-              <p v-if="!fonts.length" class="muted note">フォント一覧を読み込み中…</p>
+              <p v-if="!fonts.length" class="muted note">{{ t('caption.fontsLoading') }}</p>
               <label class="field">
-                <span>フォント</span>
+                <span>{{ t('caption.font') }}</span>
                 <select v-model="fontKey" @change="touch()">
                   <option v-for="f in fonts" :key="f.path + f.index" :value="`${f.path}#${f.index}`">
                     {{ f.has_japanese ? "🇯🇵 " : "" }}{{ f.family }}
@@ -440,16 +448,16 @@ function restoreCopy() {
               </label>
               <div class="row">
                 <label class="field" style="flex: 1">
-                  <span>大きさ <b class="mono">{{ sizeRatio.toFixed(3) }}</b></span>
+                  <span>{{ t('caption.size') }} <b class="mono">{{ sizeRatio.toFixed(3) }}</b></span>
                   <input v-model.number="sizeRatio" type="range" min="0.02" max="0.2" step="0.005" @input="touch()" />
                 </label>
                 <label class="field" style="flex: 1">
-                  <span>色</span>
+                  <span>{{ t('caption.color') }}</span>
                   <input v-model="color" type="color" @change="touch()" />
                 </label>
               </div>
               <label class="field">
-                <span>見出しの縦位置 <b class="mono">{{ show(capY) }}</b></span>
+                <span>{{ t('caption.captionY') }} <b class="mono">{{ show(capY) }}</b></span>
                 <input
                   :value="capY ?? (position === 'top' ? 0.06 : 0.85)"
                   type="range"
@@ -462,65 +470,63 @@ function restoreCopy() {
             </template>
 
             <!-- rev24: はめ込みは mood でも足せる。種別 (cut_kind) は書き換えない。 -->
-            <h4 class="sub" style="margin: 4px 0 0">はめ込み</h4>
+            <h4 class="sub" style="margin: 4px 0 0">{{ t('caption.plate') }}</h4>
             <label class="field">
-              <span>使うスナップショット{{ copying ? " (取り込み中…)" : "" }}</span>
+              <span>{{ t('caption.snapshot') }}{{ copying ? t('caption.importing') : "" }}</span>
               <select :value="chosen" :disabled="copying" @change="chooseSnapshot">
                 <option value="">
-                  {{ isProduct ? `LLM の選択のまま (${(llmSnapshot ?? 0) + 1} 枚目)` : "はめ込みなし (絵のまま)" }}
+                  {{ isProduct ? t('caption.llmChoice', { n: (llmSnapshot ?? 0) + 1 }) : t('caption.noPlate') }}
                 </option>
                 <option v-for="(c, i) in choices" :key="c.path + i" :value="i">
-                  {{ c.inRun ? `${(c.index ?? 0) + 1} 枚目` : choiceLabel(c.path) }} — {{ fileName(c.path) }}
+                  {{ c.inRun ? t('caption.nth', { n: (c.index ?? 0) + 1 }) : choiceLabel(c.path) }} — {{ fileName(c.path) }}
                 </option>
               </select>
             </label>
-            <p class="muted note">
-              左の<b>スナップショット</b>に足した画像もここに出ます (「入力に追加」)。選ぶとこの run に写します。
-              <b>撮り直し</b>は同じ名前で 2 行並びます — 上が run に写した時のもの、下が今のファイル。
-            </p>
-            <p v-if="!isProduct" class="muted note">
-              このシーンは <b>mood</b> (情景) なので、素材は背景ではなく<b>絵そのもの</b>です。
-              空きの無いところに置くと絵に重なるので、<b>大きさと位置で逃がしてください</b>。
-              種別は変えないので、参照画像を作り直すと絵は元のまま出ます。
-            </p>
+            <p class="muted note"><Rich :text="t('caption.snapshotNote')" /></p>
+            <p v-if="!isProduct" class="muted note"><Rich :text="t('caption.moodNote')" /></p>
 
             <template v-if="hasPlate">
               <label class="field">
-                <span>左右の傾き <b class="mono">{{ tiltLabel(yaw, baseTilt[0]) }}</b></span>
+                <span>{{ t('caption.yaw') }} <b class="mono">{{ tiltLabel(yaw, baseTilt[0]) }}</b></span>
                 <input :value="tiltValue(yaw, baseTilt[0])" type="range" min="-35" max="35" step="1"
                        @input="yaw = num($event); touch()" />
               </label>
               <label class="field">
-                <span>上下の傾き <b class="mono">{{ tiltLabel(pitch, baseTilt[1]) }}</b></span>
+                <span>{{ t('caption.pitch') }} <b class="mono">{{ tiltLabel(pitch, baseTilt[1]) }}</b></span>
                 <input :value="tiltValue(pitch, baseTilt[1])" type="range" min="-35" max="35" step="1"
                        @input="pitch = num($event); touch()" />
               </label>
               <label class="field">
-                <span>大きさ <b class="mono">{{ show(ratio) }}</b></span>
+                <span>{{ t('caption.size') }} <b class="mono">{{ show(ratio) }}</b></span>
                 <input :value="ratio ?? 0.78" type="range" min="0.2" max="0.95" step="0.01" @input="ratio = num($event); touch()" />
               </label>
               <label class="field">
-                <span>横位置 <b class="mono">{{ show(dx) }}</b></span>
+                <span>{{ t('caption.x') }} <b class="mono">{{ show(dx) }}</b></span>
                 <input :value="dx ?? 0" type="range" min="-0.4" max="0.4" step="0.01" @input="dx = num($event); touch()" />
               </label>
               <label class="field">
-                <span>縦位置 <b class="mono">{{ show(dy) }}</b></span>
+                <span>{{ t('caption.y') }} <b class="mono">{{ show(dy) }}</b></span>
                 <input :value="dy ?? 0" type="range" min="-0.4" max="0.4" step="0.01" @input="dy = num($event); touch()" />
               </label>
-              <p class="muted note"><b>縦位置を動かすと見出しの帯のずらしを置き換えます。</b></p>
+              <p class="muted note"><Rich :text="t('caption.yNote')" /></p>
             </template>
           </div>
         </div>
 
         <div class="row foot">
-          <button class="btn small" :class="{ on: dirty }" :disabled="busy" @click="apply">
-            {{ busy ? "焼き直し中…" : dirty ? "適用 (未反映)" : "適用" }}
+          <button class="btn small primary" :class="{ on: dirty }" :disabled="busy" @click="apply">
+            <Icon :name="busy ? 'refresh' : 'check'" :size="13" />
+            <span>{{ busy ? "..." : dirty ? `${t('caption.apply')} (*)` : t('caption.apply') }}</span>
           </button>
-          <button class="btn small" :disabled="busy" @click="reset">既定に戻す</button>
-          <button v-if="hasText" class="btn small" :disabled="busy" @click="clear">見出しを消す</button>
-          <span class="muted note" style="margin-left: auto">
-            背景から合成をやり直すので、何度変えても劣化しません。生成の費用もかかりません。
-          </span>
+          <button class="btn small" :disabled="busy" @click="reset">
+            <Icon name="undo" :size="13" />
+            <span>{{ t('caption.reset') }}</span>
+          </button>
+          <button v-if="hasText" class="btn small danger" :disabled="busy" @click="clear">
+            <Icon name="trash" :size="13" />
+            <span>{{ t('caption.removeCaption') }}</span>
+          </button>
+          <span class="muted note" style="margin-left: auto">{{ t('caption.footNote') }}</span>
         </div>
       </div>
     </div>
@@ -534,7 +540,8 @@ function restoreCopy() {
 .backdrop {
   position: fixed;
   inset: 0;
-  background: rgb(0 0 0 / 0.5);
+  background: var(--backdrop, rgb(0 0 0 / 0.65));
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -544,10 +551,12 @@ function restoreCopy() {
 .dlg {
   width: min(1400px, 96vw);
   max-height: 92vh;
-  padding: 14px;
+  padding: 20px;
+  border-radius: var(--radius-dialog);
+  box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 .cols {
   flex: 1;

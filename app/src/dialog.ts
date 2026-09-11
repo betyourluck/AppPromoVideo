@@ -8,6 +8,7 @@
  * (2 つを重ねて出すと、どちらに答えたのか分からなくなる)。
  */
 import { reactive } from "vue";
+import { t } from "./i18n";
 
 export interface AskOptions {
   message: string;
@@ -51,9 +52,9 @@ export function ask(opts: AskOptions): Promise<boolean> {
     waiting.push({
       shown: {
         message: opts.message,
-        title: opts.title ?? "確認",
-        ok: opts.ok ?? "OK",
-        cancel: opts.cancel ?? "キャンセル",
+        title: opts.title ?? t("common.confirm"),
+        ok: opts.ok ?? t("common.ok"),
+        cancel: opts.cancel ?? t("common.cancel"),
         danger: opts.danger ?? false,
       },
       resolve,
