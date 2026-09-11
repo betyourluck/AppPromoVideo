@@ -70,10 +70,10 @@ cd app && npx vitest run && npm run build    # frontend の単体テストと型
 cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 ```
 
-## 現状 (2026-09-10)
+## 現状 (2026-09-11)
 
-- **spec 01 は Phase 0〜E 着地、rev23 まで反映済み。** crates 152 green / vitest 32 / backend 15 green・clippy clean。
-- コミットは Initial `a75c3bc` の上に 28 本、`origin/main` に push 済み (private。**週末に public 予定**)。
+- **spec 01 は Phase 0〜E 着地、rev24 まで反映済み。** crates 154 green / vitest 32 / backend 15 green・clippy clean。
+- コミットは Initial `a75c3bc` の上に 30 本、`origin/main` に push 済み (private。**週末に public 予定**)。
 - 通し (解析 → 構成 → 参照画像 → 合成) は **4 リポジトリで live 成功** (Kataribe / Verificator /
   AppPromoVideo 自身 / Fuseforks)。**出口まで到達** — MiniMax i2v の 15 秒が X に投稿された (2026-09-09)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
@@ -85,7 +85,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 |---|---|
 | コピー文 | 書き換え + 「最初の文に戻す」(`original_copy` に LLM の初出を控えてある) |
 | 見出し | フォント / 大きさ / 色 / **縦位置を数値で** (`y_ratio`)。上下の選択は rev18 で撤去 (縦位置が上位互換。面が避ける側は `effective_position` が `y_ratio` から導く) |
-| はめ込み | **傾き (yaw・pitch) — つまみは実効値を指す** (`0° (正面)` / `18° (LLM)` / `18°`。rev21) / 大きさ / 横位置 / 縦位置 / **使うスナップショットの選び直し** — 一覧には左の入力ペインに**後から足した画像も出る** (選ぶとその run に写す、rev20)。取り込み口は入力ペイン 1 つ。**同じパスで撮り直したものも出る** — 同じ名前が 2 行並び、下が今のファイル (rev23) |
+| はめ込み | **傾き (yaw・pitch) — つまみは実効値を指す** (`0° (正面)` / `18° (LLM)` / `18°`。rev21) / 大きさ / 横位置 / 縦位置 / **使うスナップショットの選び直し** — 一覧には左の入力ペインに**後から足した画像も出る** (選ぶとその run に写す、rev20)。取り込み口は入力ペイン 1 つ。**同じパスで撮り直したものも出る** — 同じ名前が 2 行並び、下が今のファイル (rev23)。**mood にも足せる** — 既定は「はめ込みなし (絵のまま)」で、選ぶと面が乗る。`cut_kind` は書き換えない (rev24) |
 
 やり直しは `<run>/base/` の**素材**(product は背景 / mood は絵) から**合成ごと**行う。
 **生成 API は呼ばない** = 無料・無劣化。焼き直しは「適用」を押した時だけ (実測 debug 0.64 s / release 0.25 s)。
@@ -111,7 +111,9 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 到達したので、次は使い勝手。ユーザーが X で今どきの UI デザインを探して持ち込む予定 —
 **参照が来てから着手する** (こちらで先に作り込まない)。
 現状の形は 3 ペイン + ダイアログ 3 種 (設定 / 履歴 / シーン編集) で、rev16〜21 で
-シーン編集の中身が増えた。**私は画面を見ていないので、どこが複雑かの判断材料を持っていない。**
+シーン編集の中身が増えた。**2026-09-11 に初めてメイン画面のスクリーンショットを見た** — 観察 3 点は
+`history.md` の同日エントリ (特に「`画像: off` と `参照画像を生成` が別ペインに離れている」は見本が無くても直せる)。
+シーン編集ダイアログはまだ見ていない。
 
 **次の候補**: 傾きと可読性の境目 /
 mood カットのモチーフ一貫性 / `motion_prompt` の粒度 / ComfyUI と OpenAI の live /
@@ -122,6 +124,6 @@ rev14 のコミット `5929f93` に巻き込んだ。実害は無いが粒度が
 
 ## 再開の手順
 
-1. `cargo test --workspace` (152 green) と `cd app && npx vitest run` (30 green) で足場を確認。
+1. `cargo test --workspace` (154 green) と `cd app && npx vitest run` (32 green) で足場を確認。
 2. `git log --oneline -5` で直前の着地を見る。詳しい経緯は `history.md`。
 3. 上の「開いている判断」に答えが来ていないか確認してから着手する。

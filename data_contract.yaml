@@ -263,6 +263,13 @@ PlateOverride:                      # rev11 (2026-09-09 ユーザー要望「傾
   y_offset_ratio: Option<f32>       # ±0.4。縦ずらし (正 = 下)。**指定すると見出しの帯のずらしを置き換える**
   resolution: "上書き → 無ければ帯と scene.plate_tilt から決まる既定。フィールド単位で落ちる"
   clamp: "範囲外は Rust 側で丸める (UI の入力を信用しない)"
+  whether:                          # rev24 (2026-09-11、mood にも面を足せるように)
+    where: "**`pipeline::reference::plate_snapshot_index(scene, plate) -> Option<usize>` が唯一の決定**。None = 貼らない (素材をそのまま出す)"
+    product: "人の選び直し (PlateOverride.snapshot_index) が LLM の scene.snapshot_index に勝つ (rev13)。どちらも無ければ 0 枚目"
+    mood: "**人が足した時だけ**貼る。既定は絵そのまま。LLM が mood に番号を書いていても無視する (契約では null。それを根拠に貼ると誰も足していないのに面が出る)"
+    no_kind_rewrite: "面を足しても `cut_kind` は書き換えない。書き換えると image_prompt が背景の記述でなくなり (ProductBackdropDrawsScreen と食い違う)、参照画像を作り直したときに mood の絵を失う"
+    callers: "`reburn_caption` (焼き直し) と `plate_preview` (予定位置の枠) が**両方ここを通る**。別々に同じ式を持つと枠が嘘をつく (#19 の型)"
+    material: "mood の素材は背景ではなく**絵そのもの**。空きが無い場所では絵に重なるので、大きさと位置で逃がす前提 (黙って綺麗にはならない)"
   ui: |
     rev13: スライダーとドラッグは**値を変えるだけ**。焼き直しは「適用」だけ (実測 debug 0.64 s / release 0.25 s)。
     rev14: 触っている間は**予定位置を枠で重ねる** — 座標は command `plate_preview` が
@@ -278,7 +285,10 @@ PlateOverride:                      # rev11 (2026-09-09 ユーザー要望「傾
     (上書きを書くのは backend。frontend が手元で真似ると食い違う)。
     rev18: 枠に**見出しも含む** — `plate_preview` は `caption_lines: Vec<[x,y,w,h]>` (1 行 1 枠、canvas 座標) も返す。
     出所は `image_gen::caption_layout` で、**焼き込み (`burn_caption`) がそのまま描くのと同じ結果**。
-    `quad` は Option (mood カットには面が無い)。編集中のコピー文は引数 `copy` で渡す (promo.json はまだ古い)。
+    `quad` は Option (面が無いシーンでは None — 判定は `plate_snapshot_index`、rev24)。編集中のコピー文は引数 `copy` で渡す (promo.json はまだ古い)。
+    rev24: はめ込みの節は**どのシーンにも出す**。mood の既定は「はめ込みなし (絵のまま)」で、選ぶと面が乗る。
+    つまみ (傾き / 大きさ / 位置) は**面がある時だけ**出す。編集ボタンはどのシーンでも押せる
+    (以前は文も面も無いと押せず、mood に面を足す経路が塞がっていた)。
     フォントは数 MB〜数十 MB あるので直前の 1 つだけ持ち回す (打鍵ごとに読み直さない)。
   caption_y: "rev14: `CaptionSpec.y_ratio` / `CaptionOverride.y_ratio` (canvas 高さ比 = 文字ブロックの上端)。指定すると position + 余白より優先。canvas からはみ出す値は端で丸める"
 

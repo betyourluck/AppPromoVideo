@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 1 シーンぶんの上書き — 見出し (rev9) と、はめ込み (rev11、product のみ)。
+ * 1 シーンぶんの上書き — 見出し (rev9) と、はめ込み (rev11。rev24 から mood にも足せる)。
  *
  * 設定の値が**既定**で、ここで変えたぶんだけがその scene に効く。やり直しは `base/` の
  * **素材** (product は背景 / mood は絵) から合成し直すので、**生成 API は呼ばず、劣化しない**。
@@ -42,7 +42,8 @@ const capY = ref<number | null>(null);
 const fontKey = ref(`${base.value.fontPath}#${base.value.fontIndex}`);
 
 /**
- * はめ込み (product のみ、rev11)。空欄 = 既定に従う。
+ * はめ込み (rev11)。空欄 = 既定に従う。rev24 から **mood にも足せる** — その場合の既定は
+ * 「はめ込みなし」で、スナップショットを選んだ時だけ面が乗る (`cut_kind` は書き換えない)。
  * 傾きの既定は LLM が書いた `scene.plate_tilt`、大きさとずらしの既定は見出しの帯が決める。
  */
 /** コピー文 (rev12)。画像に焼かれ、scenes.md とクリップボードにも出る文そのもの。 */
@@ -53,8 +54,15 @@ watch(
 );
 const copyChanged = computed(() => copy.value !== props.copyText);
 
-/** 使うスナップショット (rev13)。null = LLM の選択のまま。 */
+/** 使うスナップショット (rev13)。null = product なら LLM の選択のまま、mood ならはめ込みなし。 */
 const snapIndex = ref<number | null>(null);
+
+/**
+ * **面が乗るか** (rev24)。product は常に乗る。mood は**人が足した時だけ**。
+ * `isProduct` (LLM が決めた種別) と分けているのは、種別を書き換えずに面だけ足せるようにするため —
+ * 書き換えると `image_prompt` が背景の記述でなくなり、再生成したときに mood の絵を失う。
+ */
+const hasPlate = computed(() => props.isProduct || snapIndex.value !== null);
 
 /**
  * 選べる一覧 (rev20) = run に写してあるもの + **入力ペインで後から足したもの**。
@@ -134,7 +142,8 @@ const preview = ref<HTMLImageElement | null>(null);
 
 /**
  * **予定位置** — 面 (rev14) と見出し (rev18)。座標は backend が合成・焼き込みと同じ関数から出す。
- * 射影も版組みもここに写さない (写すと必ず食い違う)。mood カットには面が無いので `quad` は null。
+ * 射影も版組みもここに写さない (写すと必ず食い違う)。面が無いシーンでは `quad` は null
+ * (判定は backend の `plate_snapshot_index`、rev24)。
  */
 interface Preview {
   canvas: [number, number];
@@ -193,7 +202,7 @@ const captionRects = computed(() => {
 let drag: { x: number; y: number; dx: number; dy: number } | null = null;
 
 function onDown(e: PointerEvent) {
-  if (!props.isProduct || !preview.value) return;
+  if (!hasPlate.value || !preview.value) return;
   drag = { x: e.clientX, y: e.clientY, dx: dx.value ?? 0, dy: dy.value ?? 0 };
   (e.target as HTMLElement).setPointerCapture(e.pointerId);
 }
@@ -281,7 +290,7 @@ async function toggle() {
   // **毎回**取りに行く (実効の傾きが要るので、フォントを読み込み済みでも省かない)。
   refreshQuad();
   // 撮り直しはアプリの外で起きる。開く直前に数えないと古い写しが選ばれ続ける (rev23)。
-  if (props.isProduct) store.refreshStaleSnapshots();
+  store.refreshStaleSnapshots();
   if (!fonts.value.length) {
     try {
       fonts.value = await invoke<FontEntry[]>("list_fonts");
@@ -347,14 +356,8 @@ function restoreCopy() {
 
 <template>
   <div class="cap">
-    <button
-      class="btn small"
-      :disabled="!hasText && !isProduct"
-      :title="hasText || isProduct ? '' : 'このシーンには copy_text も、はめ込むスクショもありません'"
-      @click="toggle"
-    >
-      {{ hasText ? (isProduct ? "見出し / はめ込み" : "見出し") : "はめ込み" }}…
-    </button>
+    <!-- rev24: mood にも面を足せるので、どのシーンも開ける (以前は文も面も無いと押せなかった)。 -->
+    <button class="btn small" @click="toggle">{{ hasText ? "見出し / はめ込み" : "はめ込み" }}…</button>
   </div>
 
   <!-- 結果ペインは overflow: auto の列なので、ダイアログは body へ出す。 -->
@@ -363,7 +366,7 @@ function restoreCopy() {
       <div class="dlg panel">
         <div class="row" style="justify-content: space-between">
           <b>
-            シーン {{ sceneId }} — {{ hasText ? (isProduct ? "見出し / はめ込み" : "見出し") : "はめ込み" }}
+            シーン {{ sceneId }} — {{ hasText ? "見出し / はめ込み" : "はめ込み" }}
             <span class="muted" style="font-weight: 400">({{ isProduct ? "product" : "mood" }})</span>
           </b>
           <button class="btn small" @click="askClose">閉じる</button>
@@ -376,10 +379,10 @@ function restoreCopy() {
               <img
                 ref="preview"
                 class="preview"
-                :class="{ draggable: isProduct }"
+                :class="{ draggable: hasPlate }"
                 :src="store.imageUrls[sceneId]"
                 :alt="`scene ${sceneId}`"
-                :title="isProduct ? 'ドラッグで位置を動かす' : ''"
+                :title="hasPlate ? 'ドラッグで位置を動かす' : ''"
                 @pointerdown.prevent="onDown"
                 @pointermove="onMove"
                 @pointerup="onUp"
@@ -395,7 +398,7 @@ function restoreCopy() {
             <p class="muted note">
               出ているのは<b>焼き上がり</b>です。<b>絵が変わるのは「適用」を押した時だけ</b>
               (再合成は原寸で 0.6 秒ほどかかるので、スライダーとドラッグは値を変えるだけ)。
-              いじっている間は<b>予定位置を枠で重ねます</b> — 見出しは行ごとの枠<template v-if="isProduct">、面は台形</template> (適用すると消えます)。
+              いじっている間は<b>予定位置を枠で重ねます</b> — 見出しは行ごとの枠<template v-if="hasPlate">、面は台形</template> (適用すると消えます)。
             </p>
           </div>
 
@@ -443,21 +446,30 @@ function restoreCopy() {
               </label>
             </template>
 
-            <template v-if="isProduct">
-              <h4 class="sub" style="margin: 4px 0 0">はめ込み</h4>
-              <label class="field">
-                <span>使うスナップショット{{ copying ? " (取り込み中…)" : "" }}</span>
-                <select :value="chosen" :disabled="copying" @change="chooseSnapshot">
-                  <option value="">LLM の選択のまま ({{ (llmSnapshot ?? 0) + 1 }} 枚目)</option>
-                  <option v-for="(c, i) in choices" :key="c.path + i" :value="i">
-                    {{ c.inRun ? `${(c.index ?? 0) + 1} 枚目` : choiceLabel(c.path) }} — {{ fileName(c.path) }}
-                  </option>
-                </select>
-              </label>
-              <p class="muted note">
-                左の<b>スナップショット</b>に足した画像もここに出ます (「入力に追加」)。選ぶとこの run に写します。
-                <b>撮り直し</b>は同じ名前で 2 行並びます — 上が run に写した時のもの、下が今のファイル。
-              </p>
+            <!-- rev24: はめ込みは mood でも足せる。種別 (cut_kind) は書き換えない。 -->
+            <h4 class="sub" style="margin: 4px 0 0">はめ込み</h4>
+            <label class="field">
+              <span>使うスナップショット{{ copying ? " (取り込み中…)" : "" }}</span>
+              <select :value="chosen" :disabled="copying" @change="chooseSnapshot">
+                <option value="">
+                  {{ isProduct ? `LLM の選択のまま (${(llmSnapshot ?? 0) + 1} 枚目)` : "はめ込みなし (絵のまま)" }}
+                </option>
+                <option v-for="(c, i) in choices" :key="c.path + i" :value="i">
+                  {{ c.inRun ? `${(c.index ?? 0) + 1} 枚目` : choiceLabel(c.path) }} — {{ fileName(c.path) }}
+                </option>
+              </select>
+            </label>
+            <p class="muted note">
+              左の<b>スナップショット</b>に足した画像もここに出ます (「入力に追加」)。選ぶとこの run に写します。
+              <b>撮り直し</b>は同じ名前で 2 行並びます — 上が run に写した時のもの、下が今のファイル。
+            </p>
+            <p v-if="!isProduct" class="muted note">
+              このシーンは <b>mood</b> (情景) なので、素材は背景ではなく<b>絵そのもの</b>です。
+              空きの無いところに置くと絵に重なるので、<b>大きさと位置で逃がしてください</b>。
+              種別は変えないので、参照画像を作り直すと絵は元のまま出ます。
+            </p>
+
+            <template v-if="hasPlate">
               <label class="field">
                 <span>左右の傾き <b class="mono">{{ tiltLabel(yaw, baseTilt[0]) }}</b></span>
                 <input :value="tiltValue(yaw, baseTilt[0])" type="range" min="-35" max="35" step="1"

@@ -157,7 +157,7 @@ pub struct RefJob<'a> {
     pub plate_mode: PlateMode,
     /// scene ごとの見出しの上書き (rev9)。無ければ `caption` がそのまま既定として効く。
     pub caption_overrides: &'a std::collections::BTreeMap<u32, CaptionOverride>,
-    /// scene ごとのはめ込みの上書き (rev11)。product のみ。
+    /// scene ごとのはめ込みの上書き (rev11)。rev24 から mood にも効く (人が足した時だけ)。
     pub plate_overrides: &'a std::collections::BTreeMap<u32, PlateOverride>,
 }
 
@@ -180,6 +180,25 @@ pub fn tilt_of(mode: PlateMode, scene: &promo_core::plan::Scene) -> Option<Tilt>
     match (mode, scene.plate_tilt) {
         (PlateMode::Perspective, Some(t)) => Some(Tilt { yaw_degrees: t.yaw_degrees, pitch_degrees: t.pitch_degrees }),
         _ => None,
+    }
+}
+
+/// **このシーンで貼るスクリーンショットの番号** (rev24)。`None` = 貼らない (素材をそのまま出す)。
+///
+/// **貼るかどうかを決めるのはここだけ。** 焼き直し (`reburn_caption`) と予定位置の枠 (`plate_preview`) が
+/// 別々に同じ式を持っていたので 1 箇所に寄せた (#19 の「同じ数式を 2 つ持たない」)。
+///
+/// - `product`: 人の選び直し (`PlateOverride`) が LLM の指定に勝つ (rev13)。どちらも無ければ 0 枚目。
+/// - `mood`: **人が足した時だけ**貼る。既定は素材の絵そのまま。
+///   `cut_kind` は書き換えない — 書き換えると `image_prompt` が背景の記述でなくなり
+///   (検査 `ProductBackdropDrawsScreen` と食い違う)、再生成したときに mood の絵を失う。
+///   LLM が mood に番号を書いていても無視する (契約では null であるべき値なので、
+///   それを根拠に貼ると「誰も足していないのに面が出る」)。
+pub fn plate_snapshot_index(scene: &promo_core::plan::Scene, plate: Option<&PlateOverride>) -> Option<usize> {
+    let chosen = plate.and_then(|p| p.snapshot_index);
+    match scene.cut_kind {
+        promo_core::plan::CutKind::Product => Some(chosen.or(scene.snapshot_index).unwrap_or(0) as usize),
+        promo_core::plan::CutKind::Mood => chosen.map(|i| i as usize),
     }
 }
 
@@ -394,6 +413,51 @@ mod tests {
     use std::future::Future;
     use std::pin::Pin;
     use std::sync::Mutex;
+
+    fn a_scene(kind: CutKind, llm: Option<u32>) -> Scene {
+        Scene {
+            scene_id: 1,
+            cut_kind: kind,
+            snapshot_index: llm,
+            plate_tilt: None,
+            motion_prompt: "Slow push-in.".into(),
+            duration_seconds: 5,
+            shot_type: "Wide".into(),
+            video_prompt: "v".into(),
+            copy_text: "c".into(),
+            image_prompt: "A desk.".into(),
+            reference_image: None,
+        }
+    }
+
+    fn a_plate(idx: Option<u32>) -> PlateOverride {
+        PlateOverride { snapshot_index: idx, ..Default::default() }
+    }
+
+    /// rev24: mood にも**人が足した時だけ**面が乗る。cut_kind は書き換えない
+    /// (書き換えると image_prompt が背景の記述でなくなり、再生成で絵を失う)。
+    #[test]
+    fn a_mood_cut_takes_a_plate_only_when_a_person_adds_one() {
+        // 既定の mood は素材 (絵) をそのまま出す — ここは今までどおり。
+        assert_eq!(plate_snapshot_index(&a_scene(CutKind::Mood, None), None), None);
+        // 人が選んだら貼る。
+        assert_eq!(plate_snapshot_index(&a_scene(CutKind::Mood, None), Some(&a_plate(Some(2)))), Some(2));
+        // 外したら戻る (上書きはあるが番号が無い = はめ込みなし)。
+        assert_eq!(plate_snapshot_index(&a_scene(CutKind::Mood, None), Some(&a_plate(None))), None);
+        // LLM が mood に番号を書いていても、それだけでは貼らない (契約では null)。
+        assert_eq!(plate_snapshot_index(&a_scene(CutKind::Mood, Some(1)), None), None);
+    }
+
+    /// product 側は rev13 のまま — 人の選び直しが LLM の指定に勝ち、どちらも無ければ 0。
+    #[test]
+    fn a_product_cut_keeps_the_existing_precedence() {
+        assert_eq!(plate_snapshot_index(&a_scene(CutKind::Product, Some(1)), None), Some(1));
+        assert_eq!(plate_snapshot_index(&a_scene(CutKind::Product, Some(1)), Some(&a_plate(Some(3)))), Some(3));
+        assert_eq!(plate_snapshot_index(&a_scene(CutKind::Product, None), None), Some(0));
+        // 面の他のつまみだけを動かした上書きは、番号の決定に影響しない。
+        let only_tilt = PlateOverride { yaw_degrees: Some(10.0), ..Default::default() };
+        assert_eq!(plate_snapshot_index(&a_scene(CutKind::Product, Some(2)), Some(&only_tilt)), Some(2));
+    }
 
     /// 呼ばれた prompt / 参照枚数を記録し、n 回目に失敗する fake (Sync のため Mutex)。
     struct Fake {

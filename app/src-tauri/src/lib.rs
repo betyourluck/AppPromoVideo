@@ -701,9 +701,9 @@ fn reburn_caption(
         scene.copy_text = t.clone();
     }
     let copy_text = scene.copy_text.clone();
-    let scene_kind = scene.cut_kind;
-    let snapshot_index = scene.snapshot_index;
     let tilt = pipeline::reference::tilt_of(promo.plate_mode, scene);
+    // 面の判定に要るぶんだけ写す (promo を可変で借りたままにしないため)。
+    let scene_for_plate = scene.clone();
 
     let name = promo_core::export::reference_image_name(scene_id, 1);
     let base = pipeline::reference::base_image_path(&dir, &name);
@@ -711,14 +711,13 @@ fn reburn_caption(
         format!("素材がありません ({}): {e}。rev10 より前に作った run は焼き直せません", base.display())
     })?;
 
-    // rev10: base/ は**素材** (product は背景 / mood は絵)。product は合成からやり直すので、
-    // 見出しの位置を変えても帯が正しく取り直され、傾きもそのまま乗る。
+    // rev10: base/ は**素材** (product は背景 / mood は絵)。合成からやり直すので、見出しの位置を
+    // 変えても帯が正しく取り直され、傾きもそのまま乗る。
+    // rev24: 貼るかどうかは `plate_snapshot_index` だけが決める (mood も人が足せば貼る)。
     let canvas = pipeline::reference::image_dims(&png)?;
-    let composed = match scene_kind {
-        promo_core::plan::CutKind::Mood => png,
-        promo_core::plan::CutKind::Product => {
-            // rev13: 人が選び直した番号が LLM の指定に勝つ。
-                        let idx = plate.as_ref().and_then(|p| p.snapshot_index).or(snapshot_index).unwrap_or(0) as usize;
+    let composed = match pipeline::reference::plate_snapshot_index(&scene_for_plate, plate.as_ref()) {
+        None => png,
+        Some(idx) => {
             let shot = read_run_snapshot(&dir, idx)?;
             let l = pipeline::reference::layout_for(canvas, spec.as_ref().map(|s| s.effective_position()), tilt, plate.as_ref());
             image_gen::composite_product_cut(&png, &shot, &l)?
@@ -787,7 +786,7 @@ struct Reburned {
 struct PlatePreview {
     canvas: [u32; 2],
     /// 面の予定位置。左上・右上・右下・左下 (canvas 座標)。傾けると台形になる。
-    /// **mood カットには面が無いので `None`。**
+    /// **面が無いシーンでは `None`** (判定は `plate_snapshot_index` — rev24 から mood にも面が乗りうる)。
     quad: Option<[[f32; 2]; 4]>,
     /// 見出しの予定位置 (rev18)。1 行 1 個の `[x, y, w, h]` (canvas 座標)。
     /// 焼き込みと同じ `caption_layout` から出すので、数式の写しを TS 側に持たない。
@@ -846,12 +845,12 @@ async fn plate_preview(
     let base = std::fs::read(pipeline::reference::base_image_path(&dir, &name)).map_err(|e| format!("素材がありません: {e}"))?;
     let canvas = pipeline::reference::image_dims(&base)?;
 
-    // 面は product にしか無い (mood は絵そのものなので貼るものが無い)。
+    // 面があるかは `plate_snapshot_index` が決める — 焼き込みと同じ関数を通す (rev24)。
+    // 枠が合成と違う式を持つと枠が嘘をつく (#17 / rev18 と同じ作法)。
     let tilt = pipeline::reference::tilt_of(promo.plate_mode, scene);
-    let quad = match scene.cut_kind {
-        promo_core::plan::CutKind::Mood => None,
-        promo_core::plan::CutKind::Product => {
-            let idx = plate.as_ref().and_then(|p| p.snapshot_index).or(scene.snapshot_index).unwrap_or(0) as usize;
+    let quad = match pipeline::reference::plate_snapshot_index(scene, plate.as_ref()) {
+        None => None,
+        Some(idx) => {
             let shot_dims = pipeline::reference::image_dims(&read_run_snapshot(&dir, idx)?)?;
             let l = pipeline::reference::layout_for(canvas, spec.as_ref().map(|s| s.effective_position()), tilt, plate.as_ref());
             let q = image_gen::compose::plate_quad(&l, shot_dims);
