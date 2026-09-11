@@ -40,6 +40,9 @@ pub struct RunOk {
     pub structured: Option<Value>,
     pub cost_usd: Option<f64>,
     pub duration_ms: u64,
+    /// CLI が init 行で名乗った実際のモデル名 (rev25)。stream-json を出さない CLI では None。
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 /// 契約 `CliOutcome::Failed`。
@@ -244,7 +247,7 @@ pub async fn run(
                 on_event(CliEvent::Structured { json: v.clone() });
             }
             let text = if fold.result_text.is_empty() { fold.transcript } else { fold.result_text };
-            Ok(RunOk { text, structured, cost_usd: fold.cost_usd, duration_ms: fold.duration_ms.unwrap_or(duration_ms) })
+            Ok(RunOk { text, structured, cost_usd: fold.cost_usd, duration_ms: fold.duration_ms.unwrap_or(duration_ms), model: fold.model })
         }
         CliKind::Aider | CliKind::Custom => {
             if !status.success() {
@@ -258,7 +261,7 @@ pub async fn run(
             if let Some(v) = &structured {
                 on_event(CliEvent::Structured { json: v.clone() });
             }
-            Ok(RunOk { text, structured, cost_usd: None, duration_ms })
+            Ok(RunOk { text, structured, cost_usd: None, duration_ms, model: None })
         }
     }
 }

@@ -84,7 +84,7 @@ runner:                             # Phase A (2026-09-08 実装・PoC 9 本 + �
   not_found: "spawn の io::ErrorKind::NotFound を CliError::NotFound へ (事前の PATH 検索はしない — spawn が唯一の真実)"
 
 CliOutcome:
-  Ok { text: String, structured: Option<Value>, cost_usd: Option<f64>, duration_ms: u64 }
+  Ok { text: String, structured: Option<Value>, cost_usd: Option<f64>, duration_ms: u64, model: Option<String> }   # model = init 行の実名 (rev25)。aider / custom は None
   Failed { error: CliError, stderr_tail: String }
 
 CliError:                           # 契約 errors。UI はこの列挙で文言を出す (沈黙させない)
@@ -100,7 +100,7 @@ CliError:                           # 契約 errors。UI はこの列挙で文�
   Shape { detail: String, raw: String }   # stream-json / JSON が読めない。raw 保持 (再生成の燃料)
 
 ClaudeStreamLine:                   # claude -p --output-format stream-json の 1 行 (NDJSON)。既知の type だけ読み、未知は Stdout へ流す (捨てない)
-  system: { subtype: "init | api_retry | hook_started | hook_response | ...", session_id }
+  system: { subtype: "init | api_retry | hook_started | hook_response | ...", session_id, model }   # model (init のみ) = **解決後の**実名。`--model sonnet` でも空欄でもここは実名 (rev25、fixture で確認)
   api_retry: { attempt, max_retries, retry_delay_ms, error_status: Option<u16>, error: "authentication_failed | oauth_org_not_allowed | billing_error | rate_limit | overloaded | invalid_request | model_not_found | server_error | max_output_tokens | unknown" }
   # 2026-09-08 実測 (fixtures/claude_auth_retry_loop.jsonl、ユーザー端末): 401 は attempt 1..10 (遅延 0.5s→38s、合計約 2.5 分) を回してから assistant(error) + result(is_error) に落ちる
   early_abort: "runner は行を読むたびに stream::early_abort を評価するが、**api_retry では止めない**。初案『authentication_failed の初回再試行で打ち切る』は同日の成功 fixture (401 × 7 回の再試行の後に成功) で反証された。止めるのは終端の assistant.error (authentication_failed) だけ。再試行は stream::retry_notice で『再試行 n/max (種別, HTTP) — 待ち秒』として進捗ログに出し、待つか中断するかはユーザーが決める"
@@ -441,6 +441,16 @@ RunStats:                           # rev15。生成時の再生成ループの�
   violation_kinds: "Vec<String>。promo_core::violation_kind の値を重複なく整列。**この文字列は契約**"
   cost_usd: f64                     # analyze + plan の合計。再生成が費用に効いたかを promo.json だけで見るため
   absent: "PromoJson.run_stats は Option。**None = 記録なし** であって「1 回で通った」ではない (rev14 以前の run)"
+  models:                           # rev25 (2026-09-11)。実際に使われたモデル
+    type: "Option<Vec<String>>。analyze + plan の**全試行**で CLI が init 行に書いたモデル名を、重複なく整列"
+    resolved: "**入力した文字列ではなく解決後の名前**。`sonnet` や空欄のまま走らせても、ここには `claude-sonnet-5` のような実名が入る"
+    absent: "**None = 記録なし** (rev24 以前の run)。**Some([]) = CLI が名乗らなかった** (stream-json の init を出さない CLI)。空で埋めて区別を消さない"
+    why: |
+      エイリアス (`sonnet`) は系列の最新版に追従するので、新しい版が出ると黙って切り替わる。
+      開いている判断 1 (frontal の費用) は同じモデル同士の比較が前提なのに、それまで run はモデルを
+      **どこにも残していなかった** (2026-09-11 実測: Fuseforks の promo.json に `model` の文字列 0 件)。
+    assembly: "**`pipeline::stages::run_stats(&analyze, &plan)` が唯一の組み立て**。CLI (`promo run`) と GUI が同じ関数を通る (#18: 同じ構造体を 2 箇所で手組みしない)"
+    index: "索引 (RunRecord) にはまだ写さない。一覧に列を足す時に写す"
   violation_kind_values: |
     scene_count / total_seconds / scene_id_not_sequential / duration_out_of_range / empty_field /
     video_prompt_not_english / video_prompt_has_aspect_flag / image_prompt_mentions_input / no_product_cut /

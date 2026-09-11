@@ -394,7 +394,8 @@ async fn run_inner(app: &AppHandle, cancel: watch::Receiver<bool>, req: RunReque
         caption_overrides: Default::default(),
         plate_overrides: Default::default(),
         plate_mode: req.plate_mode,
-        run_stats: Some(promo_core::RunStats::new(r2.attempts, &r2.violations_per_attempt, r1.cost_usd + r2.cost_usd)),
+        // rev25: 組み立ては pipeline::stages::run_stats 1 箇所 (CLI の `promo run` と同じ関数)。
+        run_stats: Some(pipeline::stages::run_stats(&r1, &r2)),
     };
     // rev7: run ごとに隔離する。以前は同じパッケージを上書きして過去の出力を消していた。
     let export_dir = Path::new(&req.export_dir);

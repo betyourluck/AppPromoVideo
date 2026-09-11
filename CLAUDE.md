@@ -72,8 +72,8 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 ## 現状 (2026-09-11)
 
-- **spec 01 は Phase 0〜E 着地、rev24 まで反映済み。** crates 154 green / vitest 32 / backend 15 green・clippy clean。
-- コミットは Initial `a75c3bc` の上に 30 本、`origin/main` に push 済み (private。**週末に public 予定**)。
+- **spec 01 は Phase 0〜E 着地、rev25 まで反映済み。** crates 159 green / vitest 32 / backend 15 green・clippy clean。
+- コミットは Initial `a75c3bc` の上に 31 本。`origin/main` には rev24 まで push 済み (private。**週末に public 予定**)。
 - 通し (解析 → 構成 → 参照画像 → 合成) は **4 リポジトリで live 成功** (Kataribe / Verificator /
   AppPromoVideo 自身 / Fuseforks)。**出口まで到達** — MiniMax i2v の 15 秒が X に投稿された (2026-09-09)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
@@ -102,6 +102,8 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
    1.5 倍の説明は依然として推測。数えるには同一リポジトリ・同一スナップショットで
    perspective / frontal を各数本走らせる必要がある (LLM 費用がかかる)。
    過去の 3 行は遡って埋められない — 当時どこにも残していないため。
+   **rev25 から `RunStats.models` に実際のモデル名 (解決後) も残る**ので、比べる run が同じモデルかを
+   promo.json で確かめられる。モデル欄は再現性のため正式名 (`claude-sonnet-5` 等) を勧める。
 
 **決着 (2026-09-09)**: `PlateMode` の既定は **frontal**。MiniMax i2v の実機観測で「斜めにすると
 動画が動かしすぎる」(ユーザー)。傾ける経路は残す (設定 / `--plate perspective`)。
@@ -113,7 +115,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 現状の形は 3 ペイン + ダイアログ 3 種 (設定 / 履歴 / シーン編集) で、rev16〜21 で
 シーン編集の中身が増えた。**2026-09-11 に初めてメイン画面のスクリーンショットを見た** — 観察 3 点は
 `history.md` の同日エントリ (特に「`画像: off` と `参照画像を生成` が別ペインに離れている」は見本が無くても直せる)。
-シーン編集ダイアログはまだ見ていない。
+シーン編集ダイアログも同日に見た (rev23 / rev24 のユーザー目視。観察 2 点は `history.md`)。
 
 **次の候補**: 傾きと可読性の境目 /
 mood カットのモチーフ一貫性 / `motion_prompt` の粒度 / ComfyUI と OpenAI の live /
@@ -124,6 +126,6 @@ rev14 のコミット `5929f93` に巻き込んだ。実害は無いが粒度が
 
 ## 再開の手順
 
-1. `cargo test --workspace` (154 green) と `cd app && npx vitest run` (32 green) で足場を確認。
+1. `cargo test --workspace` (159 green) と `cd app && npx vitest run` (32 green) で足場を確認。
 2. `git log --oneline -5` で直前の着地を見る。詳しい経緯は `history.md`。
 3. 上の「開いている判断」に答えが来ていないか確認してから着手する。

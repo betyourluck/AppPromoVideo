@@ -34,6 +34,8 @@ pub struct StageReport {
     pub duration_ms: u64,
     /// 各試行で残った違反 (最後は空なら成功)。
     pub violations_per_attempt: Vec<Vec<PlanViolation>>,
+    /// 各試行で CLI が名乗ったモデル (rev25)。重複はここでは消さない — 整列と重複除去は `RunStats::new`。
+    pub models: Vec<String>,
 }
 
 fn structured_or_shape(ok: &cli_runner::runner::RunOk, what: &'static str) -> Result<Value, PipelineError> {
@@ -60,7 +62,7 @@ pub async fn analyze(
     let v = structured_or_shape(&ok, "AnalyzedSummary")?;
     let summary: AnalyzedSummary = serde_json::from_value(v.clone())
         .map_err(|e| PipelineError::Shape { what: "AnalyzedSummary", detail: e.to_string(), raw: head(&v.to_string()) })?;
-    Ok((summary, StageReport { attempts: 1, cost_usd: ok.cost_usd.unwrap_or(0.0), duration_ms: ok.duration_ms, violations_per_attempt: vec![vec![]] }))
+    Ok((summary, StageReport { attempts: 1, cost_usd: ok.cost_usd.unwrap_or(0.0), duration_ms: ok.duration_ms, violations_per_attempt: vec![vec![]], models: ok.model.clone().into_iter().collect() }))
 }
 
 /// タスク 2: シーン構成 + 検査ループ。
@@ -84,6 +86,8 @@ pub async fn plan_scenes(
         let ok = runner.run_task(&prompt, Some(&schema)).await?;
         report.cost_usd += ok.cost_usd.unwrap_or(0.0);
         report.duration_ms += ok.duration_ms;
+        // rev25: CLI が名乗ったモデルを試行ごとに積む (名乗らない CLI では何も足さない)。
+        report.models.extend(ok.model.clone());
         let v = structured_or_shape(&ok, "ScenePlan")?;
         let plan: ScenePlan = serde_json::from_value(v.clone())
             .map_err(|e| PipelineError::Shape { what: "ScenePlan", detail: e.to_string(), raw: head(&v.to_string()) })?;
@@ -98,6 +102,15 @@ pub async fn plan_scenes(
         prompt = format!("{base}{}", repair_suffix(&v.to_string(), &violations));
     }
     unreachable!("ループは必ず return する")
+}
+
+/// **promo.json に残す再生成の記録を組み立てる唯一の場所** (rev25)。
+///
+/// それまで CLI (`promo run`) と GUI (`start_run`) が `RunStats::new(r2.attempts, …, r1.cost_usd + r2.cost_usd)` を
+/// 別々に手で組んでいた。項目を足すたびに両側を思い出す必要があり、#18 (片側だけ直る) の再発条件だった。
+pub fn run_stats(analyze: &StageReport, plan: &StageReport) -> promo_core::RunStats {
+    let models: Vec<String> = analyze.models.iter().chain(&plan.models).cloned().collect();
+    promo_core::RunStats::new(plan.attempts, &plan.violations_per_attempt, analyze.cost_usd + plan.cost_usd, &models)
 }
 
 #[cfg(test)]
@@ -130,8 +143,16 @@ mod tests {
         ) -> Pin<Box<dyn Future<Output = Result<RunOk, RunFailed>> + Send + 'a>> {
             self.prompts.lock().unwrap().push(prompt.to_string());
             let v = self.replies.lock().unwrap().remove(0);
+            // 何回目の呼び出しかをモデル名に写す (試行をまたいで運ばれるかを見分けるため)。
+            let n = self.prompts.lock().unwrap().len();
             Box::pin(async move {
-                Ok(RunOk { text: v.to_string(), structured: Some(v), cost_usd: Some(0.01), duration_ms: 10 })
+                Ok(RunOk {
+                    text: v.to_string(),
+                    structured: Some(v),
+                    cost_usd: Some(0.01),
+                    duration_ms: 10,
+                    model: Some(format!("model-{n}")),
+                })
             })
         }
     }
@@ -193,6 +214,43 @@ mod tests {
         assert!(prompts[1].contains("mentions the input (`screenshot`)"));
         assert!(prompts[1].contains("Same as the screenshot"), "前回の出力を添えて直させる");
         assert!((r.cost_usd - 0.02).abs() < 1e-9, "コストは試行の合計");
+    }
+
+    /// rev25: 試行ごとに CLI が名乗ったモデルを落とさず運ぶ (再生成の途中で変わっても残る)。
+    #[tokio::test]
+    async fn models_named_by_the_cli_are_carried_across_attempts() {
+        let bad = plan(vec![scene(1, "Same as the screenshot"), scene(2, "ok"), scene(3, "ok")]);
+        let good = plan(vec![scene(1, "A desk"), scene(2, "ok"), scene(3, "ok")]);
+        let fake = Fake::new(vec![bad, good]);
+        let (_, r) = plan_scenes(&fake, &summary(), "concept", 15, Aspect::Landscape, Language::Ja, &[], PlateMode::default()).await.unwrap();
+        assert_eq!(r.models, vec!["model-1".to_string(), "model-2".to_string()]);
+        let fake = Fake::new(vec![serde_json::to_value(summary()).unwrap()]);
+        let (_, a) = analyze(&fake, "BRIEF", "concept", Language::Ja).await.unwrap();
+        assert_eq!(a.models, vec!["model-1".to_string()]);
+    }
+
+    /// `run_stats` は**全項目**を運ぶ (#18 の処方: 組み立てを関数にして全フィールドを写す PoC を 1 本)。
+    #[test]
+    fn run_stats_carries_every_field_from_both_stages() {
+        let analyze = StageReport {
+            attempts: 1,
+            cost_usd: 0.3,
+            duration_ms: 1,
+            violations_per_attempt: vec![vec![]],
+            models: vec!["claude-sonnet-5".into()],
+        };
+        let plan = StageReport {
+            attempts: 2,
+            cost_usd: 0.7,
+            duration_ms: 2,
+            violations_per_attempt: vec![vec![PlanViolation::NoProductCut], vec![]],
+            models: vec!["claude-sonnet-5".into(), "claude-sonnet-5".into()],
+        };
+        let s = run_stats(&analyze, &plan);
+        assert_eq!(s.plan_attempts, 2);
+        assert!((s.cost_usd - 1.0).abs() < 1e-9, "analyze + plan の合計");
+        assert_eq!(s.violation_kinds, vec!["no_product_cut"]);
+        assert_eq!(s.models, Some(vec!["claude-sonnet-5".to_string()]), "重複なし");
     }
 
     #[tokio::test]

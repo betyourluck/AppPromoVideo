@@ -13,7 +13,8 @@ use crate::error::CliError;
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParsedLine {
     /// `{"type":"system","subtype":"init",...}`
-    Init { session_id: String },
+    /// `model` は CLI が**実際に使う**モデル名 (rev25)。無い行は None — 空文字で埋めない。
+    Init { session_id: String, model: Option<String> },
     /// assistant の text 断片 (人が読む)。
     Text(String),
     /// assistant に `error` が付いた (例 `authentication_failed`)。本文は content[0].text。
@@ -46,6 +47,7 @@ pub fn parse_line(line: &str) -> ParsedLine {
     match v.get("type").and_then(Value::as_str) {
         Some("system") if v.get("subtype").and_then(Value::as_str) == Some("init") => ParsedLine::Init {
             session_id: v.get("session_id").and_then(Value::as_str).unwrap_or("").to_string(),
+            model: v.get("model").and_then(Value::as_str).filter(|m| !m.is_empty()).map(str::to_string),
         },
         Some("system") if v.get("subtype").and_then(Value::as_str) == Some("api_retry") => ParsedLine::ApiRetry {
             attempt: v.get("attempt").and_then(Value::as_u64).unwrap_or(0) as u32,
@@ -122,6 +124,8 @@ pub fn retry_notice(line: &ParsedLine) -> Option<String> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct StreamFold {
     pub session_id: Option<String>,
+    /// init 行が名乗った実際のモデル名 (rev25)。
+    pub model: Option<String>,
     /// assistant text を順に連結したもの (result 本文が空の時の代替)。
     pub transcript: String,
     pub result_text: String,
@@ -135,6 +139,7 @@ pub struct StreamFold {
 pub fn fold_lines<'a, I: IntoIterator<Item = &'a str>>(lines: I) -> Result<StreamFold, CliError> {
     let mut fold = StreamFold {
         session_id: None,
+        model: None,
         transcript: String::new(),
         result_text: String::new(),
         cost_usd: None,
@@ -147,7 +152,10 @@ pub fn fold_lines<'a, I: IntoIterator<Item = &'a str>>(lines: I) -> Result<Strea
     let mut raw_tail = String::new();
     for line in lines {
         match parse_line(line) {
-            ParsedLine::Init { session_id } => fold.session_id = Some(session_id),
+            ParsedLine::Init { session_id, model } => {
+                fold.session_id = Some(session_id);
+                fold.model = model;
+            }
             ParsedLine::Text(t) => fold.transcript.push_str(&t),
             ParsedLine::AssistantError { error, message } => {
                 if error == "authentication_failed" || message.to_lowercase().contains("authenticate") {
@@ -212,7 +220,7 @@ mod tests {
     fn fixture_lines_parse_into_init_assistant_error_result() {
         let parsed: Vec<ParsedLine> = AUTH_FAILED.lines().map(parse_line).collect();
         assert_eq!(parsed.len(), 3);
-        assert!(matches!(&parsed[0], ParsedLine::Init { session_id } if !session_id.is_empty()));
+        assert!(matches!(&parsed[0], ParsedLine::Init { session_id, .. } if !session_id.is_empty()));
         assert!(matches!(&parsed[1], ParsedLine::AssistantError { error, .. } if error == "authentication_failed"));
         assert!(matches!(&parsed[2], ParsedLine::Result { is_error: true, .. }));
     }
@@ -275,6 +283,19 @@ mod tests {
         assert!(f.session_id.is_some());
         // 構造化タスクでは text ブロックが無く transcript は空でよい。
         assert_eq!(f.transcript, "");
+    }
+
+    /// rev25: init 行は CLI が**実際に使った**モデル名を持つ。エイリアス (`sonnet`) や空欄で走らせても
+    /// ここには解決後の名前が出るので、run に残す値はこれにする (入力した文字列ではなく)。
+    #[test]
+    fn init_line_carries_the_resolved_model_name() {
+        let f = fold_lines(JSON_SCHEMA_OK.lines()).expect("成功 run は Ok");
+        assert_eq!(f.model.as_deref(), Some("claude-haiku-4-5-20251001"));
+        // model を持たない init (古い CLI / 手書きの行) は None — 空文字で埋めない。
+        assert_eq!(
+            parse_line(r#"{"type":"system","subtype":"init","session_id":"s1"}"#),
+            ParsedLine::Init { session_id: "s1".into(), model: None }
+        );
     }
 
     /// この成功 run は **401 authentication_failed の再試行を 7 回**含む。ここで止めていたら成功を殺していた。

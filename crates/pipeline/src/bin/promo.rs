@@ -402,7 +402,8 @@ async fn run(a: &Args) -> Result<(), String> {
         caption_overrides: Default::default(),
         plate_overrides: Default::default(),
         plate_mode: a.plate_mode,
-        run_stats: Some(promo_core::RunStats::new(r2.attempts, &r2.violations_per_attempt, r1.cost_usd + r2.cost_usd)),
+        // rev25: 組み立ては stages::run_stats 1 箇所 (GUI と同じ関数)。
+        run_stats: Some(pipeline::stages::run_stats(&r1, &r2)),
     };
     // rev7: run ごとに隔離する。既存の id を見てから採番 (同じ秒に 2 本走っても衝突しない)。
     let now_ms = std::time::SystemTime::now()

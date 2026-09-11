@@ -633,6 +633,9 @@ vitest (既定が frontal / 未知の値は既定に落ちる / **保存済み�
 **接地の限界**: **私は画面を見ていない。** 2 行並ぶ一覧が実際に読めるか、「撮り直し」の肩書きで
 分かるかは目視していない。rev16〜21 と同じ状態。
 
+**目視 (ユーザー、2026-09-11)**: 確認済み。一覧に `4 枚目 — snapshot_04.png` と
+`撮り直し — snapshot_04.png` が上下に並んだ (スクリーンショットで確認)。
+
 ## rev24 (2026-09-11、mood にも面を足せるように — 自由度)
 
 **ユーザー判断**「1 枚めがデフォルトはめ込みなしになるのは構わないが、何もないときに
@@ -666,6 +669,44 @@ product は rev13 の優先順位を保つ)。Red は実装前のスタブ (「m
 **接地の限界**: **私は画面を見ていない。** mood の絵は背景ではないので、空きの無いところに面を
 置くと絵に重なる。**黙って綺麗にはならない** — 大きさと位置で逃がす前提で、その手触りは未確認。
 ダイアログにその旨を出してはいるが、読めるかは目視していない。
+
+**目視 (ユーザー、2026-09-11)**: 確認済み。シーン 1 (mood) で `2 枚目 — snapshot_05.png` を選ぶと
+予定位置の枠が絵に重なって出た (スクリーンショットで確認)。枠の `plate_preview` は焼き込みと同じ
+`plate_snapshot_index` を通るので、mood で「貼る」判定が効いている証拠になる。
+
+## rev25 (2026-09-11、run に実際のモデルを残す)
+
+**ユーザーの問い**「LLM のモデル名は `opus` `sonnet` の短縮名ではなく `claude-sonnet-5` のような正式名で
+入力するべきか」。
+
+**事実確認**: CLI の `--model` はエイリアス (系列の最新版に追従) と正式名の両方を受ける (手元の
+`claude --help`)。アプリは入力をそのまま渡し、空欄なら `--model` を付けない。**ところが run は、どの
+モデルで走ったかをどこにも残していなかった** — Fuseforks の最新 run の promo.json に `model` の文字列は
+0 件、`PromoJson` にも `RunStats` にも項目が無い。エイリアスのまま新しい版が出ると、開いている判断 1
+(frontal の費用) の比較の途中でモデルが入れ替わっても、後から確かめる手段が無かった。
+
+**回答**: 比較の再現性のために正式名を勧める。ただし rev25 以降は、エイリアスや空欄でも実名が残る。
+
+104. **init 行が名乗る実名を読む。** stream-json の `system/init` にはトップレベルの `model` があり、
+     エイリアスや空欄で走らせても**解決後の名前**が入る (fixture `claude_json_schema_ok.jsonl` で確認:
+     `claude-haiku-4-5-20251001`)。`ParsedLine::Init` → `StreamFold` → `RunOk` へ運ぶ。aider / custom は None。
+105. **`RunStats.models: Option<Vec<String>>`。** analyze + plan の全試行の実名を重複なく整列。
+     **None = 記録なし** (rev24 以前) / **Some([]) = CLI が名乗らなかった**。空で埋めて区別を消さない
+     (rev15 の `run_stats` と同じ作法)。
+106. **組み立てを `pipeline::stages::run_stats` 1 箇所へ。** CLI (`promo run`) と GUI が
+     `RunStats::new(r2.attempts, …, r1.cost_usd + r2.cost_usd)` を別々に手組みしていた — 項目を足すたびに
+     両側を思い出す必要がある、#18 の再発条件そのもの。
+107. **索引 (`RunRecord`) にはまだ写さない。** 履歴の一覧に列を足す時に写す。
+
+**PoC**: cli_runner 1 本 (実物 fixture から実名が取れる / model の無い init は None) / promo_core 2 本
+(重複なく整列・空でも Some / 旧 `run_stats` は None として読める) / pipeline 2 本 (試行をまたいで運ぶ /
+`run_stats` が全項目を運ぶ)。Red は各層のスタブ (今の挙動 = 読まない・残さない・運ばない) で **3 回**観測した。
+**Red にならなかったものを申告する**: 旧 `run_stats` の読み込み (serde default の後方互換を見張る役) と、
+`run_stats` の全項目 (新設の関数なので「今の挙動」が存在しない)。
+
+**接地の限界**: live の run はまだ走らせていない — 実物の promo.json で `models` が埋まるのは次の live から。
+fixture は 2026-09-08 の採取で、現行の CLI の init 行が同じ形かは未確認。形が変わっていれば
+`Some([])` として記録されるので、黙って欠けることはない。
 
 ## 検討した代案: Remotion (2026-09-08、採用しない)
 
@@ -759,6 +800,7 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [ ] **UI を簡単にする** (2026-09-09 ユーザー、次の主題)。X で今どきの UI デザインを探して持ち込む予定。**参照待ちで着手しない**
 - [x] rev23 (2026-09-10): 撮り直しが一覧に出ない件 = `no_dedup` 契約違反の回収 (failures #20)。crates 152 / vitest 32 / backend 15 green・clippy clean
 - [x] rev24 (2026-09-11): mood にも面を足せるように (自由度)。貼る判定を `plate_snapshot_index` 1 箇所へ。crates 154 / vitest 32 / backend 15 green・clippy clean
+- [x] rev25 (2026-09-11): run に実際のモデルを残す (`RunStats.models`)。組み立てを `stages::run_stats` 1 箇所へ。crates 159 / vitest 32 / backend 15 green・clippy clean
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度 / `RunStats` の live 記録 (frontal の費用)
 - [ ] Phase E
 
