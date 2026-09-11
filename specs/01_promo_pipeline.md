@@ -708,6 +708,43 @@ product は rev13 の優先順位を保つ)。Red は実装前のスタブ (「m
 fixture は 2026-09-08 の採取で、現行の CLI の init 行が同じ形かは未確認。形が変わっていれば
 `Some([])` として記録されるので、黙って欠けることはない。
 
+## rev26 (2026-09-11、確認はアプリ内のメッセージボックスで)
+
+**ユーザー報告** (スクリーンショットつき)「メッセージボックスですが、ブラウザの confirm や message を使うと
+ローカルの URL が出てしまうので、Web モーダルでメッセージボックスを作ってください」。
+シーン編集を未適用のまま閉じると、見出しに `localhost:1421 の内容` と出ていた。
+
+使っていた箇所は **2 つだけ** — シーン編集の未適用確認 (`CaptionEditor.vue`) と、run のフォルダ削除
+(`RunsDialog.vue`)。`alert` と `prompt` は使っていなかった。
+
+108. **`dialog.ts` の `ask(opts) -> Promise<boolean>` に集める。** 表示は `MessageBox.vue` を App.vue に 1 つ。
+     **一度に 1 件** — 出ている間の次の `ask` は待たせ、答えた順に返す (重ねると、どちらに答えたか分からない)。
+109. **Esc と背景クリックは否定側。** 呼び出し側は、取り消しが安全側になる文言を選ぶ (「編集に戻る」「キャンセル」)。
+110. **`danger` (削除など) は最初の焦点を否定側に置く。** Enter の連打で消さないため。肯定側は警告色。
+111. **keydown は capture 段階で受けて伝播を止める。** 止めないと、下のシーン編集の Esc も同じ打鍵で反応し、
+     確認の後ろで画面が閉じる。`askClose` の側でも、確認が出ている間は同じ確認を二重に積まない。
+112. **機械の網 `noBrowserDialogs.test.ts`。** src の `.vue` / `.ts` を読み、標準ダイアログの呼び出しで落ちる。
+     新しく書いた画面が標準ダイアログに戻っても、ここで捕まる。
+
+**PoC**: `dialog.ts` 4 本 (スタブで 3 本 Red。「何も出ていない時の answer は何もしない」はスタブでも成り立つので
+Red にならない — 申告) / 網 2 本 (本物の 2 か所で Red → 置き換えて Green / 網そのものの検出力)。
+
+**測り方についての観察 2 件**:
+①**初版の網は誤検出した** — 画面の文言「video prompt (text-to-video fallback)」の `prompt (` に反応した
+(名前と括弧の間の空白を許していた)。空白を許さないようにし、その行を「反応してはいけない例」として網自身のテストに入れた。
+②**初版は vitest では通ったが build で落ちた** — `node:fs` でソースを読んでいたが、build の型検査 (vue-tsc) は
+テストも対象にしており、このプロジェクトには Node の型定義が無い。`@types/node` の追加 (ダウンロード) と、
+型検査からテストを外す案 (他のテストの型検査まで失う) を捨て、Vite の `import.meta.glob` (`?raw`) で読むように書き直した。
+書き直した網が本物で落ちるかは、ソースに `confirm(` を一時的に差し込んで Red を見てから戻して確かめた。
+あわせて「glob が実際にファイルを拾っている」ことも網のテストに入れた (拾わないと常に空で通る)。
+
+**接地の限界**: vitest は node 環境で **DOM が無い**。次の 4 点はテストで確かめられていない —
+Esc が確認だけを閉じて下のシーン編集を閉じないこと / Tab が 2 つのボタンの間に留まること /
+閉じた後に元の焦点へ戻ること / 重なり順 (70) がすべてのダイアログの上に来ること。GUI の目視が要る。
+
+**目視 (ユーザー、2026-09-11)**: OK。確認手順 4 点 (Esc で確認だけが閉じる / Tab が 2 つのボタンに留まる /
+削除の最初の焦点が「キャンセル」/ 未適用確認が出る) を提示し、結果 OK の報告を受けた。
+
 ## 検討した代案: Remotion (2026-09-08、採用しない)
 
 React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](https://github.com/remotion-dev/remotion))。
@@ -801,6 +838,7 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [x] rev23 (2026-09-10): 撮り直しが一覧に出ない件 = `no_dedup` 契約違反の回収 (failures #20)。crates 152 / vitest 32 / backend 15 green・clippy clean
 - [x] rev24 (2026-09-11): mood にも面を足せるように (自由度)。貼る判定を `plate_snapshot_index` 1 箇所へ。crates 154 / vitest 32 / backend 15 green・clippy clean
 - [x] rev25 (2026-09-11): run に実際のモデルを残す (`RunStats.models`)。組み立てを `stages::run_stats` 1 箇所へ。crates 159 / vitest 32 / backend 15 green・clippy clean
+- [x] rev26 (2026-09-11): 確認はアプリ内のメッセージボックスで (ブラウザ標準の confirm / alert / prompt を使わない)。crates 159 / vitest 38 / backend 15 green・build green
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度 / `RunStats` の live 記録 (frontal の費用)
 - [ ] Phase E
 

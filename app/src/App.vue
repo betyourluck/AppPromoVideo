@@ -10,6 +10,7 @@ import RunsDialog from "./components/RunsDialog.vue";
 import InputPane from "./components/InputPane.vue";
 import ScenePanel from "./components/ScenePanel.vue";
 import LogPanel from "./components/LogPanel.vue";
+import MessageBox from "./components/MessageBox.vue";
 import { useStore } from "./store";
 
 const store = useStore();
@@ -39,6 +40,8 @@ onMounted(() => {
     <SettingsDialog v-if="settingsOpen" @close="settingsOpen = false" />
     <RunsDialog v-if="runsOpen" @close="runsOpen = false" />
     <div v-if="store.toast" class="toast">{{ store.toast }}</div>
+    <!-- rev26: 確認はアプリ内のメッセージボックス 1 つに集める (ブラウザ標準は URL が出る)。 -->
+    <MessageBox />
   </div>
 </template>
 

@@ -16,6 +16,7 @@ import { useStore } from "../store";
 import type { FontEntry } from "../types";
 import { baseName as fileName, snapshotChoices } from "../snapshots";
 import { tiltLabel, tiltValue } from "../plate";
+import { ask, isMessageBoxOpen } from "../dialog";
 
 const props = defineProps<{
   sceneId: number;
@@ -243,9 +244,23 @@ function currentPlate() {
   return Object.keys(p).length ? p : null;
 }
 
-/** 適用していない変更を黙って捨てない。 */
-function askClose() {
-  if (dirty.value && !confirm("適用していない変更があります。閉じますか？")) return;
+/**
+ * 適用していない変更を黙って捨てない。確認はアプリ内のメッセージボックス (rev26) —
+ * ブラウザ標準の確認は見出しに `localhost:1421 の内容` と出る。
+ */
+async function askClose() {
+  // 確認が出ている間の Esc / 背景クリック / 閉じるボタンで、同じ確認を二重に積まない。
+  if (isMessageBoxOpen()) return;
+  if (
+    dirty.value &&
+    !(await ask({
+      title: "未適用の変更",
+      message: "適用していない変更があります。閉じますか？",
+      ok: "閉じる",
+      cancel: "編集に戻る",
+    }))
+  )
+    return;
   open.value = false;
 }
 

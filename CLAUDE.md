@@ -72,8 +72,8 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 ## 現状 (2026-09-11)
 
-- **spec 01 は Phase 0〜E 着地、rev25 まで反映済み。** crates 159 green / vitest 32 / backend 15 green・clippy clean。
-- コミットは Initial `a75c3bc` の上に 31 本。`origin/main` には rev24 まで push 済み (private。**週末に public 予定**)。
+- **spec 01 は Phase 0〜E 着地、rev26 まで反映済み。** crates 159 green / vitest 38 / backend 15 green・clippy clean。
+- コミットは Initial `a75c3bc` の上に 32 本、`origin/main` に push 済み (private。**週末に public 予定**)。
 - 通し (解析 → 構成 → 参照画像 → 合成) は **4 リポジトリで live 成功** (Kataribe / Verificator /
   AppPromoVideo 自身 / Fuseforks)。**出口まで到達** — MiniMax i2v の 15 秒が X に投稿された (2026-09-09)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
@@ -94,6 +94,8 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 どちらも合成・焼き込みと同じ関数から座標を取る。
 **編集はダイアログ** (rev16、左が絵・右がつまみ)。絵を大きく見るためで、mood カットにも出る。
 未適用のまま閉じようとすると確認が出る。
+**確認はアプリ内のメッセージボックス** (`dialog.ts` の `ask` + `MessageBox.vue`、rev26)。
+**ブラウザ標準の confirm / alert / prompt は使わない** — 見出しに `localhost:1421 の内容` と出る。`noBrowserDialogs.test.ts` が網。
 
 **開いている判断**
 
@@ -126,6 +128,6 @@ rev14 のコミット `5929f93` に巻き込んだ。実害は無いが粒度が
 
 ## 再開の手順
 
-1. `cargo test --workspace` (159 green) と `cd app && npx vitest run` (32 green) で足場を確認。
+1. `cargo test --workspace` (159 green) と `cd app && npx vitest run` (38 green) で足場を確認。
 2. `git log --oneline -5` で直前の着地を見る。詳しい経緯は `history.md`。
 3. 上の「開いている判断」に答えが来ていないか確認してから着手する。

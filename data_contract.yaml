@@ -475,6 +475,13 @@ DesktopUi:                          # app/ = Tauri 2 + Vue 3 + Pinia。Tailwind 
     get_image_api_keys / set_image_api_key / probe_image: "キーは app_data/.env、画面には有無 (bool) だけ"
     open_folder / copy_package: "export 補助"
   event: "promo-progress {stage: brief|analyze|plan|cli|cli-stderr|images|done|error, text}"
+  dialogs:                          # rev26 (2026-09-11 ユーザー報告、スクリーンショットつき)
+    rule: "**ブラウザ標準の confirm / alert / prompt を使わない**。WebView の標準ダイアログは見出しに配信元の URL (`localhost:1421 の内容`) を出し、見た目もアプリから外れる"
+    where: "`dialog.ts` の `ask(opts) -> Promise<boolean>` が状態を持ち、`MessageBox.vue` (App.vue に 1 つ) が描く。**一度に 1 件** — 出ている間の次の ask は待たせ、答えた順に返す"
+    options: "message / title (既定「確認」) / ok (既定「OK」) / cancel (既定「キャンセル」) / danger (削除など。肯定側を警告色にし、最初の焦点を否定側へ)"
+    keys: "Esc と背景クリック = 否定側。keydown は capture 段階で受けて伝播を止める (下のダイアログの Esc が同じ打鍵で反応しないように)。Tab は 2 つのボタンの間に閉じ込める。閉じたら開く前の焦点へ戻す"
+    layer: "z-index 70 = すべてのダイアログの上 (履歴・設定 40 / シーン編集 45 / トースト 50 / Lightbox 60)"
+    guard: "`noBrowserDialogs.test.ts` が src の .vue / .ts を走査して標準ダイアログの呼び出しを落とす (機械の網)。網そのものの検出力もテストする (画面の文言「video prompt (…)」に初版が誤検出した)"
   snapshots_ux:                     # 2026-09-08 ユーザー FB: ドロップ / 貼り付け / 横並び + 拡大
     drop: "tauri.conf dragDropEnabled: true → getCurrentWebview().onDragDropEvent の drop.paths (OS のパスが取れる。HTML5 drop はパスを持たないので使わない)。enter/over で帯を強調"
     paste: "window の paste event → clipboardData.items の image/* File → FileReader.readAsDataURL → base64 を command save_clipboard_image(base64, mime) へ → app_data/snapshots/clip_<ms>.<ext> に保存し snapshot_meta で検証 (壊れていれば消す) → 他のスナップショットと同じパスとして一覧へ"

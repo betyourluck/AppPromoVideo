@@ -7,6 +7,7 @@
  * **同じ scene を 2 つの run で左右に並べられること**が要件。
  */
 import { computed, onMounted, ref } from "vue";
+import { ask } from "../dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../store";
 import { describeAttempts } from "../runs";
@@ -43,7 +44,17 @@ async function reveal(dir: string) {
 }
 
 async function drop(dir: string, files: boolean) {
-  if (files && !confirm("この run のフォルダごと削除します。元に戻せません。よろしいですか？")) return;
+  // 取り返しがつかないので danger (最初の焦点は「キャンセル」)。rev26: ブラウザ標準の確認は使わない。
+  if (
+    files &&
+    !(await ask({
+      title: "run を削除",
+      message: "この run のフォルダごと削除します。元に戻せません。よろしいですか？",
+      ok: "削除する",
+      danger: true,
+    }))
+  )
+    return;
   await store.forgetRun(dir, files);
 }
 </script>
