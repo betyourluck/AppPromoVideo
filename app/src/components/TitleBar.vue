@@ -73,10 +73,12 @@ async function win(method: "minimize" | "toggleMaximize" | "close") {
   border-bottom: 1px solid rgb(var(--line));
   user-select: none;
 }
+/* ウィンドウ枠の文字は試行の対象外 (rev29、ユーザー判断)。書体・大きさ・太さを試行前の値で固定。 */
 .brand {
   padding: 0 12px;
-  font-size: 12px;
-  font-weight: 700;
+  font-family: var(--font-chrome);
+  font-size: var(--fs-chrome);
+  font-weight: var(--fw-chrome);
   letter-spacing: 0.08em;
   pointer-events: none;
 }

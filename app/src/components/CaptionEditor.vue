@@ -425,7 +425,7 @@ function restoreCopy() {
             </label>
             <div v-if="originalCopy !== null && copy !== originalCopy" class="row" style="gap: 4px">
               <button class="btn small" @click="restoreCopy">最初の文に戻す</button>
-              <span class="muted" style="font-size: 11px">元: {{ originalCopy }}</span>
+              <span class="muted" style="font-size: var(--fs-sm)">元: {{ originalCopy }}</span>
             </div>
 
             <template v-if="copy.trim()">

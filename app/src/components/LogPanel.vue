@@ -34,7 +34,8 @@ function cls(stage: string): string {
       <h2 style="margin: 0">進捗</h2>
       <button class="btn small" @click="store.log = []">消去</button>
     </div>
-    <div ref="box" class="log mono">
+    <!-- rev29: 等幅 (Consolas) をやめて UI の書体の Medium に。Consolas には Medium が無い。 -->
+    <div ref="box" class="log">
       <div v-for="(l, i) in store.log" :key="i" :class="cls(l.stage)">
         <span class="muted">{{ fmt(l.ts) }}</span> <span class="stage">[{{ l.stage }}]</span> {{ l.text }}
       </div>
@@ -53,7 +54,10 @@ function cls(stage: string): string {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  font-size: 11px;
+  /* rev29: ユーザー「進捗のログも medium で普通サイズ」。等幅をやめたので時刻の桁は等幅数字で揃える。 */
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+  font-variant-numeric: tabular-nums;
   line-height: 1.5;
   margin-top: 8px;
   white-space: pre-wrap;

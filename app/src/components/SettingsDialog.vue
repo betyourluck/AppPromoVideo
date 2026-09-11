@@ -294,7 +294,7 @@ function close() {
             <span>ワークフロー JSON (API 形式。%prompt% %negative% %seed% %width% %height% %ref_1..3% を差し替えます)</span>
             <textarea v-model="slot.workflowJson" rows="8" class="mono" @change="store.persist()"></textarea>
           </label>
-          <div v-if="workflowWarn" class="warn" style="font-size: 11px">{{ workflowWarn }}</div>
+          <div v-if="workflowWarn" class="warn" style="font-size: var(--fs-sm)">{{ workflowWarn }}</div>
           <div class="row">
             <label class="field row" style="gap: 6px; flex: 1">
               <input v-model="store.image.lockSeed" type="checkbox" style="width: auto" @change="store.persist()" />
@@ -308,7 +308,7 @@ function close() {
         </template>
         <div class="row" style="margin-top: 6px">
           <button class="btn small" :disabled="probing" @click="probe">{{ probing ? '接続テスト中…' : '接続テスト' }}</button>
-          <span class="muted" style="font-size: 11px; white-space: pre-wrap">{{ probeMsg }}</span>
+          <span class="muted" style="font-size: var(--fs-sm); white-space: pre-wrap">{{ probeMsg }}</span>
         </div>
 
         <h3 class="sub">製品カットの画面の貼り方</h3>
@@ -375,7 +375,7 @@ function close() {
           </label>
           <button class="btn small" style="align-self: flex-end; margin-bottom: 8px" @click="previewCaption">プレビュー</button>
         </div>
-        <div v-if="captionMsg" class="warn" style="font-size: 11px">{{ captionMsg }}</div>
+        <div v-if="captionMsg" class="warn" style="font-size: var(--fs-sm)">{{ captionMsg }}</div>
         <img v-if="captionPreview" :src="captionPreview" alt="caption preview" class="preview" />
       </section>
     </div>
@@ -406,21 +406,21 @@ function close() {
   color: rgb(var(--accent));
 }
 .note {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
 }
 .authbox {
   border: 1px solid rgb(var(--line));
   border-radius: 6px;
   padding: 8px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   line-height: 1.6;
   margin: 6px 0;
   word-break: break-all;
 }
 .sub {
   margin: 14px 0 4px;
-  font-size: 12px;
+  font-size: var(--fs-h-md);
   letter-spacing: 0.06em;
   color: rgb(var(--muted));
   border-top: 1px solid rgb(var(--line));

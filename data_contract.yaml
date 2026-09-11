@@ -475,6 +475,17 @@ DesktopUi:                          # app/ = Tauri 2 + Vue 3 + Pinia。Tailwind 
     get_image_api_keys / set_image_api_key / probe_image: "キーは app_data/.env、画面には有無 (bool) だけ"
     open_folder / copy_package: "export 補助"
   event: "promo-progress {stage: brief|analyze|plan|cli|cli-stderr|images|done|error, text}"
+  typography:                       # rev27 (2026-09-11 ユーザー「文字を少しだけ大きく」)
+    tokens: "main.css の :root に --fs-xs / sm / md / base / lg / xl = (11 / 12 / 13 / 14 / 15 / 19 px) × **--fs-scale** (項目、rev29 で 1.25)。**部品は font-size を px で直に書かずトークンを参照する**。例外は Lightbox の矢印 (文字ではなく記号、40px)"
+    headings: "rev29: 見出しは --fs-h-md / h-lg / h-xl = (13 / 15 / 19 px) × **--fs-scale-heading** (1.5)。対象 = .panel h2 (入力・結果・進捗) / 結果のアプリ名 .app とキャッチ .hook / メッセージボックス .mb-title / 設定の小見出し .sub の 5 か所。ユーザー「見出しはこれくらい、中の項目はちょっと小さく」で倍率を 2 本に分けた"
+    chrome: "rev29: ウィンドウ枠 (タイトルバーのアプリ名 .brand) は文字の試行の対象外。--font-chrome (Segoe UI → Noto Sans JP → system-ui) / --fs-chrome 12px / --fw-chrome 700 で試行前の値に固定し、倍率も掛けない。ユーザー「ウィンドウタイトルバーのアプリタイトルのフォントと大きさは変えなくていい」。中の「実行中」の chip は .chip のまま (項目の倍率が掛かる)"
+    font: "rev28: --font-ui = \"IBM Plex Sans JP\", \"Segoe UI\", \"Noto Sans JP\", system-ui。**同梱していない** — 入っていない環境では Segoe UI に落ちる。等幅 (.mono) は Consolas のまま"
+    weight: "rev28: --fw-base (本文) / --fw-semi (旧 600) / --fw-bold (旧 700) を全部 700。本文だけ Bold にすると見出し・ボタンの SemiBold が本文より細く見えて逆転するため。補足の「(mood)」は意図した 400 のまま。rev29: --fw-medium (500) を追加"
+    secondary: "rev29: .muted (説明文と補足、47 か所) は Medium (--fw-medium) で小さめ (--fs-sm)。ユーザー「説明文は bold でなく medium で小さめ」。説明文以外の薄い文字 (ログの時刻 / 表の plate_mode 列 / コピー先のラベル / Lightbox の番号など) も同じになる。中の <b> は bolder で Bold に戻る。設定ダイアログの .note も --fs-sm に揃えた"
+    log: "rev29: 進捗ログは等幅 (Consolas、Medium が無い) をやめて UI の書体の Medium・本文の大きさ (--fs-base)。時刻の桁は font-variant-numeric: tabular-nums で揃える。ユーザー「進捗のログも medium で普通サイズ」"
+    why: "旧値 10 / 11 / 12 / 13 / 14 / 18 px が 37 か所に直書きされていた。基準 (body) だけ上げてもラベルや補足 (11〜12px 固定) が変わらないので、トークンにまとめて全段 +1px。次の調整は main.css の 1 か所で済む"
+  panes:                            # rev27 (ユーザー「入力、結果、進捗の枠をなくしてみたい」、試行)
+    frameless: "3 つの列の直下の .panel は背景・枠線・角丸を持たない (App.vue の scoped + :deep)。**共通の .panel はダイアログ (設定 / 履歴 / シーン編集 / メッセージボックス) が使うので変えない**"
   dialogs:                          # rev26 (2026-09-11 ユーザー報告、スクリーンショットつき)
     rule: "**ブラウザ標準の confirm / alert / prompt を使わない**。WebView の標準ダイアログは見出しに配信元の URL (`localhost:1421 の内容`) を出し、見た目もアプリから外れる"
     where: "`dialog.ts` の `ask(opts) -> Promise<boolean>` が状態を持ち、`MessageBox.vue` (App.vue に 1 つ) が描く。**一度に 1 件** — 出ている間の次の ask は待たせ、答えた順に返す"

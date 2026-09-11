@@ -76,7 +76,7 @@ function remove(key: string) {
 <template>
   <div class="strip-wrap" :class="{ dragging }">
     <div class="row" style="justify-content: space-between">
-      <span class="muted" style="font-size: 11px">UI スナップショット (png / jpg / webp) — ドロップ、Ctrl+V、または</span>
+      <span class="muted" style="font-size: var(--fs-sm)">UI スナップショット (png / jpg / webp) — ドロップ、Ctrl+V、または</span>
       <button class="btn small" @click="store.pickSnapshots()">追加…</button>
     </div>
     <div v-if="store.project.snapshots.length === 0" class="empty muted">ここに画像をドロップ / クリップボードの画像を Ctrl+V</div>
@@ -88,7 +88,7 @@ function remove(key: string) {
         <button class="x" title="外す" @click.stop="store.removeSnapshot(i)">×</button>
       </figure>
     </div>
-    <div class="muted" style="font-size: 11px">{{ store.project.snapshots.length }} 枚 · クリックで拡大</div>
+    <div class="muted" style="font-size: var(--fs-sm)">{{ store.project.snapshots.length }} 枚 · クリックで拡大</div>
     <Lightbox
       v-if="lightbox !== null && items.length"
       :items="items"
@@ -117,7 +117,7 @@ function remove(key: string) {
   border-radius: 8px;
   padding: 18px 8px;
   text-align: center;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   margin: 6px 0;
 }
 .strip {
@@ -149,7 +149,7 @@ function remove(key: string) {
   border-color: rgb(var(--accent2));
 }
 figcaption {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: rgb(var(--muted));
   overflow: hidden;
   text-overflow: ellipsis;
@@ -167,7 +167,7 @@ figcaption {
   background: rgb(0 0 0 / 0.6);
   color: #fff;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--fs-md);
   line-height: 20px;
   padding: 0;
 }

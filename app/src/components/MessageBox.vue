@@ -91,7 +91,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey, true));
   box-shadow: 0 12px 40px rgb(0 0 0 / 0.45);
 }
 .mb-title {
-  font-size: 14px;
+  font-size: var(--fs-h-lg);
 }
 .mb-message {
   margin: 0;

@@ -39,7 +39,7 @@ const canRun = computed(
         <button class="btn" @click="pickRepo">参照</button>
       </div>
     </label>
-    <div v-if="store.brief" class="muted" style="font-size: 11px">brief {{ store.brief.chars }} 字 / tree {{ store.brief.tree_lines }} 行</div>
+    <div v-if="store.brief" class="muted" style="font-size: var(--fs-sm)">brief {{ store.brief.chars }} 字 / tree {{ store.brief.tree_lines }} 行</div>
 
     <SnapshotStrip />
 
@@ -89,7 +89,7 @@ const canRun = computed(
       <span class="chip" :class="store.image.enabled ? 'accent' : ''">画像: {{ store.image.enabled ? store.image.provider : 'off' }}</span>
       <button class="btn small" @click="emit('open-settings')">設定</button>
     </div>
-    <div v-if="store.cliCheck && !store.cliCheck.found" class="warn" style="font-size: 11px; margin-top: 4px">{{ store.cliCheck.error }}</div>
+    <div v-if="store.cliCheck && !store.cliCheck.found" class="warn" style="font-size: var(--fs-sm); margin-top: 4px">{{ store.cliCheck.error }}</div>
 
     <div class="row" style="margin-top: 12px">
       <button class="btn primary" :disabled="!canRun" @click="store.run()">

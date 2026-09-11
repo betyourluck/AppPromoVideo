@@ -1,4 +1,44 @@
 /* AppPromoVideo — 配色は CSS 変数 (RGB チャンネル)、data-theme で入れ替える。Tailwind は使わない。 */
+
+/*
+ * 文字のトークン (rev27〜28)。部品は font-size / font-weight / font-family を直に書かず、これを参照する —
+ * 見た目の試行を 1 か所で調整できるように。テーマ (配色) とは独立なので別の :root に置く。
+ *
+ * - 大きさ: 各段の値 × 倍率。rev27 で全段 +1px (旧: 10 / 11 / 12 / 13 / 14 / 18)、
+ *   rev28 でユーザー「1.5 倍くらいに」→ 1.5。rev29 でユーザー「見出しはこれくらい、中の項目はちょっと小さく」→
+ *   **倍率を 2 本に分けた**: 見出し `--fs-scale-heading` (1.5) / 項目 `--fs-scale` (1.25)。
+ *   見出しは `--fs-h-*` を参照する (入力・結果・進捗 / 結果のアプリ名とキャッチ /
+ *   メッセージボックスのタイトル / 設定の小見出し)。**倍率を試す時はこの 2 つだけ変える**。
+ * - ウィンドウ枠 (タイトルバーのアプリ名) は**試行の対象外** — `--*-chrome` で試行前の値に固定し、倍率も掛けない。
+ *   rev29 ユーザー「ウィンドウタイトルバーのアプリタイトルのフォントと大きさは変えなくていい」。
+ * - 書体: rev28 ユーザー「IBM Plex Sans JP の Bold に」。この機体ではユーザーごとのフォントとして入っている。
+ *   **入っていない環境では Segoe UI に落ちる** (同梱はしていない)。
+ * - 太さ: 本文を Bold にすると、見出しやボタンの SemiBold (600) が本文より細く見えて逆転するので、
+ *   段ごとのトークンにして一緒に引き上げた (旧: 本文 400 / semi 600 / bold 700)。
+ *   rev29: ユーザー「説明文は bold でなく medium で小さめ」「進捗のログも medium で普通サイズ」→
+ *   `--fw-medium` (500)。`.muted` (説明文と補足) と進捗ログが使う。
+ */
+:root {
+  --fs-scale: 1.25;
+  --fs-scale-heading: 1.5;
+  --fs-xs: calc(11px * var(--fs-scale));
+  --fs-sm: calc(12px * var(--fs-scale));
+  --fs-md: calc(13px * var(--fs-scale));
+  --fs-base: calc(14px * var(--fs-scale));
+  --fs-lg: calc(15px * var(--fs-scale));
+  --fs-xl: calc(19px * var(--fs-scale));
+  --fs-h-md: calc(13px * var(--fs-scale-heading));
+  --fs-h-lg: calc(15px * var(--fs-scale-heading));
+  --fs-h-xl: calc(19px * var(--fs-scale-heading));
+  --font-ui: "IBM Plex Sans JP", "Segoe UI", "Noto Sans JP", system-ui, sans-serif;
+  --fw-base: 700;
+  --fw-semi: 700;
+  --fw-bold: 700;
+  --fw-medium: 500;
+  --font-chrome: "Segoe UI", "Noto Sans JP", system-ui, sans-serif;
+  --fs-chrome: 12px;
+  --fw-chrome: 700;
+}
 :root,
 [data-theme="dark"] {
   --bg: 18 16 24;
@@ -32,8 +72,9 @@ body,
 body {
   background: rgb(var(--bg));
   color: rgb(var(--text));
-  font-family: "Segoe UI", "Noto Sans JP", system-ui, sans-serif;
-  font-size: 13px;
+  font-family: var(--font-ui);
+  font-weight: var(--fw-base);
+  font-size: var(--fs-base);
   overflow: hidden;
 }
 * {
@@ -71,7 +112,7 @@ label.field {
 }
 label.field > span {
   display: block;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: rgb(var(--muted));
   margin-bottom: 3px;
 }
@@ -99,7 +140,7 @@ label.field > span {
   background: rgb(var(--accent));
   border-color: transparent;
   color: #fff;
-  font-weight: 600;
+  font-weight: var(--fw-semi);
 }
 .btn.danger {
   border-color: rgb(var(--warn) / 0.6);
@@ -107,7 +148,7 @@ label.field > span {
 }
 .btn.small {
   padding: 3px 8px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
 }
 .panel {
   background: rgb(var(--panel));
@@ -117,13 +158,16 @@ label.field > span {
 }
 .panel h2 {
   margin: 0 0 8px;
-  font-size: 12px;
+  font-size: var(--fs-h-md);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: rgb(var(--muted));
 }
+/* 説明文と補足 (rev29)。本文 (Bold) より一段引かせる — Medium で小さめ。中の <b> は bolder で Bold に戻る。 */
 .muted {
   color: rgb(var(--muted));
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-sm);
 }
 .warn {
   color: rgb(var(--warn));
@@ -133,14 +177,14 @@ label.field > span {
 }
 .mono {
   font-family: Consolas, "Cascadia Mono", monospace;
-  font-size: 12px;
+  font-size: var(--fs-md);
 }
 .chip {
   display: inline-block;
   border: 1px solid rgb(var(--line));
   border-radius: 999px;
   padding: 1px 8px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: rgb(var(--muted));
 }
 .chip.accent {

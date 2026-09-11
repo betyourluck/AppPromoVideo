@@ -86,7 +86,7 @@ function openRef(sceneId: number) {
         <div>
           <div class="app">{{ promo.summary.app_name }}</div>
           <div class="hook">{{ promo.summary.hook_copy }}</div>
-          <div class="muted" style="font-size: 11px">{{ promo.summary.one_liner }} · {{ promo.summary.target_audience }}</div>
+          <div class="muted" style="font-size: var(--fs-sm)">{{ promo.summary.one_liner }} · {{ promo.summary.target_audience }}</div>
         </div>
         <div class="stats">
           <span class="chip">{{ promo.plan.total_seconds }}s · {{ promo.plan.aspect }}</span>
@@ -100,7 +100,7 @@ function openRef(sceneId: number) {
         <ul>
           <li v-for="d in promo.summary.differentiators" :key="d">{{ d }}</li>
         </ul>
-        <div class="muted" style="font-size: 12px">
+        <div class="muted" style="font-size: var(--fs-md)">
           mood: {{ promo.summary.visual_identity.mood }}<br />
           palette:
           <span v-for="c in promo.summary.visual_identity.palette" :key="c" class="swatch" :style="{ background: c.match(/#[0-9a-fA-F]{6}/)?.[0] ?? 'transparent' }" :title="c"></span>
@@ -123,7 +123,7 @@ function openRef(sceneId: number) {
           {{ store.imaging ? '参照画像 生成中…' : '参照画像を生成' }}
         </button>
       </div>
-      <div v-if="store.images?.truncated" class="muted" style="font-size: 11px">参照: {{ store.images.truncated }}</div>
+      <div v-if="store.images?.truncated" class="muted" style="font-size: var(--fs-sm)">参照: {{ store.images.truncated }}</div>
 
       <div v-for="s in promo.plan.scenes" :key="s.scene_id" class="scene">
         <div class="scene-head">
@@ -136,9 +136,9 @@ function openRef(sceneId: number) {
         </div>
         <div class="scene-body">
           <div>
-            <div class="muted" style="font-size: 11px">motion (image-to-video)</div>
+            <div class="muted" style="font-size: var(--fs-sm)">motion (image-to-video)</div>
             <pre class="block mono">{{ s.motion_prompt }}</pre>
-            <details class="muted" style="font-size: 11px">
+            <details class="muted" style="font-size: var(--fs-sm)">
               <summary>video prompt (text-to-video fallback)</summary>
               <pre class="block mono">{{ s.video_prompt }}</pre>
             </details>
@@ -154,7 +154,7 @@ function openRef(sceneId: number) {
             <CaptionEditor v-if="store.imageUrls[s.scene_id]" :scene-id="s.scene_id" :has-text="!!s.copy_text.trim()" :is-product="s.cut_kind === 'product'"
               :copy-text="s.copy_text" :original-copy="promo.original_copy?.[s.scene_id] ?? null"
               :snapshots="promo.snapshot_paths" :llm-snapshot="s.snapshot_index ?? null" />
-            <details class="muted" style="font-size: 11px">
+            <details class="muted" style="font-size: var(--fs-sm)">
               <summary>{{ s.cut_kind === 'product' ? 'backdrop prompt' : 'image prompt' }}</summary>
               <pre class="block mono">{{ s.image_prompt }}</pre>
             </details>
@@ -177,11 +177,11 @@ function openRef(sceneId: number) {
   align-items: flex-start;
 }
 .app {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: var(--fs-h-xl);
+  font-weight: var(--fw-bold);
 }
 .hook {
-  font-size: 14px;
+  font-size: var(--fs-h-lg);
   color: rgb(var(--accent));
   margin: 2px 0 4px;
 }
@@ -197,7 +197,7 @@ function openRef(sceneId: number) {
 .sum summary {
   cursor: pointer;
   color: rgb(var(--muted));
-  font-size: 12px;
+  font-size: var(--fs-md);
 }
 .swatch {
   display: inline-block;
@@ -227,12 +227,12 @@ function openRef(sceneId: number) {
   align-items: center;
 }
 .num {
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   color: rgb(var(--accent2));
 }
 .copytext {
   flex: 1;
-  font-size: 12px;
+  font-size: var(--fs-md);
 }
 .scene-body {
   display: grid;
@@ -258,7 +258,7 @@ function openRef(sceneId: number) {
   justify-content: center;
   border: 1px dashed rgb(var(--line));
   border-radius: 6px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   text-align: center;
   padding: 6px;
 }

@@ -79,14 +79,14 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 }
 figcaption {
   color: #eee;
-  font-size: 12px;
+  font-size: var(--fs-md);
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   justify-content: center;
 }
 .title {
-  font-weight: 600;
+  font-weight: var(--fw-semi);
 }
 .nav {
   position: fixed;

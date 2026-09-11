@@ -172,7 +172,7 @@ async function drop(dir: string, files: boolean) {
 .runs {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--fs-md);
 }
 .runs th,
 .runs td {
@@ -187,7 +187,7 @@ async function drop(dir: string, files: boolean) {
 /* 2 回以上かかった run。ここを見るために列を足したので、目に入る強さにする。 */
 .runs td.retried {
   color: var(--warn, #e0a33e);
-  font-weight: 600;
+  font-weight: var(--fw-semi);
 }
 .cmp {
   display: grid;
@@ -213,7 +213,7 @@ async function drop(dir: string, files: boolean) {
   aspect-ratio: 16 / 9;
   border: 1px dashed var(--line, rgb(255 255 255 / 0.2));
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--fs-md);
 }
 .btn.danger {
   color: #e06c6c;

@@ -72,8 +72,8 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 ## 現状 (2026-09-11)
 
-- **spec 01 は Phase 0〜E 着地、rev26 まで反映済み。** crates 159 green / vitest 38 / backend 15 green・clippy clean。
-- コミットは Initial `a75c3bc` の上に 32 本、`origin/main` に push 済み (private。**週末に public 予定**)。
+- **spec 01 は Phase 0〜E 着地、rev29 (試行) まで反映済み。** crates 159 green / vitest 38 / backend 15 green・clippy clean。
+- コミットは Initial `a75c3bc` の上に 33 本。`origin/main` には rev26 まで push 済み — **rev27〜29 (UI の試行) は一時コミットで未 push** (private。**週末に public 予定**)。
 - 通し (解析 → 構成 → 参照画像 → 合成) は **4 リポジトリで live 成功** (Kataribe / Verificator /
   AppPromoVideo 自身 / Fuseforks)。**出口まで到達** — MiniMax i2v の 15 秒が X に投稿された (2026-09-09)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
@@ -114,6 +114,15 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 **次の主題 (2026-09-09 ユーザー)**: **UI をもっと簡単にする。** 機能は出口 (MiniMax の 15 秒) まで
 到達したので、次は使い勝手。ユーザーが X で今どきの UI デザインを探して持ち込む予定 —
 **参照が来てから着手する** (こちらで先に作り込まない)。
+**2026-09-11、ユーザーが最初の手を出した**: 文字を少し大きく (大きさをトークン化して +1px) と、3 つの列の枠を外す (rev27、試行中)。
+続けて書体を IBM Plex Sans JP の Bold に、文字を 1.5 倍に (rev28、試行中)。
+さらに見出し 1.5 倍・項目 1.25 倍に分け、説明文 (`.muted`) とログを Medium に (rev29、試行中)。
+**文字は `main.css` のトークンを参照する** — 大きさ 項目 `--fs-*` (倍率 `--fs-scale`) / 見出し `--fs-h-*` (倍率 `--fs-scale-heading`) / 太さ `--fw-*` / 書体 `--font-ui`。部品に直書きしない。
+**タイトルバーのアプリ名は試行の対象外** — `--font-chrome` / `--fs-chrome` / `--fw-chrome` で試行前の値に固定 (ユーザー判断)。
+**試行の未決 (2026-09-11 一時コミット時点)**: ①rev27〜29 の採否 ②Plex の同梱 (公開前に判断。今は入っていない環境で Segoe UI に落ちる)
+③WebView2 がユーザーごとにインストールしたフォントを拾えているか (未確認) ④`.muted` (47 か所) に巻き込まれた表の列・ラベルを戻すか
+⑤ログの「medium」を太さと解釈した件 ⑥タイトルバーの「実行中」chip の大きさ (項目の倍率のまま)。
+**Plex は同梱していない** (この機体にはユーザーごとのフォントとして入っている)。
 現状の形は 3 ペイン + ダイアログ 3 種 (設定 / 履歴 / シーン編集) で、rev16〜21 で
 シーン編集の中身が増えた。**2026-09-11 に初めてメイン画面のスクリーンショットを見た** — 観察 3 点は
 `history.md` の同日エントリ (特に「`画像: off` と `参照画像を生成` が別ペインに離れている」は見本が無くても直せる)。

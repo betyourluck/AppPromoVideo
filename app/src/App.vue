@@ -65,4 +65,16 @@ onMounted(() => {
   min-height: 0;
   overflow: auto;
 }
+/*
+ * rev27: 3 つの列 (入力 / 結果 / 進捗) は枠を持たない (ユーザー「枠をなくしてみたい」)。
+ * `.panel` はダイアログ (設定 / 履歴 / シーン編集 / メッセージボックス) でも使うので共通の定義は変えず、
+ * 列の直下だけを平らにする。子の root が複数でも届くように :deep で書く。
+ */
+.left > :deep(.panel),
+.center > :deep(.panel),
+.right > :deep(.panel) {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
 </style>
