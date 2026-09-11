@@ -165,6 +165,23 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgb(var(--accent2) / 0.25);
 }
 
+/*
+ * rev33: チェックボックスとラジオは、文字の入力欄の寸法 (幅 100% / 最小の高さ 44px / 余白) を持たない。
+ * 持つと並ぶ列の幅に引き伸ばされる — 履歴の表では比較中 (A / B の印で列が広がる) だけ大きくなった
+ * (実測: 比較していない 28x44 → 比較中のチェックなし 76x44)。
+ */
+input[type="checkbox"],
+input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  flex: none;
+  accent-color: rgb(var(--accent2));
+  cursor: pointer;
+}
+
 input::placeholder,
 textarea::placeholder {
   color: rgb(var(--muted) / 0.7);

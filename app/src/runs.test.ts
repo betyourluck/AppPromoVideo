@@ -1,5 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { describeAttempts } from "./runs";
+import { describeAttempts, pinCompared } from "./runs";
+
+describe("pinCompared (rev32、比較中は比較対象を表の先頭に)", () => {
+  // ユーザー報告 2026-09-11 (スクリーンショット): 比較中は表が縮んで上の 2 行しか見えず、
+  // 下の方の run を比較に選ぶと、その行が見えなくなって外せなかった。
+  const runs = [{ run_dir: "r1" }, { run_dir: "r2" }, { run_dir: "r3" }, { run_dir: "r4" }];
+
+  it("2 つ選んでいれば、選んだ順 (A → B) で先頭に出し、残りは元の順", () => {
+    expect(pinCompared(runs, ["r4", "r2"]).map((r) => r.run_dir)).toEqual(["r4", "r2", "r1", "r3"]);
+  });
+
+  it("比較していない時 (0 か 1 つ) は並びを変えない", () => {
+    expect(pinCompared(runs, []).map((r) => r.run_dir)).toEqual(["r1", "r2", "r3", "r4"]);
+    expect(pinCompared(runs, ["r3"]).map((r) => r.run_dir)).toEqual(["r1", "r2", "r3", "r4"]);
+  });
+
+  it("一覧に無い run_dir は飛ばし、元の配列は書き換えない", () => {
+    expect(pinCompared(runs, ["gone", "r3"]).map((r) => r.run_dir)).toEqual(["r3", "r1", "r2", "r4"]);
+    expect(runs.map((r) => r.run_dir)).toEqual(["r1", "r2", "r3", "r4"]);
+  });
+});
 
 describe("describeAttempts", () => {
   it("記録が無い行は 1 回だと言わない", () => {

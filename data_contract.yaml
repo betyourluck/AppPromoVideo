@@ -477,7 +477,7 @@ DesktopUi:                          # app/ = Tauri 2 + Vue 3 + Pinia。Tailwind 
   event: "promo-progress {stage: brief|analyze|plan|cli|cli-stderr|images|done|error, text}"
   typography:                       # rev27 (2026-09-11 ユーザー「文字を少しだけ大きく」)
     tokens: "main.css の :root に --fs-xs / sm / md / base / lg / xl = (11 / 12 / 13 / 14 / 15 / 19 px) × **--fs-scale** (項目、rev29 で 1.25)。**部品は font-size を px で直に書かずトークンを参照する**。例外は Lightbox の矢印 (文字ではなく記号、40px)"
-    headings: "rev29: 見出しは --fs-h-md / h-lg / h-xl = (13 / 15 / 19 px) × **--fs-scale-heading** (1.5)。対象 = .panel h2 (入力・結果・進捗) / 結果のアプリ名 .app とキャッチ .hook / メッセージボックス .mb-title / 設定の小見出し .sub の 5 か所。ユーザー「見出しはこれくらい、中の項目はちょっと小さく」で倍率を 2 本に分けた"
+    headings: "rev29: 見出しは --fs-h-md / h-lg / h-xl = (13 / 15 / 19 px) × **--fs-scale-heading** (1.5)。対象 = .panel h2 (入力・結果・進捗) / 結果のアプリ名 .app とキャッチ .hook / メッセージボックス .mb-title / 設定の小見出し .sub の 5 か所 (rev31 で履歴画面の見出し .title を足して 6 か所)。ユーザー「見出しはこれくらい、中の項目はちょっと小さく」で倍率を 2 本に分けた"
     chrome: "rev29: ウィンドウ枠 (タイトルバーのアプリ名 .brand) は文字の試行の対象外。--font-chrome / --fs-chrome / --fw-chrome を参照し、倍率は掛けない。ユーザー「ウィンドウタイトルバーのアプリタイトルのフォントと大きさは変えなくていい」。rev29 の値 (Segoe UI / 12px / 700) は、rev30 のデザイン修正 (ユーザー) で Inter Variable / 14px / 600。中の「実行中」の chip は .chip のまま (項目の倍率が掛かる)"
     font: "rev30: --font-ui = \"Inter Variable\", \"Noto Sans JP Variable\", \"Noto Sans JP\", \"BIZ UDPGothic\", \"Yu Gothic UI\", system-ui …。**同梱する** — @fontsource-variable/inter と @fontsource-variable/noto-sans-jp (5.3.0、OFL-1.1) を main.ts で import。**先頭はパッケージの宣言名** (Inter と書くと手元に入っていない限り当たらない)。**外部 (Google Fonts) から読まない** — tauri.conf.json の CSP は style-src に外部を含まず font-src 未指定 (= default-src 'self')。woff2 を data: にインライン化させない (同じ理由で読めない)。rev28 の IBM Plex Sans JP (未同梱) は rev30 のデザイン修正で置き換わった"
     weight: "rev28: --fw-base (本文) / --fw-semi (旧 600) / --fw-bold (旧 700) を全部 700。本文だけ Bold にすると見出し・ボタンの SemiBold が本文より細く見えて逆転するため。rev29: --fw-medium (500) を追加。rev30 のデザイン修正 (ユーザー): 本文 500 / semi 600 / bold 700 / --fw-regular 400 を追加"
@@ -485,6 +485,9 @@ DesktopUi:                          # app/ = Tauri 2 + Vue 3 + Pinia。Tailwind 
     secondary: "rev29: .muted (説明文と補足、47 か所) は Medium (--fw-medium) で小さめ (--fs-sm)。ユーザー「説明文は bold でなく medium で小さめ」。説明文以外の薄い文字 (ログの時刻 / 表の plate_mode 列 / コピー先のラベル / Lightbox の番号など) も同じになる。中の <b> は bolder で Bold に戻る。設定ダイアログの .note も --fs-sm に揃えた"
     log: "rev29: 進捗ログは等幅 (Consolas、Medium が無い) をやめて UI の書体の Medium・本文の大きさ (--fs-base)。時刻の桁は font-variant-numeric: tabular-nums で揃える。ユーザー「進捗のログも medium で普通サイズ」"
     why: "旧値 10 / 11 / 12 / 13 / 14 / 18 px が 37 か所に直書きされていた。基準 (body) だけ上げてもラベルや補足 (11〜12px 固定) が変わらないので、トークンにまとめて全段 +1px。次の調整は main.css の 1 か所で済む"
+  form_controls:                    # rev33 (2026-09-12 ユーザー「選択されるとチェックボックスを大きくする必要はないかな」)
+    text_inputs: "main.css の input / select / textarea は文字の入力欄の寸法 (幅 100% / 最小の高さ --input-height 44px / 余白) を持つ (rev30 のデザイン修正)"
+    checkbox_radio: "input[type=checkbox] / [type=radio] はその寸法を持たない — 16px 四方・余白なし・accent-color は --accent2。部品側で幅や高さを直書きしない (設定ダイアログの style=width:auto は rev33 で外した)"
   i18n:                             # rev30 (2026-09-11、ユーザーが多言語化 → 残りを回収)
     langs: "ja (正本) / en / zh-CN。localStorage apppromo.ui_lang、既定 ja。**コピー言語 (project.lang = LLM に書かせる言語) とは別物**"
     dict: "app/src/i18n.ts。ja の as const からキー型 MessageKey を取り、en / zh-CN は Record<MessageKey, string> — キーの欠け (TS2740) も余り (TS2353) も型検査で落ちる。キー集合の一致は i18n.test.ts でも見る"
@@ -493,13 +496,20 @@ DesktopUi:                          # app/ = Tauri 2 + Vue 3 + Pinia。Tailwind 
     rich: "強調と等幅は文言の中に <b>…</b> / <mono>…</mono> と書き、components/Rich.vue で出す (解析は rich.ts)。**v-html は使わない** — 認める印以外の < は文字として出る。閉じ忘れは文末まで、対の無い閉じ印は無視 (文字を落とさない)"
     ja_wording: "rev30 の移行で日本語の文言は変えていない (移行前の日本語断片 275 個を辞書と突き合わせた)。ソースの改行で画面に出ていた空白 1 つも残した"
   panes:                            # rev27 (ユーザー「入力、結果、進捗の枠をなくしてみたい」、試行)
-    frameless: "3 つの列の直下の .panel は背景・枠線・角丸を持たない (App.vue の scoped + :deep)。**共通の .panel はダイアログ (設定 / 履歴 / シーン編集 / メッセージボックス) が使うので変えない**"
+    frameless: "3 つの列の直下の .panel は背景・枠線・角丸を持たない (App.vue の scoped + :deep)。**共通の .panel はダイアログ (設定 / シーン編集 / メッセージボックス) が使うので変えない** (履歴は rev31 から全画面で .panel を使わない)"
+  runs_screen:                      # rev31 (2026-09-11 ユーザー「履歴はダイアログではなく全画面に。開くを押すと画面を閉じ、開いた run でメイン画面に戻る」)
+    shape: "履歴 (RunsScreen.vue) はダイアログではなく全画面。タイトルバーの下で 3 ペインと入れ替える (App.vue の view = main | runs)。メインは v-show で隠すだけ — 戻った時に入力・コピー先の選択・スクロール位置が残る"
+    open: "「開く」は store.openRun(dir): Promise<boolean> が true の時だけメイン画面へ戻る。false ならこの画面に残り、store.error をその場に出す (この画面ではログのペインも入力ペインのエラー表示も見えない)。読み込み中は他の「開く」を押させない。openRun は始めに store.error を空にする"
+    back: "左上の「戻る」でメイン画面へ。Esc では戻らない (ダイアログ時代も閉じるボタンと背景クリックだけだった)"
+    pin: "rev32: 比較中 (2 つ選択) は比較対象を選んだ順 A → B で表の先頭に出し (runs.ts pinCompared、残りは元の順)、行に A / B の印を付けて下の画像と揃える。組が変わったら画面と表のスクロールを先頭へ戻す。1 つ外すと比較が解けて全件の表に戻る"
+    cells: "rev33: 表のセル (td) を display: flex にしない — 表のセルとして並ばなくなり、同じ行で上端と高さがずれる (比較対象の行の色付けが段になった)。並べたい中身は td の中の div を flex にする (チェックと A / B の印 .pick、操作ボタン .row)"
+    compare: "rev32: 表の包み (.table-wrap、横にだけ流す) は縮ませない (flex-shrink: 0 — overflow を持つ箱は縦の flex の中で最小の高さが 0 扱いになり、rev31 では画像に場所を譲って 2 行まで潰れた)。比較中だけ表に max-height 30vh + 中でスクロール + 見出し行を固定。比較の区画が残りの高さを取り、画像はその中に object-fit: contain で収まる。画像の枠の最小 260px、それより低い窓は画面全体をスクロール"
   dialogs:                          # rev26 (2026-09-11 ユーザー報告、スクリーンショットつき)
     rule: "**ブラウザ標準の confirm / alert / prompt を使わない**。WebView の標準ダイアログは見出しに配信元の URL (`localhost:1421 の内容`) を出し、見た目もアプリから外れる"
     where: "`dialog.ts` の `ask(opts) -> Promise<boolean>` が状態を持ち、`MessageBox.vue` (App.vue に 1 つ) が描く。**一度に 1 件** — 出ている間の次の ask は待たせ、答えた順に返す"
     options: "message / title (既定「確認」) / ok (既定「OK」) / cancel (既定「キャンセル」) / danger (削除など。肯定側を警告色にし、最初の焦点を否定側へ)"
     keys: "Esc と背景クリック = 否定側。keydown は capture 段階で受けて伝播を止める (下のダイアログの Esc が同じ打鍵で反応しないように)。Tab は 2 つのボタンの間に閉じ込める。閉じたら開く前の焦点へ戻す"
-    layer: "z-index 70 = すべてのダイアログの上 (履歴・設定 40 / シーン編集 45 / トースト 50 / Lightbox 60)"
+    layer: "z-index 70 = すべてのダイアログの上 (設定 40 / シーン編集 45 / トースト 50 / Lightbox 60)。履歴は rev31 から全画面で、重ならない"
     guard: "`noBrowserDialogs.test.ts` が src の .vue / .ts を走査して標準ダイアログの呼び出しを落とす (機械の網)。網そのものの検出力もテストする (画面の文言「video prompt (…)」に初版が誤検出した)"
   snapshots_ux:                     # 2026-09-08 ユーザー FB: ドロップ / 貼り付け / 横並び + 拡大
     drop: "tauri.conf dragDropEnabled: true → getCurrentWebview().onDragDropEvent の drop.paths (OS のパスが取れる。HTML5 drop はパスを持たないので使わない)。enter/over で帯を強調"

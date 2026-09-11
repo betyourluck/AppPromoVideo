@@ -72,8 +72,8 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 ## 現状 (2026-09-11)
 
-- **spec 01 は Phase 0〜E 着地、rev30 まで反映済み (rev27〜29 は試行)。** crates 159 green / vitest 60 / backend 15 green・clippy clean。
-- コミットは Initial `a75c3bc` の上に 34 本。`origin/main` には rev26 まで push 済み — **rev27〜29 (UI の試行、一時コミット) と rev30 (デザインの修正・多言語化) は未 push** (private。**週末に public 予定**)。
+- **spec 01 は Phase 0〜E 着地、rev33 まで反映済み (rev27〜29 は試行)。** crates 159 green / vitest 65 / backend 15 green・clippy clean。
+- コミットは Initial `a75c3bc` の上に 35 本。`origin/main` には rev26 まで push 済み — **rev27〜29 (UI の試行、一時コミット) / rev30 (デザインの修正・多言語化) / rev31〜33 (履歴の全画面・比較の並び・チェックボックス、一時コミット) は未 push** (private。**週末に public 予定**)。
 - 通し (解析 → 構成 → 参照画像 → 合成) は **4 リポジトリで live 成功** (Kataribe / Verificator /
   AppPromoVideo 自身 / Fuseforks)。**出口まで到達** — MiniMax i2v の 15 秒が X に投稿された (2026-09-09)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
@@ -96,6 +96,11 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 未適用のまま閉じようとすると確認が出る。
 **確認はアプリ内のメッセージボックス** (`dialog.ts` の `ask` + `MessageBox.vue`、rev26)。
 **ブラウザ標準の confirm / alert / prompt は使わない** — 見出しに `localhost:1421 の内容` と出る。`noBrowserDialogs.test.ts` が網。
+**履歴は全画面** (rev31、`RunsScreen.vue`。3 ペインと入れ替え、メインは `v-show`)。「開く」は**読めた時だけ**メイン画面へ戻る (`openRun` が成否を返す)。
+比較中は比較対象を A → B で表の先頭に出し、表は比較中だけ 30vh で中をスクロール、画像の側を縮める (rev32)。
+**見た目の変更は画面を測ってから報告する** — vite の dev サーバーをブラウザのペインで開き、ストアにダミーを入れて位置を数値で取れる (rev32 で初実施)。
+**測る前に、今のコードがページに届いているかを確かめる** (今回の変更でしか存在しない要素・規則の有無)。開いたページはサーバーが止まっても古いまま動く (rev33)。
+チェックボックスとラジオは文字入力欄の寸法を持たない、表のセル (td) は flex にしない (rev33)。
 
 **開いている判断**
 
@@ -127,12 +132,12 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 **画面の文言は `i18n.ts` の辞書を通す** — ja が正本、en / zh-CN は `Record<MessageKey, string>` で型で縛る。強調・等幅は文言に `<b>` / `<mono>` と書いて
 `Rich.vue` で出す (`v-html` は使わない)。コードに日本語を直書きしない (`noHardcodedJapanese.test.ts`。対象外は settings.ts のフォント名と `console.*`)。
 backend 由来のログ・エラーの文言は日本語のまま。
-**試行の未決 (2026-09-11 rev30 時点)**: ①rev27〜30 の採否 (rev30 は GUI 未目視 — 同梱の書体で出るか、英語で溢れないか)
+**試行の未決 (2026-09-11 rev30 時点)**: ①rev27〜33 の採否 (rev30〜33 は Tauri の GUI で未目視 — 同梱の書体で出るか、英語で溢れないか、履歴の全画面・戻り方・比較の並び・チェックボックス)
 ②en / zh-CN の訳は私が書いた (未査読) ③`.muted` (47 か所) に巻き込まれた表の列・ラベルを戻すか ④ログの「medium」を太さと解釈した件
 ⑤タイトルバーの「実行中」chip の大きさ ⑥既存の文言の不具合 2 点を直すか (設定の説明が `**全シーンの既定**` のまま / 「既定は OFF」が実際の ON と違う)
 ⑦ユーザーが先に作った未使用キー 17 個を消すか。
 旧 ②Plex の同梱 と旧 ③WebView2 がユーザーごとのフォントを拾うか は、rev30 で書体を同梱にしたので閉じた。
-現状の形は 3 ペイン + ダイアログ 3 種 (設定 / 履歴 / シーン編集) で、rev16〜21 で
+現状の形は 3 ペイン + 全画面の履歴 (rev31) + ダイアログ 2 種 (設定 / シーン編集) で、rev16〜21 で
 シーン編集の中身が増えた。**2026-09-11 に初めてメイン画面のスクリーンショットを見た** — 観察 3 点は
 `history.md` の同日エントリ (特に「`画像: off` と `参照画像を生成` が別ペインに離れている」は見本が無くても直せる)。
 シーン編集ダイアログも同日に見た (rev23 / rev24 のユーザー目視。観察 2 点は `history.md`)。
@@ -146,6 +151,6 @@ rev14 のコミット `5929f93` に巻き込んだ。実害は無いが粒度が
 
 ## 再開の手順
 
-1. `cargo test --workspace` (159 green) と `cd app && npx vitest run` (60 green) で足場を確認。
+1. `cargo test --workspace` (159 green) と `cd app && npx vitest run` (65 green) で足場を確認。
 2. `git log --oneline -5` で直前の着地を見る。詳しい経緯は `history.md`。
 3. 上の「開いている判断」に答えが来ていないか確認してから着手する。

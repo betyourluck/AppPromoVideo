@@ -21,6 +21,18 @@ export interface AttemptsView {
  * `plan_attempts` を表示に落とす。**0 と未定義は「1 回」ではなく「記録なし」**。
  * rev14 以前の行を 1 と描くと、集計に偽の分母が混ざる。
  */
+/**
+ * 比較中 (2 つ選んでいる時) は、比較対象を**選んだ順 (A → B) で表の先頭**に出す (rev32)。
+ * 比較中は下に画像が並ぶので表に使える高さが限られ、下の方の run を選ぶとその行が見えなくなって
+ * 外せなかった (ユーザー報告 2026-09-11、スクリーンショットつき)。比較していない時は並びを変えない。
+ * 元の配列は書き換えない。
+ */
+export function pinCompared<T extends { run_dir: string }>(runs: T[], compare: string[]): T[] {
+  if (compare.length < 2) return runs.slice();
+  const pinned = compare.map((dir) => runs.find((r) => r.run_dir === dir)).filter((r): r is T => r !== undefined);
+  return [...pinned, ...runs.filter((r) => !compare.includes(r.run_dir))];
+}
+
 export function describeAttempts(attempts: number, kinds: string[] = []): AttemptsView {
   if (!attempts) return { text: "—", retried: false, title: t("runs.noRecord") };
   const why = kinds.length ? ` — ${kinds.join(", ")}` : "";

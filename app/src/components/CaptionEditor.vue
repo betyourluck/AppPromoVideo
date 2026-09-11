@@ -545,7 +545,7 @@ function restoreCopy() {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* 履歴・設定 (40) の上。この画面からしか開かない。 */
+  /* 設定 (40) の上。この画面からしか開かない (履歴は rev31 から全画面で、ダイアログではない)。 */
   z-index: 45;
 }
 .dlg {

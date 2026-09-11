@@ -288,6 +288,8 @@ const ja = {
   "runs.selectTwo": "比較するには、左端のチェックで run を 2 つ選んでください。",
   "runs.noRecord": "記録なし (rev14 以前の run)",
   "runs.passedOn": "{n} 回目で通過{why}",
+  "runs.back": "戻る",
+  "runs.backTitle": "メイン画面に戻る",
 
   // シーン編集ダイアログ (rev30)
   "caption.retaken": "撮り直し",
@@ -600,6 +602,8 @@ const en: Dict = {
   "runs.selectTwo": "To compare, select two runs with the checkboxes on the left.",
   "runs.noRecord": "No record (run from before rev14)",
   "runs.passedOn": "Passed on attempt {n}{why}",
+  "runs.back": "Back",
+  "runs.backTitle": "Back to the main screen",
 
   // Scene editor dialog (rev30)
   "caption.retaken": "Retaken",
@@ -907,6 +911,8 @@ const zhCN: Dict = {
   "runs.selectTwo": "如需对比，请用左侧复选框选择两个运行记录。",
   "runs.noRecord": "无记录 (rev14 之前的运行)",
   "runs.passedOn": "第 {n} 次尝试通过{why}",
+  "runs.back": "返回",
+  "runs.backTitle": "返回主界面",
 
   // 分镜编辑对话框 (rev30)
   "caption.retaken": "重新截取",

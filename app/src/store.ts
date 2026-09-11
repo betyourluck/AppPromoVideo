@@ -206,8 +206,13 @@ export const useStore = defineStore("main", {
         this.push("error", t("store.runsLoadFailed", { error: String(e) }));
       }
     },
-    /** 過去の run を結果ペインに戻す。正本は run_dir/promo.json (索引ではない)。 */
-    async openRun(runDir: string) {
+    /**
+     * 過去の run を結果ペインに戻す。正本は run_dir/promo.json (索引ではない)。
+     * rev31: **成否を返す** — 履歴画面は読めた時だけメイン画面へ戻り、読めなければ残って `error` を出す。
+     * 前のエラーは先に消す (残っていると、履歴画面が別の失敗の理由を出してしまう)。
+     */
+    async openRun(runDir: string): Promise<boolean> {
+      this.error = "";
       try {
         const r = await invoke<OpenedRun>("open_run", { runDir });
         this.result = {
@@ -229,9 +234,11 @@ export const useStore = defineStore("main", {
           }
         }
         this.showToast(t("store.runOpened", { app: r.promo.summary.app_name }));
+        return true;
       } catch (e) {
         this.error = String(e);
         this.push("error", String(e));
+        return false;
       }
     },
     /** 比較の選択をトグルする (2 つまで。3 つ目を押したら古い方を落とす)。 */

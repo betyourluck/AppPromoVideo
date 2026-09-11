@@ -208,7 +208,7 @@ function close() {
           </label>
         </div>
         <label class="field row" style="gap: 8px">
-          <input v-model="store.cli.oauthOnly" type="checkbox" style="width: auto" @change="store.persist()" />
+          <input v-model="store.cli.oauthOnly" type="checkbox" @change="store.persist()" />
           <span style="margin: 0">{{ t('settings.oauthOnly') }}</span>
         </label>
         <label class="field">
@@ -243,7 +243,7 @@ function close() {
       <section v-else>
         <p class="muted note"><Rich :text="t('settings.imageNote')" /></p>
         <label class="field row" style="gap: 8px">
-          <input v-model="store.image.enabled" type="checkbox" style="width: auto" @change="store.persist()" />
+          <input v-model="store.image.enabled" type="checkbox" @change="store.persist()" />
           <span style="margin: 0">{{ t('settings.autoImages') }}</span>
         </label>
         <label class="field">
@@ -306,7 +306,7 @@ function close() {
           <div v-if="workflowWarn" class="warn" style="font-size: var(--fs-sm)">{{ workflowWarn }}</div>
           <div class="row">
             <label class="field row" style="gap: 6px; flex: 1">
-              <input v-model="store.image.lockSeed" type="checkbox" style="width: auto" @change="store.persist()" />
+              <input v-model="store.image.lockSeed" type="checkbox" @change="store.persist()" />
               <span style="margin: 0">{{ t('settings.lockSeed') }}</span>
             </label>
             <label class="field" style="flex: 1">
@@ -340,7 +340,7 @@ function close() {
         <h3 class="sub">{{ t('settings.captionHeading') }}</h3>
         <p class="muted note"><Rich :text="t('settings.captionNote')" /></p>
         <label class="field row" style="gap: 8px">
-          <input v-model="store.image.caption.enabled" type="checkbox" style="width: auto" @change="store.persist()" />
+          <input v-model="store.image.caption.enabled" type="checkbox" @change="store.persist()" />
           <span style="margin: 0">{{ t('settings.captionEnable') }}</span>
         </label>
         <label class="field">
