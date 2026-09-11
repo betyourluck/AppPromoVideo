@@ -83,29 +83,29 @@ runner:                             # Phase A (2026-09-08 実装・PoC 9 本 + �
   fold: "claude = stream::fold_lines (structured は result.structured_output → 無ければ result 文字列の fenced) / aider・custom = 終了コード検査 → 生 stdout 連結 → fenced_json なら救済"
   not_found: "spawn の io::ErrorKind::NotFound を CliError::NotFound へ (事前の PATH 検索はしない — spawn が唯一の真実)"
 
-CliOutcome:
-  Ok { text: String, structured: Option<Value>, cost_usd: Option<f64>, duration_ms: u64, model: Option<String> }   # model = init 行の実名 (rev25)。aider / custom は None
-  Failed { error: CliError, stderr_tail: String }
+CliOutcome:                         # 列挙の各 variant を「名前: フィールド」で書く (Rust の擬似記法は引用符の中)
+  Ok: "{ text: String, structured: Option<Value>, cost_usd: Option<f64>, duration_ms: u64, model: Option<String> }"   # model = init 行の実名 (rev25)。aider / custom は None
+  Failed: "{ error: CliError, stderr_tail: String }"
 
 CliError:                           # 契約 errors。UI はこの列挙で文言を出す (沈黙させない)
-  NotFound { executable: String }   # spawn 前の存在検査 or ENOENT
-  Timeout { secs: u64 }             # kill 済み
-  Cancelled                         # ユーザー中断 (kill 済み)
+  NotFound: "{ executable: String }"   # spawn 前の存在検査 or ENOENT
+  Timeout: "{ secs: u64 }"             # kill 済み
+  Cancelled: "(フィールドなし)"         # ユーザー中断 (kill 済み)
   kill_semantics:                   # rev2 査読 8: tokio の child.kill() は Windows で TerminateProcess = 子孫が孤児化する。実装 = tree_kill.rs
     windows: "Job Object (CreateJobObjectW + KILL_ON_JOB_CLOSE、spawn 直後に AssignProcessToJobObject、止める時は TerminateJobObject)。**2026-09-08 実機 Green** (孫 = fake_cli hang 120 が timeout 後に消える)。限界: spawn〜アタッチの数 µs に生まれた孫は Job 外 (tokio は CREATE_SUSPENDED を出さない)"
     unix: "process_group(0) で spawn → killpg(SIGTERM) (claude は SIGTERM で実行中 Bash のプロセス木を止めて exit 143 する — 公式) → 猶予 5s → killpg(SIGKILL)。**この機体 (Windows) では未コンパイル・未検証**"
     poc: "tests/runner.rs timeout_kills_the_whole_tree_including_grandchild (fake_cli grandchild が孫 pid を stdout に出す → timeout 2s → process_alive(pid) == false)。process_alive 自体は自分=true / 終了済み=false で検算 (常に false の実装で通ってしまうのを防ぐ)"
-  ExitStatus { code: Option<i32>, stderr_tail: String }
-  Auth { message: String }          # claude stream-json: assistant.error == "authentication_failed" or result.is_error + 本文 (fixtures/claude_auth_failed.jsonl = 2026-09-07 実測)
-  Shape { detail: String, raw: String }   # stream-json / JSON が読めない。raw 保持 (再生成の燃料)
+  ExitStatus: "{ code: Option<i32>, stderr_tail: String }"
+  Auth: "{ message: String }"          # claude stream-json: assistant.error == "authentication_failed" or result.is_error + 本文 (fixtures/claude_auth_failed.jsonl = 2026-09-07 実測)
+  Shape: "{ detail: String, raw: String }"   # stream-json / JSON が読めない。raw 保持 (再生成の燃料)
 
 ClaudeStreamLine:                   # claude -p --output-format stream-json の 1 行 (NDJSON)。既知の type だけ読み、未知は Stdout へ流す (捨てない)
-  system: { subtype: "init | api_retry | hook_started | hook_response | ...", session_id, model }   # model (init のみ) = **解決後の**実名。`--model sonnet` でも空欄でもここは実名 (rev25、fixture で確認)
-  api_retry: { attempt, max_retries, retry_delay_ms, error_status: Option<u16>, error: "authentication_failed | oauth_org_not_allowed | billing_error | rate_limit | overloaded | invalid_request | model_not_found | server_error | max_output_tokens | unknown" }
+  system: '{ subtype: "init | api_retry | hook_started | hook_response | ...", session_id, model }'   # model (init のみ) = **解決後の**実名。`--model sonnet` でも空欄でもここは実名 (rev25、fixture で確認)
+  api_retry: '{ attempt, max_retries, retry_delay_ms, error_status: Option<u16>, error: "authentication_failed | oauth_org_not_allowed | billing_error | rate_limit | overloaded | invalid_request | model_not_found | server_error | max_output_tokens | unknown" }'
   # 2026-09-08 実測 (fixtures/claude_auth_retry_loop.jsonl、ユーザー端末): 401 は attempt 1..10 (遅延 0.5s→38s、合計約 2.5 分) を回してから assistant(error) + result(is_error) に落ちる
   early_abort: "runner は行を読むたびに stream::early_abort を評価するが、**api_retry では止めない**。初案『authentication_failed の初回再試行で打ち切る』は同日の成功 fixture (401 × 7 回の再試行の後に成功) で反証された。止めるのは終端の assistant.error (authentication_failed) だけ。再試行は stream::retry_notice で『再試行 n/max (種別, HTTP) — 待ち秒』として進捗ログに出し、待つか中断するかはユーザーが決める"
-  assistant: { message: { content: [ {type: text, text} | ... ], model }, error: Option<String>, is_api_error_message: Option<bool> }
-  result: { is_error: bool, result: String, total_cost_usd: f64, duration_ms: u64, num_turns, terminal_reason: "..." }
+  assistant: '{ message: { content: [ {type: text, text} | ... ], model }, error: Option<String>, is_api_error_message: Option<bool> }'
+  result: '{ is_error: bool, result: String, total_cost_usd: f64, duration_ms: u64, num_turns, terminal_reason: "..." }'
   # --json-schema 使用時の構造化出力は **result.structured_output で確定** (2026-09-08 実測 fixtures/claude_json_schema_ok.jsonl)。`result` 文字列にも同じ JSON が入る。機序: assistant が `StructuredOutput` という tool_use を出し、user 行に tool_result が返り、result 行に載る。--allowedTools に StructuredOutput を書かなくても動いた。無ければ result 本文の fenced_json へ落ちる
   other_types: "user (tool_result の往復) / rate_limit_event / stream_event (--include-partial-messages 時) は未知 type として Other で素通し (捨てない)。成功 run にも api_retry が混じる (同 fixture: 401 authentication_failed × 7 の後に成功。OAuth 期限切れ + ANTHROPIC_API_KEY ありの環境)"
   fixture_procedure: "ユーザーの通常端末で `pwsh scripts/capture_claude_fixture.ps1` → scripts/redact_stream.py が cwd/tools/hook 行を伏せて crates/cli_runner/fixtures/claude_json_schema_ok.jsonl に書く → stream::tests に include_str! で焼く。Neo のセッション内では OAuth が継承されず採取不可 (live.claude_stream_20260907)"
@@ -175,10 +175,10 @@ Scene:                              # rev3 (2026-09-08、ユーザー FB「ス�
   duration_seconds: u32             # 3〜10
   shot_type: String                 # Close-up / Medium / Wide / Screen recording 等 (自由文)
   video_prompt: String              # 英語。動画生成モデル向け。`--ar` を含まない (Midjourney 記法。Veo/Sora の文法ではない — rev2 査読 5)。aspect は ScenePlan が持つ
+                                    # text-to-video の**保険** (rev3 で主役から降格)。Veo / Sora は指示に従わないのでコピー先から外した (ユーザー実測 2026-09-08)
   copy_text: String                 # テロップ / ナレーション (language)
   image_prompt: String              # 静止画 1 枚のプロンプト。**product では背景のみ** (画面・端末・UI・文字の語は validate が弾く = 合成と二重にしない)。mood では絵の全部。参照そのものを指す語 (reference / screenshot / sheet) は書かない (Kataribe failures #85)
-  video_prompt: String              # text-to-video の**保険** (rev3 で主役から降格)。Veo / Sora は指示に従わないのでコピー先から外した (ユーザー実測 2026-09-08)
-  plate_tilt: Option<{ yaw_degrees: f32, pitch_degrees: f32 }>   # rev5。product のみ。背景のパースに合わせてスクショ面を傾ける指定。
+  plate_tilt: "Option<{ yaw_degrees: f32, pitch_degrees: f32 }>"   # rev5。product のみ。背景のパースに合わせてスクショ面を傾ける指定。
                                     # yaw 負 = 左が奥 / 正 = 右が奥。pitch 負 = 上が奥 (俯瞰) / 正 = 下が奥 (ローアングル)。
                                     # 各 -35〜35 度。範囲外は違反 (PlateTiltOutOfRange)。省略 = 正面。frontal モードでは無視される
   reference_image: Option<PathBuf>  # 生成後に埋まる
@@ -252,6 +252,29 @@ ImageGenConfig:                     # (Kataribe) provider / base_url / model / s
         mood: base/ をそのまま → 焼く。どちらも直下の完成品を置き換え、promo.json の overrides を更新して data URL を返す。
         毎回 base から作り直すので、何度やっても劣化しない。
       layout_for: "canvas / 見出しの有無と位置 / 傾き / はめ込みの上書き から Layout を作る**唯一の関数**。生成と焼き直しで共有する (帯の計算が二重にならないように)"
+    default_font: |
+      既定 ON にすると「ON なのにフォント未選択で何も焼かれない」が無言で起きるので、実行直前に
+      `pickCaptionFont` (frontend の純関数) が自動で選ぶ。規律は 4 つ:
+        ①日本語グリフ必須 (copy_text は日本語)
+        ②app_data/fonts に置いたもの (source=user) を最優先 — 意図して置いたものより機械の推測を上に置かない
+        ③**太めのゴシックを優先**。画像に焼くので、細い明朝・教科書体は写真の上で読めない。
+           優先語には**日本語表記を必ず入れる** — 実測 (Windows 11、日本語あり 118 件) で
+           游ゴシック / メイリオ は日本語名で登録されており、ASCII の "yu gothic" / "meiryo" では
+           一生当たらない。半角カナ (HGPｺﾞｼｯｸE) も見る
+        ④同点は family 名で決める (実行のたびに変わらない)
+      選べなければ**焼かずに進み**、理由を進捗に出す (画像は出す)。fontPath は空のまま保存され、
+      toBackendCaption が null を返すので backend には渡らない。
+    fonts: "image_gen::fonts::list_fonts(app_data/fonts) = ユーザーが置いたフォント (User) + OS のフォントフォルダ (System: Windows %WINDIR%\\Fonts と %LOCALAPPDATA%\\Microsoft\\Windows\\Fonts / macOS /System/Library/Fonts, /Library/Fonts, ~/Library/Fonts / Linux /usr/share/fonts 等)。ttf/otf/ttc。TTC は face ごとに 1 件 (index)。ファミリー名は name テーブル (日本語 0x0411 → 英語 → 任意)。has_japanese = 『あ』のグリフ有無。並び = 日本語あり → ユーザー → 名前。実測: この機体で JP 118 / 他 368 面"
+    burn: "image_gen::caption::burn_caption(png, Caption{text, font_data, font_index, size_ratio 0.055, color 白, position top|bottom, margin_ratio 0.06}) — 中央揃え・複数行・落ち影 (黒 190/255、~5% ずらし)・幅 90% に収まるまで縮小 (下限 2%)。ab_glyph でラスタライズ。純粋"
+    wiring: "RefJob.caption: Option<CaptionSpec{font_path, font_index, size_ratio, position}> — 生成・合成の後に scene.copy_text を焼く。フォントが読めない / 焼けない時は焼かずに続行 (画像は残す、進捗に理由)。GUI: 設定 → 画像生成 → 『見出しの焼き込み — 任意』(チェック / フォント一覧 / 高さ比 / 位置 / プレビュー / フォントフォルダを開く)。command list_fonts / open_fonts_folder / caption_preview。CLI: --caption-font 等、`promo caption` / `promo fonts`"
+    poc: "caption 3 本 (空文字は同一 / 壊れフォントは Err / 実フォントで下部帯に文字・上部無傷・200 字でも端を突き抜けない) + fonts 2 本 + settings.test toBackendCaption。目視 1 枚 (BIZ UDゴシック B、demo_product_cut_caption.png)"
+  http: "全て backend (reqwest)。CSP connect-src は localhost のみ。表示は data URL"
+  keys: "**2 層構造を UI で明示** (rev2 査読 2): LLM = CLI 認証委任 (キー欄なし) / 画像 = OpenAI・Gemini はキー必須、ComfyUI は無キー。設定ペインは『LLM (CLI)』と『画像生成 (API キー)』を別セクションにし、『完全無キー』と読める文言を置かない"
+  comfy: "HTTP ポーリング (POST /prompt → GET /history/{id} → GET /view)。WebSocket は v1 外。%prompt% %negative% %seed% %width% %height% %ref_n% の型保持置換 + 未充足 %ref_n% ノードの剪定 (Kataribe #83)"
+  comfy_wait:                       # rev2 査読 7: /history 404 の期間が『実行待ち』か『失敗』か区別できない
+    poll: "1s → 2s → 4s → 上限 5s の指数バックオフ"
+    queue_check: "history 未着の間は GET /queue を併読し、prompt_id が queue_running / queue_pending のどちらにも無く history にも無ければ『消失』として即失敗 (timeout を待たない)。どちらかに在れば『待機中 (前に N 件)』を進捗に出す"
+    timeout: "600s は『queue に居る状態』にも適用 (無限待ちはしない)"
 
 PlateOverride:                      # rev11 (2026-09-09 ユーザー要望「傾きもはめ込み位置も変えたい」)。product カットのみ
   why: "rev10 で合成からやり直せるようになったので、見出しだけでなく**プレートの置き方**も無料で変えられる。より複雑な PR 動画を作るには 1 枚ごとの調整が要る"
@@ -335,29 +358,6 @@ CaptionLayout:                      # rev18。見出しの版組み。**焼き�
 # PromoJson.original_copy (rev12): scene_id → LLM が最初に書いたコピー文。生成時に 1 度だけ入れて以後触らない。
 # コピー文の書き換えは `scene.copy_text` を**その場で**書き換える — scenes.md もクリップボードも plan を
 # 読むので自動で揃う。書き換えたら reburn が scenes.md も書き直す (パッケージの中で食い違わせない)。
-    default_font: |
-      既定 ON にすると「ON なのにフォント未選択で何も焼かれない」が無言で起きるので、実行直前に
-      `pickCaptionFont` (frontend の純関数) が自動で選ぶ。規律は 4 つ:
-        ①日本語グリフ必須 (copy_text は日本語)
-        ②app_data/fonts に置いたもの (source=user) を最優先 — 意図して置いたものより機械の推測を上に置かない
-        ③**太めのゴシックを優先**。画像に焼くので、細い明朝・教科書体は写真の上で読めない。
-           優先語には**日本語表記を必ず入れる** — 実測 (Windows 11、日本語あり 118 件) で
-           游ゴシック / メイリオ は日本語名で登録されており、ASCII の "yu gothic" / "meiryo" では
-           一生当たらない。半角カナ (HGPｺﾞｼｯｸE) も見る
-        ④同点は family 名で決める (実行のたびに変わらない)
-      選べなければ**焼かずに進み**、理由を進捗に出す (画像は出す)。fontPath は空のまま保存され、
-      toBackendCaption が null を返すので backend には渡らない。
-    fonts: "image_gen::fonts::list_fonts(app_data/fonts) = ユーザーが置いたフォント (User) + OS のフォントフォルダ (System: Windows %WINDIR%\\Fonts と %LOCALAPPDATA%\\Microsoft\\Windows\\Fonts / macOS /System/Library/Fonts, /Library/Fonts, ~/Library/Fonts / Linux /usr/share/fonts 等)。ttf/otf/ttc。TTC は face ごとに 1 件 (index)。ファミリー名は name テーブル (日本語 0x0411 → 英語 → 任意)。has_japanese = 『あ』のグリフ有無。並び = 日本語あり → ユーザー → 名前。実測: この機体で JP 118 / 他 368 面"
-    burn: "image_gen::caption::burn_caption(png, Caption{text, font_data, font_index, size_ratio 0.055, color 白, position top|bottom, margin_ratio 0.06}) — 中央揃え・複数行・落ち影 (黒 190/255、~5% ずらし)・幅 90% に収まるまで縮小 (下限 2%)。ab_glyph でラスタライズ。純粋"
-    wiring: "RefJob.caption: Option<CaptionSpec{font_path, font_index, size_ratio, position}> — 生成・合成の後に scene.copy_text を焼く。フォントが読めない / 焼けない時は焼かずに続行 (画像は残す、進捗に理由)。GUI: 設定 → 画像生成 → 『見出しの焼き込み — 任意』(チェック / フォント一覧 / 高さ比 / 位置 / プレビュー / フォントフォルダを開く)。command list_fonts / open_fonts_folder / caption_preview。CLI: --caption-font 等、`promo caption` / `promo fonts`"
-    poc: "caption 3 本 (空文字は同一 / 壊れフォントは Err / 実フォントで下部帯に文字・上部無傷・200 字でも端を突き抜けない) + fonts 2 本 + settings.test toBackendCaption。目視 1 枚 (BIZ UDゴシック B、demo_product_cut_caption.png)"
-  http: "全て backend (reqwest)。CSP connect-src は localhost のみ。表示は data URL"
-  keys: "**2 層構造を UI で明示** (rev2 査読 2): LLM = CLI 認証委任 (キー欄なし) / 画像 = OpenAI・Gemini はキー必須、ComfyUI は無キー。設定ペインは『LLM (CLI)』と『画像生成 (API キー)』を別セクションにし、『完全無キー』と読める文言を置かない"
-  comfy: "HTTP ポーリング (POST /prompt → GET /history/{id} → GET /view)。WebSocket は v1 外。%prompt% %negative% %seed% %width% %height% %ref_n% の型保持置換 + 未充足 %ref_n% ノードの剪定 (Kataribe #83)"
-  comfy_wait:                       # rev2 査読 7: /history 404 の期間が『実行待ち』か『失敗』か区別できない
-    poll: "1s → 2s → 4s → 上限 5s の指数バックオフ"
-    queue_check: "history 未着の間は GET /queue を併読し、prompt_id が queue_running / queue_pending のどちらにも無く history にも無ければ『消失』として即失敗 (timeout を待たない)。どちらかに在れば『待機中 (前に N 件)』を進捗に出す"
-    timeout: "600s は『queue に居る状態』にも適用 (無限待ちはしない)"
 
 ImageGenError:                      # (Kataribe) Unauthorized / RateLimited{detail} / Blocked{reason} / Timeout{provider} / ComfyNodeError / Api / Network / Shape / Config
 

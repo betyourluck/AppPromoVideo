@@ -810,3 +810,26 @@ rev30 のコミット (`4400506`) の後に、ユーザー「履歴のダイア�
 
 **同日、一時コミット (ユーザー指示)**: rev31〜33 を一時コミットした (push はしていない)。続けて data_contract.yaml を YAML として読めるように直す
 (以前から 87 行目で解析に失敗していた。rev30 以降、触ったブロックだけを切り出して検証していた)。
+
+---
+
+## 2026-09-12 — data_contract.yaml を YAML として読めるように直す
+
+一時コミット (`51e7645`) の後、ユーザー「data_contract.yaml の yaml をなおしましょう」。
+
+**壊れていた箇所** (29 ブロック中 5 つ。PyYAML で 1 ブロックずつ読んで洗い出した):
+①CliOutcome / CliError — Rust の列挙の擬似記法 (`Ok { text: String, ... }` / `Cancelled`) が、キーの無い行として並んでいた。
+②ClaudeStreamLine / Scene — 値の中の `|` や `Option<{ yaw_degrees: f32, ... }>` が YAML の構文と衝突していた。
+③CaptionLayout — **中身ではなく位置の破損**。`ImageGenConfig.caption` の続き (`default_font` など 5 キー) と `ImageGenConfig` の続き (`http` など 4 キー) が、
+rev11 (`9375135`) で `PlateOverride` をその途中に挿し込んだ時に親から切り離され、後から挿し込まれた `RunSnapshots` / `CaptionLayout` の下に残っていた。
+git で rev11 の 1 つ前の版を見て、`per_scene.layout_for` の直後に `default_font` が続いていたことを確かめた。
+加えて、Scene に `video_prompt` のキーが 2 回あった (PyYAML は黙って後勝ちにする)。
+
+**直し方**: 擬似記法は `Variant: "{ ... }"` の形で引用符の中へ (情報は変えない)。迷子の 9 キーは元の位置へ移した (行頭の目印で切り出すスクリプトで、長い行を手で写さない)。
+重複した `video_prompt` は 1 つにし、2 つ目の説明は同じ文言のまま続きのコメント行にした。
+
+**検証**: 全体の解析 OK・重複キーなし (29 ブロック)。直す前の 513 行と、引用符・コロン・空白の差を除いて突き合わせ、差は意図した 3 行だけ。
+網 `scripts/check_data_contract.py` (重複キーも拾う) を足し、直す前の版で NG (87 行目) / 今の版で OK / 重複キーの見本で NG になることを確かめた
+(素の PyYAML は同じ見本を黙って通した)。
+
+**コミット** (ユーザー指示、この修正と台帳の記録を 1 本に。push はしていない)。

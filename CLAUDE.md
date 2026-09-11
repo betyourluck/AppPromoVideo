@@ -50,7 +50,7 @@
 
 | file | 中身 | 見るとき |
 |---|---|---|
-| `data_contract.yaml` | **名詞と契約**。型・上限・enum・不変条件 | 実装の前。ここが正本 |
+| `data_contract.yaml` | **名詞と契約**。型・上限・enum・不変条件 | 実装の前。ここが正本。触ったら `scripts/check_data_contract.py`。新しいブロックはトップレベルの切れ目に足す (mapping の途中に挿すと後ろのキーの親が変わる) |
 | `specs/NN_*.md` | **決定と Phase**。rev ごとの判断と理由、接地の限界 | なぜそうなっているかを知りたいとき |
 | `failures.md` | **罠台帳**。症状 → 真因 → 処方 → 一般化 | 同じ形の問題に当たったとき |
 | `history.md` | **作業ログ**。いつ何が起きて何が分かったか | 経緯をたどるとき。**読まなくても現状は分かる** |
@@ -61,6 +61,7 @@
 ```bash
 cargo test --workspace                    # PoC (promo_core + cli_runner + pipeline + image_gen)
 cargo clippy --workspace --all-targets    # lint
+python scripts/check_data_contract.py     # data_contract.yaml の構文と重複キー (PyYAML が要る。台帳は機械が読まないので壊れても何も落ちない)
 cargo run -q -p pipeline --bin promo -- brief <repo>   # RepoBrief を見る (LLM ゼロ)
 cargo run -q -p pipeline --bin promo -- run <repo> --concept "..." --snapshot <png> --model sonnet \
   --plate perspective|frontal --images gemini --out <dir>          # live 通し
@@ -73,7 +74,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 ## 現状 (2026-09-11)
 
 - **spec 01 は Phase 0〜E 着地、rev33 まで反映済み (rev27〜29 は試行)。** crates 159 green / vitest 65 / backend 15 green・clippy clean。
-- コミットは Initial `a75c3bc` の上に 35 本。`origin/main` には rev26 まで push 済み — **rev27〜29 (UI の試行、一時コミット) / rev30 (デザインの修正・多言語化) / rev31〜33 (履歴の全画面・比較の並び・チェックボックス、一時コミット) は未 push** (private。**週末に public 予定**)。
+- コミットは Initial `a75c3bc` の上に 36 本。`origin/main` には rev26 まで push 済み — **rev27〜29 (UI の試行、一時コミット) / rev30 (デザインの修正・多言語化) / rev31〜33 (履歴の全画面・比較の並び・チェックボックス、一時コミット) / data_contract.yaml の構文修正 は未 push** (private。**週末に public 予定**)。
 - 通し (解析 → 構成 → 参照画像 → 合成) は **4 リポジトリで live 成功** (Kataribe / Verificator /
   AppPromoVideo 自身 / Fuseforks)。**出口まで到達** — MiniMax i2v の 15 秒が X に投稿された (2026-09-09)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
