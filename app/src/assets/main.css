@@ -463,3 +463,21 @@ pre.block {
     0 0 6px oklch(var(--brand-mark) / 0.8),
     0 0 18px oklch(var(--brand-mark) / 0.4);
 }
+
+/* 配布ビルドだけ、ラベルやボタンの文字を選べなくする (rev47、ユーザー要望)。
+   印は main.ts が立てる (`document.documentElement.dataset.locked`) — CSS は dev か配布かを知らない。
+   **選べるままにするもの**: 入力欄 / プロンプトの本文 / 進捗ログ / エラー文。
+   ここを塞ぐと「ログを貼って報告する」導線ごと潰れる (実害がある)。 */
+:root[data-locked] {
+  user-select: none;
+  -webkit-user-select: none;
+}
+:root[data-locked] input,
+:root[data-locked] textarea,
+:root[data-locked] [contenteditable],
+:root[data-locked] pre,
+:root[data-locked] .warn,
+:root[data-locked] .selectable {
+  user-select: text;
+  -webkit-user-select: text;
+}

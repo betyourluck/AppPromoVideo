@@ -14,6 +14,10 @@ applyTheme();
 // 配布ビルドでは WebView の既定右クリックメニューと F5 / Ctrl+R を抑止する (Kataribe と同じ理由:
 // 「更新」が実行中の表示を吹き飛ばす)。入力欄と選択テキストの上ではネイティブメニューを残す。
 if (!import.meta.env.DEV) {
+  // 文字の選択を止める印 (rev47)。**CSS は dev か配布かを知らない**ので、ここで <html> に立てる。
+  // 何を選べるままにするかは main.css の `:root[data-locked]` 側が決める
+  // (入力欄・プロンプト・進捗ログは選べる — ログを貼れなくなるのは実害)。
+  document.documentElement.dataset.locked = "1";
   window.addEventListener("contextmenu", (e) => {
     const t = e.target instanceof HTMLElement ? e.target : null;
     const editable = t?.closest("input, textarea, [contenteditable]");

@@ -42,7 +42,8 @@ function cls(stage: string): string {
       </button>
     </div>
     <!-- rev29: 等幅 (Consolas) をやめて UI の書体の Medium に。Consolas には Medium が無い。 -->
-    <div ref="box" class="log">
+    <!-- 進捗ログは配布ビルドでも選べるまま (rev47) — 報告のために貼れなくなるのは実害。 -->
+    <div ref="box" class="log selectable">
       <div v-for="(l, i) in store.log" :key="i" class="log-entry" :class="cls(l.stage)">
         <span class="muted time">{{ fmt(l.ts) }}</span>
         <span class="stage-tag">[{{ l.stage }}]</span>

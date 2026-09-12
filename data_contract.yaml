@@ -241,6 +241,19 @@ Scene:                              # rev3 (2026-09-08、ユーザー FB「ス�
                                     # 各 -35〜35 度。範囲外は違反 (PlateTiltOutOfRange)。省略 = 正面。frontal モードでは無視される
   reference_image: Option<PathBuf>  # 生成後に埋まる
 
+DesktopGuards:                      # 2026-09-12 (rev47)。配布ビルドでブラウザ由来の操作を隠す。ユーザー要望
+  why: "デスクトップアプリなのに、右クリックすると WebView の「最新の情報に更新」「名前を付けて保存」「印刷」が出て、F5 で実行中の表示が吹き飛ぶ。ラベルの文字も選べてしまい、アプリらしくない"
+  dev_is_exempt: "**dev では締めない** — 右クリック → 検証と再読み込みは開発の道具。判別は `import.meta.env.DEV` (Vite)"
+  devtools: "`Cargo.toml` の tauri は `features = []` なので、**release には開発ツールがそもそもコンパイルされない** (Tauri 2 は debug でだけ自動で入れる)。右クリックの抑止はその上の二重の蓋"
+  context_menu: "抑止する。ただし**入力欄と選択中テキストの上ではネイティブメニューを残す** (コピー / 貼り付けの導線)"
+  reload: "F5 と Ctrl+R も塞ぐ — 右クリックの「更新」を潰しても WebView2 のアクセラレータで通る"
+  selection:                        # rev47 で追加 (Kataribe には無い)
+    how: "main.ts が配布ビルドでだけ `document.documentElement.dataset.locked` を立て、CSS が `:root[data-locked]` で切る。**CSS は dev か配布かを知らない**ので印で伝える"
+    locked: "既定は `user-select: none` (ラベル・見出し・ボタンの文字)"
+    exempt: "`input` / `textarea` / `[contenteditable]` / `pre` (プロンプト本文) / `.warn` (エラー文) / `.selectable` (進捗ログ)。**ここを塞ぐと「ログを貼って報告する」導線ごと潰れる** — 実害があるので免除する"
+  measured: "2026-09-12 実測 (印を手で立てて computed style): ラベル / 見出し / ボタンの文字 = none、入力欄 / テキストエリア / 進捗ログ / エラー文 = text"
+  poc: "app src/desktopGuards.test.ts (締めが dev の外にあること / 右クリックの例外 / F5・Ctrl+R / 印 / 免除の一覧 / 網自身がソースを読めているか)"
+
 FirstRunTour:                       # 2026-09-12 (rev44)。初回起動のナビゲーション。ユーザー要望
   why: "何をどの順でやるアプリなのかが、画面を見ただけでは分からない。**手順を教えるだけ** — 案内の中から設定や実行はさせない (ユーザー決定。移植元 Lorekeel と同じ流儀。開いた瞬間に案内は終わるので、案内の中に置く意味が薄い)"
   origin: "Lorekeel (Kataribe `app/src/tour.ts` + `FirstRunTour.vue`、2026-09-07) の移植。`spotlightBox` / `placeCard` は実機で詰めた判断なので**そのまま写す**。変えたのは ①歩数と対象 ②『初回』の見分け方 ③`spotlightUnion` (複数の要素をまとめて照らす)"
