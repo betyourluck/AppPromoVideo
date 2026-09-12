@@ -14,6 +14,10 @@
 
 <br />
 
+<video src="video/promovideo.mp4" controls="controls" muted="muted" width="100%"></video>
+
+<br />
+
 > **"Ready-to-paste output."**  
 > Not clever copywriting — prompts with the right granularity to paste directly into video-generation UIs, and reference images that stay faithful to your snapshots.  
 > *It doesn't create the video itself. It crafts the ultimate "brief" for video-generation AIs.*

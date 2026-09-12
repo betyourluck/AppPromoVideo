@@ -14,6 +14,10 @@
 
 <br />
 
+<video src="video/promovideo.mp4" controls="controls" muted="muted" width="100%"></video>
+
+<br />
+
 > **「貼れば動く出力」。**  
 > 訴求文の巧さではなく、動画生成 UI にそのまま貼れる粒度と、スナップショットに寄った参照画像の一貫性が売り。  
 > *動画そのものは作らない。動画生成 AI への最高の「指示書」を仕立てる。*
