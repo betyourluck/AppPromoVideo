@@ -1135,7 +1135,7 @@ Error: -p took "--output-format" as its prompt, so the intended prompt was left 
 Attach the prompt to the flag (-p='your prompt') and move --output-format elsewhere on the command line.
 ```
 
-**再現しない。** 同じ実体 (`C:/Users/conan/.local/bin/claude.exe`、2.1.263、Sep 8 から更新なし) に対し、
+**再現しない。** 同じ実体 (`C:/Users/user/.local/bin/claude.exe`、2.1.263、Sep 8 から更新なし) に対し、
 `-p --output-format …` を `--max-turns` / `--model` / `--add-dir` / `--allowedTools` / `--json-schema` と組み合わせて
 bash・PowerShell の両方から試したが、**すべて正常に受理された** (`-p` を末尾に移した並びも同じ)。
 位置引数を足した場合もエラーにならず、単にそれが prompt になる。
@@ -1157,7 +1157,7 @@ bash・PowerShell の両方から試したが、**すべて正常に受理され
 
 | ツール | headless での扱い |
 |---|---|
-| `list_dir` / `view_file` | **無条件に通る。cwd の外も読んだ** (`~/.gemini/` 配下の無関係なファイル) |
+| `list_dir` / `view_file` | **無条件に通る。cwd の外も読んだ** (ホームディレクトリ配下の、この run と無関係なファイル) |
 | `write_to_file` | **無条件に通る。`probe.txt` が実際に作られた** (3 バイト) |
 | `run_command` | 自動拒否 (`permission check failed` → step state=ERROR) |
 

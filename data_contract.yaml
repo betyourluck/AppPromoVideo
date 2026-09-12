@@ -83,7 +83,7 @@ IsolationGuarantee:                 # **kind ごとに強さが違う**。2026-0
   structural: "claude。`--allowedTools Read Glob Grep` で Write / Edit / Bash を**そもそも渡さない**。原理的に起きない"
   detect_only: "agy。**予防できない。起きた後に殺すだけ。**"
   agy_measured:                     # 2026-09-12 実測 (agy 1.2.2、headless = --input-format stream-json)
-    read: "list_dir / view_file は**無条件に通り、cwd の外も読む** (実測: ~/.gemini/ 配下の無関係なファイルを読んだ)。--add-dir が読み取りを縛るかは未確認"
+    read: "list_dir / view_file は**無条件に通り、cwd の外も読む** (実測: ホームディレクトリ配下の、この run と無関係なファイルを読んだ)。--add-dir が読み取りを縛るかは未確認"
     write: "write_to_file は**無条件に通る**。スクラッチパッドに probe.txt (3 バイト) が実際に作られた。**これがこの契約の根拠**であり、仕様に残す"
     command: "run_command だけは headless で自動拒否される (`permission check failed` → step state=ERROR)。理由は「headless では確認を出せないので auto-denied」"
     flags: "--mode plan / --sandbox のどちらもツールの面 (57 個) と permission_mode (request-review) を変えない。argv で絞る手は存在しない"

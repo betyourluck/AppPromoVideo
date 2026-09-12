@@ -56,6 +56,8 @@
 | `failures.md` | **罠台帳**。症状 → 真因 → 処方 → 一般化 | 同じ形の問題に当たったとき |
 | `history.md` | **作業ログ**。いつ何が起きて何が分かったか | 経緯をたどるとき。**読まなくても現状は分かる** |
 | `CLAUDE.md` | この file。北極星 / アーキテクチャ / 掟 / 現状 / 台帳の地図 | 毎回 |
+| `LICENSE` | **MIT**。公開リポジトリ (2026-09-13) | 配布・引用の条件を見るとき |
+| `.github/workflows/build.yml` | **リリースビルド**。`v*.*` タグの push で 3 OS を建てて Release を draft で作る (Lorekeel / Fuseforks からの移植) | 配布物を出すとき |
 
 ## 主要コマンド
 
@@ -77,7 +79,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 - **spec 01 は Phase 0〜E 着地、rev47 まで反映済み (rev27〜29 は試行)。** crates 188 green / vitest 118 / backend 25 green・clippy clean。
 - **agy でも通しが成功** (2026-09-12 21:13、ユーザー実機)。解析 → 構成 (1 回目で通過) → 参照画像 → 合成 → 見出しの焼き込み。
   費用の chip は出ない (agy は費用を返さないので描かない)。
-- コミットは Initial `a75c3bc` の上に積んでいる (**本数は数えない** — 書くたび 1 手遅れて嘘になる。`git rev-list --count a75c3bc..HEAD`)。**`origin/main` には rev42 まで push 済み** (private。**週末に public 予定**)。未 push があるかは `git log --oneline origin/main..HEAD` で数える — ここに書くと 1 手遅れる。
+- コミットは Initial `a75c3bc` の上に積んでいる。**本数も push 済みの範囲もここに書かない** — 書くたび 1 手遅れて嘘になる (実際に 2026-09-12、`rev42 まで push 済み` と書いた行の中に 「ここに書くと 1 手遅れる」と併記する矛盾を作った)。数えるなら `git rev-list --count a75c3bc..HEAD` と `git log --oneline origin/main..HEAD`。**公開リポジトリ** (MIT、`LICENSE`)。
 - 通し (解析 → 構成 → 参照画像 → 合成) は **4 リポジトリで live 成功** (Kataribe / Verificator /
   AppPromoVideo 自身 / Fuseforks)。**出口まで到達** — MiniMax i2v の 15 秒が X に投稿された (2026-09-09)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
