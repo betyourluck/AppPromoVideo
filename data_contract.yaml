@@ -83,9 +83,19 @@ runner:                             # Phase A (2026-09-08 実装・PoC 9 本 + �
   fold: "claude = stream::fold_lines (structured は result.structured_output → 無ければ result 文字列の fenced) / aider・custom = 終了コード検査 → 生 stdout 連結 → fenced_json なら救済"
   not_found: "spawn の io::ErrorKind::NotFound を CliError::NotFound へ (事前の PATH 検索はしない — spawn が唯一の真実)"
 
+CliRawLog:                          # 2026-09-12 起点。live の analyze が result 行なしで落ちた時、手掛かりが 300 字しか残っていなかった
+  why: "落ちた run の stream-json をディスクに残す。それまで raw_lines はメモリにしか無く、畳むのに失敗すると CliError::Shape.raw (1 行の先頭 300 字) だけが残った。run ディレクトリは export 時に作られるので、解析で落ちた run は痕跡がゼロだった"
+  where: "<CliInvocation.cwd>/cli-logs/<UTC yyyymmdd-HHMMSS>-<pid>.jsonl — cwd は app 所有の作業ディレクトリ。**解析対象のリポジトリには書かない**"
+  content: "**stdout の行だけ**を受信順にそのまま。stderr は混ぜない — NDJSON のままで fixtures/*.jsonl に流用できることを優先する (stderr は RunFailed.stderr_tail に末尾 4 KB)"
+  when: "成功・失敗を問わず常に書く (成功した run の封筒も fixture の原料)。**行が届くたびに書く** — timeout / cancel / kill でも届いたところまで残る"
+  invocation: "兄弟ファイル `<同名>.invocation.json` に `{program, args, cwd}` を書く。**何を起動したか**は失敗の半分の情報 (2026-09-12: argv が分からず再現できなかった)。`.jsonl` を claude の封筒だけに保つため別ファイルにする。**本文は argv に載らない契約**なのでここにも現れない。あわせて `runner::invocation_summary` が同じ内容を 1 行にして進捗ログへ出す (`--json-schema` の値は長さだけ)"
+  retention: "run の開始時に古い順で刈り、最新 CLI_LOG_KEEP (=20) 本だけ残す。**兄弟の `.invocation.json` も道連れ**にする (孤児にしない)"
+  fail_open: "ディレクトリが作れない・書けない時は log_path=None のまま実行を続ける。ログのために run を落とさない"
+  poc: "tests/runner.rs truncated_stream_keeps_the_raw_log_and_reports_exit_code / successful_run_also_leaves_the_raw_log / old_raw_logs_are_pruned / the_invocation_is_recorded_next_to_the_raw_log / invocation_summary_abbreviates_the_schema"
+
 CliOutcome:                         # 列挙の各 variant を「名前: フィールド」で書く (Rust の擬似記法は引用符の中)
   Ok: "{ text: String, structured: Option<Value>, cost_usd: Option<f64>, duration_ms: u64, model: Option<String> }"   # model = init 行の実名 (rev25)。aider / custom は None
-  Failed: "{ error: CliError, stderr_tail: String }"
+  Failed: "{ error: CliError, stderr_tail: String, log_path: Option<PathBuf> }"   # log_path = CliRawLog (書けなかった時は None)。Display は error の後ろに " — 生ログ: <path>" を足す
 
 CliError:                           # 契約 errors。UI はこの列挙で文言を出す (沈黙させない)
   NotFound: "{ executable: String }"   # spawn 前の存在検査 or ENOENT
@@ -97,7 +107,7 @@ CliError:                           # 契約 errors。UI はこの列挙で文�
     poc: "tests/runner.rs timeout_kills_the_whole_tree_including_grandchild (fake_cli grandchild が孫 pid を stdout に出す → timeout 2s → process_alive(pid) == false)。process_alive 自体は自分=true / 終了済み=false で検算 (常に false の実装で通ってしまうのを防ぐ)"
   ExitStatus: "{ code: Option<i32>, stderr_tail: String }"
   Auth: "{ message: String }"          # claude stream-json: assistant.error == "authentication_failed" or result.is_error + 本文 (fixtures/claude_auth_failed.jsonl = 2026-09-07 実測)
-  Shape: "{ detail: String, raw: String }"   # stream-json / JSON が読めない。raw 保持 (再生成の燃料)
+  Shape: "{ detail: String, raw: String }"   # stream-json / JSON が読めない。raw 保持 (再生成の燃料)。claude で result 行が無い時は detail に子の**終了コード**も載せる — それまで status を見るのは aider / custom だけで、claude では取得しておきながら捨てていた
 
 ClaudeStreamLine:                   # claude -p --output-format stream-json の 1 行 (NDJSON)。既知の type だけ読み、未知は Stdout へ流す (捨てない)
   system: '{ subtype: "init | api_retry | hook_started | hook_response | ...", session_id, model }'   # model (init のみ) = **解決後の**実名。`--model sonnet` でも空欄でもここは実名 (rev25、fixture で確認)

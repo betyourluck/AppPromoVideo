@@ -15,9 +15,12 @@ use tokio::process::{Child, Command};
 use tokio::sync::watch;
 
 use crate::error::CliError;
+use crate::raw_log::RawLog;
 use crate::invocation::{AIDER_MESSAGE_FILE_FLAG, CliInvocation, CliKind, PromptTransport, Structured};
 use crate::stream::{ParsedLine, early_abort, fold_lines, parse_line, retry_notice};
 use crate::tree_kill::Tree;
+
+pub use crate::raw_log::CLI_LOG_KEEP;
 
 /// 契約 `CliEvent` (Finished は戻り値で表す)。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -47,10 +50,13 @@ pub struct RunOk {
 
 /// 契約 `CliOutcome::Failed`。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, thiserror::Error)]
-#[error("{error}")]
+#[error("{error}{}", .log_path.as_ref().map(|p| format!(" — 生ログ: {}", p.display())).unwrap_or_default())]
 pub struct RunFailed {
     pub error: CliError,
     pub stderr_tail: String,
+    /// 生ログ (契約 `CliRawLog`)。書けなかった時は None。**落ちた run の唯一の手掛かり**なので文言にも出す。
+    #[serde(default)]
+    pub log_path: Option<PathBuf>,
 }
 
 pub struct RunOptions {
@@ -98,7 +104,8 @@ pub async fn run(
     mut on_event: impl FnMut(CliEvent),
 ) -> Result<RunOk, RunFailed> {
     let started = Instant::now();
-    let fail = |error: CliError, stderr_tail: String| RunFailed { error, stderr_tail };
+    // spawn 前の失敗にはまだ生ログが無い。spawn 後は `failed` を使う。
+    let fail = |error: CliError, stderr_tail: String| RunFailed { error, stderr_tail, log_path: None };
 
     // --- 本文の運搬先を決める ---
     let mut args = inv.args.clone();
@@ -143,6 +150,16 @@ pub async fn run(
     let pid = child.id().unwrap_or(0);
     on_event(CliEvent::Started { pid });
 
+    // --- 生ログ (契約 CliRawLog。開けなくても続ける) ---
+    let mut log = RawLog::open(&inv.cwd, pid);
+    if let Some(l) = log.as_ref() {
+        l.write_invocation(&inv.program, &args, &inv.cwd);
+    }
+    // 何を起動したかは失敗の半分の情報 (2026-09-12: argv が分からず再現できなかった)。
+    on_event(CliEvent::Progress { text: invocation_summary(&inv.program, &args) });
+    let log_path = log.as_ref().map(|l| l.path().to_path_buf());
+    let failed = |error: CliError, stderr_tail: String| RunFailed { error, stderr_tail, log_path: log_path.clone() };
+
     // --- stdin (書き切ったら閉じる = EOF を届ける) ---
     if let Some(mut stdin) = child.stdin.take() {
         let body = inv.prompt.clone();
@@ -172,6 +189,7 @@ pub async fn run(
         tokio::select! {
             l = out_lines.next_line(), if out_open => match l {
                 Ok(Some(line)) => {
+                    if let Some(l) = log.as_mut() { l.write_line(&line); }
                     let parsed = parse_line(&line);
                     if let Some(err) = early_abort(&parsed) {
                         raw_lines.push(line);
@@ -208,15 +226,15 @@ pub async fn run(
     match end {
         LoopEnd::Timeout => {
             tree.kill(&mut child).await;
-            return Err(fail(CliError::Timeout { secs: opts.timeout.as_secs() }, stderr_tail));
+            return Err(failed(CliError::Timeout { secs: opts.timeout.as_secs() }, stderr_tail));
         }
         LoopEnd::Cancelled => {
             tree.kill(&mut child).await;
-            return Err(fail(CliError::Cancelled, stderr_tail));
+            return Err(failed(CliError::Cancelled, stderr_tail));
         }
         LoopEnd::Abort(err) => {
             tree.kill(&mut child).await;
-            return Err(fail(err, stderr_tail));
+            return Err(failed(err, stderr_tail));
         }
         LoopEnd::Eof => {}
     }
@@ -225,10 +243,10 @@ pub async fn run(
     let remaining = opts.timeout.saturating_sub(started.elapsed()).max(Duration::from_secs(1));
     let status = match tokio::time::timeout(remaining, child.wait()).await {
         Ok(Ok(s)) => s,
-        Ok(Err(e)) => return Err(fail(CliError::Shape { detail: format!("wait 失敗: {e}"), raw: String::new() }, stderr_tail)),
+        Ok(Err(e)) => return Err(failed(CliError::Shape { detail: format!("wait 失敗: {e}"), raw: String::new() }, stderr_tail)),
         Err(_) => {
             tree.kill(&mut child).await;
-            return Err(fail(CliError::Timeout { secs: opts.timeout.as_secs() }, stderr_tail));
+            return Err(failed(CliError::Timeout { secs: opts.timeout.as_secs() }, stderr_tail));
         }
     };
     let duration_ms = started.elapsed().as_millis() as u64;
@@ -236,7 +254,8 @@ pub async fn run(
     // --- kind 別に畳む ---
     match inv.kind {
         CliKind::Claude => {
-            let fold = fold_lines(raw_lines.iter().map(String::as_str)).map_err(|e| fail(e, stderr_tail.clone()))?;
+            let fold = fold_lines(raw_lines.iter().map(String::as_str))
+                .map_err(|e| failed(annotate_exit(e, &status), stderr_tail.clone()))?;
             let structured = match (inv.structured, fold.structured) {
                 (Structured::JsonSchema, Some(v)) => Some(v),
                 (Structured::JsonSchema, None) => promo_core::fenced::parse_json_object(&fold.result_text).ok(),
@@ -251,7 +270,7 @@ pub async fn run(
         }
         CliKind::Aider | CliKind::Custom => {
             if !status.success() {
-                return Err(fail(CliError::ExitStatus { code: status.code(), stderr_tail: stderr_tail.clone() }, stderr_tail));
+                return Err(failed(CliError::ExitStatus { code: status.code(), stderr_tail: stderr_tail.clone() }, stderr_tail));
             }
             let text = raw_lines.join("\n");
             let structured = match inv.structured {
@@ -264,4 +283,38 @@ pub async fn run(
             Ok(RunOk { text, structured, cost_usd: None, duration_ms, model: None })
         }
     }
+}
+
+/// claude の畳みが失敗した時、子の**終了コード**を detail に足す。
+///
+/// rev38 以前は `status` を計算しておきながら aider / custom でしか見ておらず、claude が result 行を
+/// 出さずに落ちた時に「自分で終わったのか異常終了なのか」が分からなかった (2026-09-12 の live 障害)。
+fn annotate_exit(err: CliError, status: &std::process::ExitStatus) -> CliError {
+    match err {
+        CliError::Shape { detail, raw } => {
+            let code = status.code().map(|c| c.to_string()).unwrap_or_else(|| "不明 (シグナル)".into());
+            CliError::Shape { detail: format!("{detail}, 終了コード {code}"), raw }
+        }
+        other => other,
+    }
+}
+
+/// 起動の 1 行 (進捗ログ用、純粋)。`--json-schema` の値は**長さだけ**にする — 数千字が
+/// ログを埋めるうえに、読みたいのは「schema を渡したか」であって中身ではない。
+/// **本文 (prompt) は argv に載らない契約**なので、ここに現れることはない。
+pub fn invocation_summary(program: &str, args: &[String]) -> String {
+    let mut out = vec![program.to_string()];
+    let mut skip_next = false;
+    for (i, a) in args.iter().enumerate() {
+        if skip_next {
+            skip_next = false;
+            out.push(format!("<schema {} 字>", a.chars().count()));
+            continue;
+        }
+        if a == "--json-schema" && i + 1 < args.len() {
+            skip_next = true;
+        }
+        out.push(a.clone());
+    }
+    format!("起動: {}", out.join(" "))
 }

@@ -195,7 +195,9 @@ pub fn run_id_from(unix_ms: i64, existing: &[String]) -> String {
 }
 
 /// unix ms → `YYYYMMDD-HHMMSS` (UTC、純粋)。暦は Howard Hinnant の civil_from_days。
-fn format_utc_compact(unix_ms: i64) -> String {
+///
+/// `run_id` と `CliRawLog` の名前が同じ書式・同じ暦を使う (cli_runner から参照)。
+pub fn format_utc_compact(unix_ms: i64) -> String {
     let secs = unix_ms.div_euclid(1000);
     let days = secs.div_euclid(86_400);
     let sod = secs.rem_euclid(86_400);

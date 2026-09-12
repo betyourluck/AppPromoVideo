@@ -3,6 +3,8 @@
 //! - `stream-echo`            : stdin を全部読み、claude 風 stream-json (init / assistant text / result +
 //!   structured_output {"echo": <stdin>}) を出す
 //! - `stream-auth-then-hang`  : init + assistant(error=authentication_failed) を出して 60 秒眠る
+//! - `stream-truncated <code>`: init + assistant text + **JSON でない散文の行**を出し、result 行を出さずに
+//!   code で終了する (2026-09-12 の live 障害の形。claude が result を出さずに落ちた)
 //! - `hang <secs>`            : 眠る (stdout に "hanging" を 1 行)
 //! - `grandchild`             : 自分を `hang 120` で spawn し、"grandchild_pid=<pid>" を出して 120 秒眠る
 //! - `fail <code>`            : stderr に "boom" を出して code で終了
@@ -40,6 +42,19 @@ fn main() {
             .unwrap();
             out.flush().unwrap();
             std::thread::sleep(std::time::Duration::from_secs(60));
+        }
+        "stream-truncated" => {
+            let code: i32 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(1);
+            writeln!(out, r#"{{"type":"system","subtype":"init","session_id":"fake","model":"claude-sonnet-5"}}"#).unwrap();
+            writeln!(
+                out,
+                r#"{{"type":"assistant","message":{{"content":[{{"type":"text","text":"scanning"}}]}}}}"#
+            )
+            .unwrap();
+            // stream-json の規約違反 (素の散文)。実機ではここに作業の要約が出ていた。
+            writeln!(out, "- **製品分析JSONの作成**: …出力しました。").unwrap();
+            out.flush().unwrap();
+            std::process::exit(code);
         }
         "hang" => {
             let secs: u64 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(60);

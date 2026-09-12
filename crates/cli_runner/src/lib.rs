@@ -7,6 +7,7 @@
 pub mod env_scrub;
 pub mod error;
 pub mod invocation;
+pub mod raw_log;
 pub mod runner;
 pub mod stream;
 pub mod tree_kill;

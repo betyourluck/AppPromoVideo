@@ -1082,6 +1082,70 @@ promo.json には rev15 から書かれており型も同じだが、live の 1 
 **接地の限界**: Tauri の WebView では未目視。**保存の成功経路は backend のテストで固定したが、GUI からの保存は未実施**。
 コピー先の文字列は plan から組むので保存後のコピーにも反映されるはずだが、これも GUI では未確認。
 
+## rev38 (2026-09-12、落ちた run の生ログを残す / 未使用の i18n キーを撤去)
+
+**ユーザー**「途中で止まってしまった」。live の解析が 2 分 04 秒で `result 行が無い (途中で終了)` で落ち、
+最後に読めなかった行が JSON ではなく日本語の散文 (「…出力しました。」= 作業の完了報告の形) だった。
+
+**切り分け** (**原因は特定していない**。除外できたものだけを書く):
+
+| 問い | 結果 | 接地 |
+|---|---|---|
+| タイムアウトか | 違う | timeout は `CliError::Timeout`。出たのは `Shape` = 子が**自分で** stdout/stderr を閉じた経路。既定 600 秒に対し 124 秒 |
+| 認証か | 違う | 認証失敗は `CliError::Auth` に分類される |
+| `--max-turns` が消えたか | 違う | 2.1.263 の `--help` に載っていないが**受理される**。未知フラグは `error: unknown option` で即死することを対照実験で確認 |
+| 何が起きたか | **result 行を出さずに終了**。stream-json の規約に反して素の散文が stdout に出ていた | `fold_lines` の `raw_tail` |
+
+**調べられなかった理由がそのまま欠陥だった** (failures「落ちた run の手掛かりを捨てていた」)。
+
+149. **生ログ** (契約 `CliRawLog`)。`<CliInvocation.cwd>/cli-logs/<UTC YYYYMMDD-HHMMSS>-<pid>.jsonl` に
+     **stdout の行だけ**を受信順に、**行が届くたびに**書く。stderr は混ぜない — NDJSON のままなら `fixtures/*.jsonl` に流用できる。
+     成功・失敗を問わず残し (成功 run の封筒も fixture の原料)、最新 20 本だけ保つ。**fail-open** — 書けなくても run は落とさない。
+     暦は `promo_core::export::format_utc_compact` を公開して共用した (`run_id` と同じ書式・同じ暦を 2 か所に持たない)。
+150. **`RunFailed.log_path`** に載せ、**Display にも出す** (`… — 生ログ: <path>`)。`PipelineError::Cli` が `{0}` で写すので進捗ログにパスが出る。
+151. **claude でも終了コードを見る**。`annotate_exit` が `Shape.detail` に `終了コード N` を足す。
+     それまで `status` は計算しておきながら `aider` / `custom` の分岐でしか見ておらず、claude では捨てていた。
+152. **未使用の i18n キー 13 個を撤去** — すべて改名の取り残しで、置き換え先が現役だった
+     (`runs.empty`→`runs.none` / `runs.app`→`runs.colApp` / `runs.runDir`→`runs.folder` / `runs.remove`→`runs.forgetTitle` /
+     `caption.originalText`→`caption.restoreFirst` / `common.apply`→`caption.apply` / `common.open`→`runs.open` ほか)。
+     3 言語から同時に消して 270 → 257 キー。**機械の網 `i18nUnusedKeys.test.ts`** を置いた
+     (型は「辞書に無いキーを使うこと」は止めるが「使われないキーが残ること」は止めない)。
+
+**PoC**:
+- cli_runner 3 本 (`truncated_stream_keeps_the_raw_log_and_reports_exit_code` / `successful_run_also_leaves_the_raw_log` / `old_raw_logs_are_pruned`)。
+  偽 CLI に `stream-truncated <code>` を足して**今回の症状の形**を再現した (init + assistant + 素の散文 → result 無しで終了)。
+  API が無い状態で Red (`no field log_path` / `cannot find value CLI_LOG_KEEP`) → Green。
+- **検出力も確認** — 行を書く 1 行・終了コードを足す式・刈り取りの 3 か所をそれぞれ外すと 3 本とも落ち、戻すと通る。
+- 網の初版は**部分一致**で `runs.delete` を `runs.deleteTitle` の陰に見逃していた (12 個と数えた)。
+  引用符つきの完全一致に締めて 13 個目が出た — **台帳の数字と 1 個ずれたので測定を疑い直した**結果。
+
+足場: crates 162 → 165 / backend 17 green / vitest 75 → 78 / build green / 両ワークスペース clippy clean。
+
+153. **起動の記録** — 兄弟ファイル `<同名>.invocation.json` に `{program, args, cwd}` を書き、
+     `invocation_summary` が同じ内容を 1 行にして進捗ログにも出す (`--json-schema` の値は長さだけ)。
+     **何を起動したかは失敗の半分の情報**で、生ログ (何が返ったか) だけでは足りなかった (下の 19:24 の障害で判明)。
+     刈る時は兄弟も道連れにする。**本文は argv に載らない契約**なので、どちらにも指示本文は出ない (PoC で固定)。
+
+**生ログの初実測 (2026-09-12 19:24)**: ユーザーが再実行し、**別の壊れ方**が出た。設定「OAuth ログインを使う」を ON にした run で、
+起動と同じ秒に `終了コード 2` で落ち、stderr に:
+
+```
+Error: -p took "--output-format" as its prompt, so the intended prompt was left as an argument and ignored.
+Attach the prompt to the flag (-p='your prompt') and move --output-format elsewhere on the command line.
+```
+
+**再現しない。** 同じ実体 (`C:/Users/conan/.local/bin/claude.exe`、2.1.263、Sep 8 から更新なし) に対し、
+`-p --output-format …` を `--max-turns` / `--model` / `--add-dir` / `--allowedTools` / `--json-schema` と組み合わせて
+bash・PowerShell の両方から試したが、**すべて正常に受理された** (`-p` を末尾に移した並びも同じ)。
+位置引数を足した場合もエラーにならず、単にそれが prompt になる。
+→ **アプリが実際に渡した argv が分からないと進めない**ので 153 を足した。次の run で確定する。
+疑っているのは GUI 設定の「追加の引数」に入った 1 語 (**未確認の仮説**)。
+
+**接地の限界**: **障害は 2 件とも直っていない。** 18:48 の件で除外できたのは timeout / 認証 / `--max-turns` の 3 つだけで、
+「なぜ result 行が出なかったか」「なぜ素の散文が stdout に出たか」は不明のまま。19:24 の件は再現に失敗している。
+この rev がしたのは**次に落ちた時に読めるようにした**ことだけで、再発の防止ではない。
+生ログは 19:24 の run で初めて実機に出た (パスがエラーに出ることは確認済み)。**中身はまだ読んでいない。**
+
 ## 検討した代案: Remotion (2026-09-08、採用しない)
 
 React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](https://github.com/remotion-dev/remotion))。
@@ -1187,6 +1251,8 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [ ] rev35 (2026-09-12): 設定も全画面に (138〜141、`SettingsScreen.vue`。3 列 / 説明は畳む / 段は下端で揃える)。vitest 65 / build green。1288x842 と 1600x1017 で実測。**GUI 目視 OK (ユーザー 2026-09-12、英語表示でも溢れない)**
 - [ ] rev36 (2026-09-12): 無い記録を描かない (142) / タイトルバーのアイコンはトグル (143〜144)。vitest 72 / build green。ブラウザで実測、**Tauri の GUI は未目視**
 - [ ] rev37 (2026-09-12): プロンプトの書き換え (145〜148、鉛筆で編集モード)。crates 162 / backend 17 / vitest 75 / build green。**Tauri の GUI は未目視 (GUI からの保存は未実施)**
+- [x] rev38 (2026-09-12): 落ちた run の生ログと起動の記録を残す (149〜151・153、契約 `CliRawLog`) / 未使用の i18n キー 13 個を撤去 (152)。crates 167 / backend 17 / vitest 78 / build green。**障害は 2 件とも未解明** — 読めるようにしただけ
+- [ ] **19:24 の障害** (`-p took "--output-format" as its prompt`、終了コード 2)。手元では再現しない。次の run の `.invocation.json` で argv を確定する
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度 / `RunStats` の live 記録 (frontal の費用)
 - [ ] Phase E
 

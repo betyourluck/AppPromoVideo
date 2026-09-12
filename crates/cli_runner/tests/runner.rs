@@ -17,6 +17,13 @@ fn scratch() -> PathBuf {
     d
 }
 
+/// ログを数えるテスト用の隔離された cwd (共有 scratch では他のテストの刈り取りと干渉する)。
+fn scratch_named(name: &str) -> PathBuf {
+    let d = std::env::temp_dir().join(format!("cli_runner_test_{}_{name}", std::process::id()));
+    std::fs::create_dir_all(&d).unwrap();
+    d
+}
+
 fn inv(kind: CliKind, args: &[&str], prompt: &str, transport: PromptTransport, structured: Structured) -> CliInvocation {
     CliInvocation {
         program: FAKE.to_string(),
@@ -178,6 +185,117 @@ fn process_alive_distinguishes_live_and_dead() {
     let pid = child.id();
     let _ = child.wait_with_output().unwrap();
     assert!(!process_alive(pid), "終了済みのプロセス {pid} が生きていると判定された");
+}
+
+/// 2026-09-12 の live 障害の形: claude が result 行を出さずに終了した。
+/// **落ちた run から手掛かりが残ること**を固定する — 生ログのパスと、子の終了コード。
+#[tokio::test]
+async fn truncated_stream_keeps_the_raw_log_and_reports_exit_code() {
+    let mut i = inv(CliKind::Claude, &["stream-truncated", "1"], "", PromptTransport::Stdin, Structured::JsonSchema);
+    i.cwd = scratch_named("truncated");
+    let (o, _tx) = opts(10);
+    let err = run(&i, o, |_| {}).await.unwrap_err();
+    let CliError::Shape { detail, raw } = &err.error else { panic!("Shape であるべき: {:?}", err.error) };
+    assert!(detail.contains("result 行が無い"), "{detail}");
+    assert!(detail.contains("終了コード 1"), "終了コードが detail に無い: {detail}");
+    assert!(raw.contains("出力しました"), "JSON でない行が raw に残っていない: {raw}");
+
+    let path = err.log_path.as_ref().expect("生ログのパスが RunFailed に無い");
+    let body = std::fs::read_to_string(path).unwrap();
+    let lines: Vec<&str> = body.lines().collect();
+    assert_eq!(lines.len(), 3, "stdout の 3 行が揃っていない: {lines:?}");
+    assert!(lines[0].contains(r#""subtype":"init""#));
+    assert!(lines[2].contains("出力しました"), "JSON でない行がログから落ちている");
+    assert!(err.to_string().contains(&path.display().to_string()), "文言にログのパスが無い: {err}");
+}
+
+/// 成功した run の封筒も fixture の原料になるので残す。
+#[tokio::test]
+async fn successful_run_also_leaves_the_raw_log() {
+    let mut i = inv(CliKind::Claude, &["stream-echo"], "body", PromptTransport::Stdin, Structured::JsonSchema);
+    i.cwd = scratch_named("success_log");
+    let (o, _tx) = opts(10);
+    let before = log_files(&i.cwd);
+    run(&i, o, |_| {}).await.unwrap();
+    let after = log_files(&i.cwd);
+    let fresh: Vec<_> = after.iter().filter(|p| !before.contains(p)).collect();
+    assert_eq!(fresh.len(), 1, "成功 run のログが 1 本増えていない");
+    assert_eq!(std::fs::read_to_string(fresh[0]).unwrap().lines().count(), 3);
+}
+
+/// ログは無限に溜めない。
+#[tokio::test]
+async fn old_raw_logs_are_pruned() {
+    let mut i = inv(CliKind::Claude, &["stream-echo"], "body", PromptTransport::Stdin, Structured::JsonSchema);
+    i.cwd = scratch_named("prune");
+    let dir = i.cwd.join("cli-logs");
+    std::fs::create_dir_all(&dir).unwrap();
+    for n in 0..(cli_runner::runner::CLI_LOG_KEEP + 12) {
+        std::fs::write(dir.join(format!("19700101-0000{n:02}-0.jsonl")), "x
+").unwrap();
+        std::fs::write(dir.join(format!("19700101-0000{n:02}-0.invocation.json")), "{}").unwrap();
+    }
+    let (o, _tx) = opts(10);
+    run(&i, o, |_| {}).await.unwrap();
+    assert!(log_files(&i.cwd).len() <= cli_runner::runner::CLI_LOG_KEEP, "古いログが刈られていない");
+    let orphans = std::fs::read_dir(&dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| {
+            let Some(name) = p.file_name().and_then(|n| n.to_str()) else { return false };
+            name.ends_with(".invocation.json") && !dir.join(name.replace(".invocation.json", ".jsonl")).exists()
+        })
+        .count();
+    assert_eq!(orphans, 0, "起動の記録だけが孤児として残っている");
+}
+
+/// 何を起動したかも残す (argv が分からないと再現できない。2026-09-12)。
+/// **本文は argv に載らない契約**なので、ここにも出てはいけない。
+#[tokio::test]
+async fn the_invocation_is_recorded_next_to_the_raw_log() {
+    let mut i = inv(CliKind::Claude, &["stream-truncated", "1"], "秘密の指示本文", PromptTransport::Stdin, Structured::JsonSchema);
+    i.cwd = scratch_named("invocation");
+    let (o, _tx) = opts(10);
+    let mut progress = Vec::new();
+    let err = run(&i, o, |e| {
+        if let CliEvent::Progress { text } = &e {
+            progress.push(text.clone());
+        }
+    })
+    .await
+    .unwrap_err();
+
+    let side = err.log_path.as_ref().unwrap().with_extension("invocation.json");
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&side).unwrap()).unwrap();
+    assert_eq!(v["args"][0], "stream-truncated");
+    assert!(!side.display().to_string().is_empty());
+    assert!(!std::fs::read_to_string(&side).unwrap().contains("秘密の指示本文"), "本文が argv の記録に漏れている");
+
+    let started = progress.iter().find(|t| t.starts_with("起動: ")).expect("起動の 1 行が進捗に無い");
+    assert!(started.contains("stream-truncated"), "{started}");
+    assert!(!started.contains("秘密の指示本文"), "本文が進捗ログに漏れている");
+}
+
+/// `--json-schema` の値は長さだけにする (数千字がログを埋める)。
+#[test]
+fn invocation_summary_abbreviates_the_schema() {
+    let args: Vec<String> = ["-p", "--json-schema", r#"{"type":"object"}"#, "--add-dir", "D:/x"].iter().map(|s| s.to_string()).collect();
+    let line = cli_runner::runner::invocation_summary("claude", &args);
+    assert_eq!(line, "起動: claude -p --json-schema <schema 17 字> --add-dir D:/x");
+}
+
+fn log_files(cwd: &Path) -> Vec<PathBuf> {
+    let dir = cwd.join("cli-logs");
+    let Ok(rd) = std::fs::read_dir(&dir) else { return vec![] };
+    // 起動の記録 (.invocation.json) は数えない — 数えたいのはログの本数。
+    let mut v: Vec<PathBuf> = rd
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "jsonl"))
+        .collect();
+    v.sort();
+    v
 }
 
 #[test]
