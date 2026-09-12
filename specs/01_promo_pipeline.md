@@ -1227,6 +1227,29 @@ UI のバナーは Tauri の GUI で未目視。
 (その時は `version` が `claude` を含まなくなるので「食い違い」と出る)。aider の名乗りは未確認なので判定の外。
 GUI は未目視。
 
+## rev41 (2026-09-12、食い違ったまま走らせない — 警告は必ず通る場所に置く)
+
+**rev40 では足りなかった。** 警告を設定画面にだけ置いたが、**実行はメイン画面からする**ので誰も見ない。
+同じ事故 (種類 `claude` × 実行ファイル `agy`) が 3 回続いた。
+ユーザー決定: **止める** — 食い違ったまま走らせると必ず数秒で失敗するので、止めても失うものが無い。
+
+163. **run の開始時に止める**。認証の行の直後・brief を読む前に `--version` を引き、
+     `kind_mismatches_version` が真なら進捗ログに 1 行出して `Err` で返す。
+     **名乗りが取れない時は黙って進む** — 取れないことは食い違いの証拠ではない (rev40 と同じ規律)。
+     実行ファイルが無い場合はこの先の spawn が `NotFound` で落ちるので、ここで二重に判定しない。
+164. **文言は 1 行で完結させる** — 種類 / 実行ファイル / 名乗り / **どう直すか**。ログには 1 行しか出ない。
+165. `--version` を引く経路を `cli_version` 1 つに寄せた (`check_cli` と preflight が別々に組み立てない)。
+
+**PoC**: backend 2 本 (実測の名乗りで止まる / 止まらない、文言が 4 つの要素を含む)。
+文言から直し方を消すと落ちることを確認。
+
+足場: crates 176 / **backend 17 → 19** / vitest 83 / build green / 両ワークスペース clippy clean。
+
+**接地の限界**: **止める配線そのものは未テスト。** 判定と文言は純関数の PoC で固定したが、
+`run_inner` が実際に `Err` を返して走らないことは Tauri のコマンドを動かさないと確かめられず、
+ここでは Red を観測していない。GUI 未目視。
+1 回の run につき `--version` の子プロセスが 1 つ増える (実測でどちらの CLI も即返る)。
+
 ## 検討した代案: Remotion (2026-09-08、採用しない)
 
 React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](https://github.com/remotion-dev/remotion))。
@@ -1336,6 +1359,7 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [x] **19:24 の障害の真因** (2026-09-12): `.invocation.json` と進捗ログの「起動:」で確定 — 実行ファイルが `claude` ではなく **`agy`** だった。agy の `-p` は値を取る
 - [x] rev39 (2026-09-12): agy 対応 (154〜160、契約 `IsolationGuarantee` / `AgyStreamLine`)。crates 175 / backend 17 / vitest 81 / build green。**agy での通しは未実施**
 - [x] rev40 (2026-09-12): 種類と実行ファイルの食い違いを画面で止める (161〜162、契約 `CliKindCheck`)。crates 176 / backend 17 / vitest 83 / build green。**GUI 未目視**
+- [x] rev41 (2026-09-12): 食い違ったまま走らせない (163〜165)。run の開始時に止める。crates 176 / backend 19 / vitest 83 / build green。**止める配線は未テスト・GUI 未目視**
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度 / `RunStats` の live 記録 (frontal の費用)
 - [ ] Phase E
 

@@ -189,6 +189,25 @@ fn auth_view_env() -> AuthView {
     }
 }
 
+/// `--version` の 1 行目 (契約 `CliKindCheck`)。取れなければ None — **取れないことを食い違いの証拠にしない**。
+async fn cli_version(executable: &str) -> Option<String> {
+    let fut = tokio::process::Command::new(executable).arg("--version").output();
+    match tokio::time::timeout(std::time::Duration::from_secs(20), fut).await {
+        Ok(Ok(out)) => {
+            let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            text.lines().next().map(str::to_string).filter(|l| !l.trim().is_empty())
+        }
+        _ => None,
+    }
+}
+
+/// 種類と実体が食い違っている時に出す 1 行 (純粋。PoC あり)。
+fn kind_mismatch_message(kind: cli_runner::CliKind, executable: &str, version: &str) -> String {
+    format!(
+        "種類は {kind:?} ですが、{executable} は \"{version}\" と名乗りました — 別系統の引数が飛びます。設定の「CLI の種類」を実体に合わせてください"
+    )
+}
+
 #[tauri::command]
 async fn check_cli(executable: String, kind: Option<cli_runner::CliKind>) -> CliCheck {
     let mut auth = auth_view_env();
@@ -328,6 +347,17 @@ async fn run_inner(app: &AppHandle, cancel: watch::Receiver<bool>, req: RunReque
             a.scrubbed.len()
         ),
     );
+    // 種類と実体の食い違いは**走らせる前に止める** (契約 `CliKindCheck`)。
+    // rev40 は設定画面にだけ警告を出したが、実行はメイン画面からするので誰も見なかった
+    // (同じ事故が 3 回続いた)。名乗りが取れない時は黙って進む — 取れないことは食い違いの証拠ではない。
+    if let Some(version) = cli_version(&req.cli.executable).await {
+        if cli_runner::kind_mismatches_version(req.cli.kind, &version) {
+            let msg = kind_mismatch_message(req.cli.kind, &req.cli.executable, &version);
+            emit(app, "cli", msg.clone());
+            return Err(msg);
+        }
+    }
+
     emit(app, "brief", "リポジトリを読んでいます…");
     let inputs = collect_brief(&project, &snaps)?;
     let brief = compress(&inputs);
@@ -1316,6 +1346,31 @@ mod prompt_edit_tests {
         assert!(err.contains("motion"), "{err}");
         assert_eq!(fs::read_to_string(dir.join("promo.json")).unwrap(), before);
         assert!(!dir.join("scenes.md").exists(), "拒んだのに scenes.md を書いている");
+    }
+}
+
+#[cfg(test)]
+mod kind_preflight_tests {
+    use super::kind_mismatch_message;
+    use cli_runner::{CliKind, kind_mismatches_version};
+
+    /// 走らせる前に止める判定 (契約 `CliKindCheck`)。実測の名乗りに接地する。
+    #[test]
+    fn the_preflight_stops_only_on_a_real_mismatch() {
+        // 実測: claude 2.1.263 / agy 1.2.2。
+        assert!(kind_mismatches_version(CliKind::Claude, "1.2.2"), "今日の事故の形");
+        assert!(!kind_mismatches_version(CliKind::Claude, "2.1.263 (Claude Code)"));
+        assert!(!kind_mismatches_version(CliKind::Agy, "1.2.2"));
+    }
+
+    /// 文言は**何をどう直せばよいか**まで書く (ログに 1 行しか出ないため)。
+    #[test]
+    fn the_message_names_the_kind_the_executable_and_the_version() {
+        let m = kind_mismatch_message(CliKind::Claude, "agy", "1.2.2");
+        assert!(m.contains("Claude"), "{m}");
+        assert!(m.contains("agy"), "{m}");
+        assert!(m.contains("1.2.2"), "{m}");
+        assert!(m.contains("CLI の種類"), "直し方が書かれていない: {m}");
     }
 }
 

@@ -72,7 +72,9 @@ CliKindCheck:                       # 2026-09-12 (rev40)。設定の「種類」
   rule: "`cli_runner::kind_mismatches_version(kind, version)` (純関数)。claude = 名乗りに `claude` を含まなければ食い違い / agy = 含んだら食い違い / aider・custom は**判定しない** (名乗りの形を知らない)"
   grounding: "実測の名乗り — claude `2.1.263 (Claude Code)` / agy `1.2.2`"
   silence: "**名乗りが空なら何も言わない。** 検査が失敗しただけで、食い違いの証拠は無い (無いものを断定しない)"
-  surface: "`check_cli` が `CliCheck.kind_mismatch` を返し、設定画面が警告バナーとチップの色で出す。実行は止めない — 判断はユーザーのもの"
+  surface: "①設定画面 = `check_cli` が `CliCheck.kind_mismatch` を返し、警告バナーとチップの色で出す (rev40) ②**run の開始時 = 走らせる前に止める** (rev41)。認証の行の直後・brief を読む前に `--version` を引き、食い違えば進捗ログに 1 行出して `Err` で返す"
+  why_blocking: "rev40 は設定画面にだけ警告を置いたが、**実行はメイン画面からするので誰も見なかった** — 同じ事故が 3 回続いた。食い違ったまま走らせると必ず数秒で失敗するので、止めても失うものは無い (ユーザー決定 2026-09-12)。**警告は人が見に行く場所ではなく、必ず通る場所に置く**"
+  message: "1 行で完結させる — 種類 / 実行ファイル / 名乗り / **どう直すか** (「設定の『CLI の種類』を実体に合わせてください」)。ログには 1 行しか出ないため"
   poc: "invocation.rs kind_mismatch_is_judged_from_the_measured_version_strings / app src/kindMismatch.test.ts"
 
 IsolationGuarantee:                 # **kind ごとに強さが違う**。2026-09-12 実測で確定 (旧契約は claude だけを見て全 kind を同じ言葉で括っていた)
