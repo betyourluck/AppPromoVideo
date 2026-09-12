@@ -7,11 +7,13 @@ import { computed, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../store";
 import { runHeaderStats } from "../runs";
-import type { Scene } from "../types";
+import type { Scene, SceneOp } from "../types";
 import { t } from "../i18n";
 import Lightbox from "./Lightbox.vue";
 import CaptionEditor from "./CaptionEditor.vue";
 import Icon from "./Icon.vue";
+import Rich from "./Rich.vue";
+import { ask } from "../dialog";
 
 const store = useStore();
 type Target = "minimax" | "generic";
@@ -28,6 +30,38 @@ const promo = computed(() => store.result?.promo ?? null);
 const editingSceneId = ref<number | null>(null);
 const draft = ref({ motion: "", video: "" });
 const savingPrompts = ref(false);
+const busyScene = ref(false);
+
+const scenes = computed(() => promo.value?.plan.scenes ?? []);
+
+/** 尺の合計と `total_seconds` のずれ (秒)。**直さない、出すだけ** (契約 `SceneEdit.duration`)。 */
+const durationDrift = computed(() => {
+  const p = promo.value;
+  if (!p) return 0;
+  return scenes.value.reduce((n, s) => n + s.duration_seconds, 0) - p.plan.total_seconds;
+});
+
+/** 並び替え / 複製 / 削除 (rev43)。**backend が返した promo に差し替わる** — 手元で並べ替えない。 */
+async function edit(op: SceneOp, sceneId: number) {
+  busyScene.value = true;
+  try {
+    await store.editScenes(op, sceneId);
+  } finally {
+    busyScene.value = false;
+  }
+}
+
+/** 削除は取り消せない (参照画像も消える) ので確認する。ブラウザ標準は使わない (rev26)。 */
+async function askRemove(sceneId: number) {
+  // 取り返しがつかない (参照画像も消える) ので danger。
+  const ok = await ask({
+    title: t("scene.removeTitle"),
+    message: t("scene.removeMessage", { id: sceneId }),
+    ok: t("scene.remove"),
+    danger: true,
+  });
+  if (ok) await edit("remove", sceneId);
+}
 
 function startEdit(s: Scene) {
   editingSceneId.value = s.scene_id;
@@ -195,7 +229,11 @@ function openRef(sceneId: number) {
       <div v-if="store.images?.truncated" class="muted" style="font-size: var(--fs-sm); margin: 4px 0">{{ t('scene.refsTruncated', { detail: store.images?.truncated ?? '' }) }}</div>
 
       <div class="scene-list">
-        <div v-for="s in promo.plan.scenes" :key="s.scene_id" class="scene-card">
+        <!-- 尺の合計と指定のずれ。**直さない、出すだけ** (契約 SceneEdit.duration)。 -->
+        <p v-if="durationDrift !== 0" class="muted note drift">
+          <Rich :text="t(durationDrift > 0 ? 'scene.driftOver' : 'scene.driftUnder', { n: Math.abs(durationDrift), total: promo.plan.total_seconds })" />
+        </p>
+        <div v-for="(s, i) in scenes" :key="s.scene_id" class="scene-card">
           <div class="scene-head">
             <span class="num">#{{ s.scene_id }}</span>
             <span class="chip" :class="s.cut_kind === 'product' ? 'accent' : ''">{{ s.cut_kind === 'product' ? `product · snap ${s.snapshot_index ?? '?'}` : 'mood' }}</span>
@@ -213,6 +251,25 @@ function openRef(sceneId: number) {
             </template>
             <button v-else class="btn small" :disabled="store.running" :title="t('scene.editPrompts')" @click="startEdit(s)">
               <Icon name="edit" :size="13" />
+            </button>
+            <!-- 並び替え / 複製 / 削除 (rev43)。**端と限界では押せない** — 拒否は backend にもあるが、
+                 押せるのに必ず失敗するボタンは出さない。 -->
+            <button class="btn small" :disabled="busyScene || i === 0" :title="t('scene.moveUp')" @click="edit('move_up', s.scene_id)">
+              <Icon name="chevron-up" :size="13" />
+            </button>
+            <button
+              class="btn small"
+              :disabled="busyScene || i === scenes.length - 1"
+              :title="t('scene.moveDown')"
+              @click="edit('move_down', s.scene_id)"
+            >
+              <Icon name="chevron-down" :size="13" />
+            </button>
+            <button class="btn small" :disabled="busyScene || scenes.length >= 8" :title="t('scene.duplicate')" @click="edit('duplicate', s.scene_id)">
+              <Icon name="plus" :size="13" />
+            </button>
+            <button class="btn small" :disabled="busyScene || scenes.length <= 3" :title="t('scene.remove')" @click="askRemove(s.scene_id)">
+              <Icon name="trash" :size="13" />
             </button>
             <button
               class="btn small copy-btn"

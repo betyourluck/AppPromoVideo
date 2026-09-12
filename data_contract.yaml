@@ -241,6 +241,21 @@ Scene:                              # rev3 (2026-09-08、ユーザー FB「ス�
                                     # 各 -35〜35 度。範囲外は違反 (PlateTiltOutOfRange)。省略 = 正面。frontal モードでは無視される
   reference_image: Option<PathBuf>  # 生成後に埋まる
 
+SceneEdit:                          # 2026-09-12 (rev43)。シーンの追加 / 並び替え / 削除。ユーザー要望
+  why: "生成されたシーンの並びや数は人が直したい。ただし `scene_id` は**連番であることが検査で強制**されている (SceneIdNotSequential) ので、並べ替えと削除は必ず**振り直し**を伴う"
+  ops: "move_up | move_down | duplicate | remove (どれも対象は 1 シーン)。追加は**複製** — 検査が空欄を弾く (EmptyField) ので白紙のシーンは作れない。隣を写してから直す"
+  renumber: "操作のあと scene_id は**位置 + 1** に振り直す。振り直しは `SceneRemap` (旧 id → 新 id) を返し、**追従はこの表 1 つだけを見て行う**"
+  follows:                          # 振り直しに追従するもの (**ここが全部。漏らすと静かに壊れる**)
+    maps: "PromoJson の `caption_overrides` / `plate_overrides` / `original_copy` — いずれも scene_id が鍵。**人の手編集と『最初の文』の控え**なので、付け替えを誤ると別のシーンに付く"
+    files: "`<run>/scene_{NN}_ref_{MM}.png` と `<run>/base/scene_{NN}_ref_{MM}.png`"
+    derived: "`scenes.md` は plan から**作り直す**ので追従不要 (写しではなく導出)"
+  rename_order: "**二段で rename する。** 1→2 と 2→1 のような入れ替えでは、直接 rename すると衝突して片方を潰す。①削除されたシーンのファイルを消す ②全部を一時名へ ③一時名から最終名へ"
+  limits: "シーン数は 3..=8 (SCENES_MIN/MAX) — 3 で remove、8 で duplicate は拒む。**唯一の product カットは消せない** (NoProductCut になる。検査を待たずに拒む)。端での move_up / move_down も拒む"
+  duplicate: "シーンの中身に加え、そのシーンの caption_override / plate_override / original_copy も**写す** (見た目ごと複製する)。**参照画像は写さない** — 複製直後は画像なしで、生成し直すまで出ない"
+  duration: "**尺は触らない。合計のずれを画面に出すだけ** (ユーザー決定 2026-09-12)。そもそも `validate_scene_plan` は尺の合計を検査していない (`total_seconds` が 15/30/60 かだけ見る) ので、追加・削除で合計はずれる。**自動で数字をいじらない** — 人が決める"
+  where: "`promo_core::scene_edit::apply_scene_edit(promo, op, scene_id) -> Result<SceneRemap, SceneEditError>` が唯一の書き換え (純粋)。command `edit_scenes(run_dir, op, scene_id)` が呼び、ファイルを rename し、promo.json と scenes.md を書き直し、**書き換えた後の PromoJson を返す** (rev21 / rev37 と同じ作法 — frontend が手元で真似ると食い違う)"
+  poc: "promo_core: 振り直しと 3 つの Map の追従 / 入れ替えでファイル名が衝突しない順序 / 限界 (3 で remove・8 で duplicate・唯一の product・端) / backend: rename と promo.json・scenes.md の書き直し"
+
 ScenePromptEdit:                    # rev37 (2026-09-12 ユーザー「motion や video prompt は書き換え可能に。鉛筆でシーンの編集モードにしてから」)
   why: "生成した文を貼る前に手で整えたい。ただし**常に書き換えられる欄**にすると、読むつもりの操作で壊れる — 編集モードを挟む"
   mode: "結果ペインのシーンカードの鉛筆で**そのシーンだけ**編集モードへ。モード中は motion_prompt / video_prompt が入力欄。保存で確定、破棄で入る前の値に戻す。実行中は入れない"

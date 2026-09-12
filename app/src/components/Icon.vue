@@ -22,6 +22,8 @@ withDefaults(
       | "terminal"
       | "chevron-left"
       | "chevron-right"
+      | "chevron-up"
+      | "chevron-down"
       | "undo"
       | "external-link"
       | "download"
@@ -134,6 +136,16 @@ withDefaults(
     <!-- chevron-left -->
     <template v-else-if="name === 'chevron-left'">
       <path d="m15 18-6-6 6-6" />
+    </template>
+
+    <!-- chevron-up (シーンを上へ) -->
+    <template v-else-if="name === 'chevron-up'">
+      <path d="m18 15-6-6-6 6" />
+    </template>
+
+    <!-- chevron-down (シーンを下へ) -->
+    <template v-else-if="name === 'chevron-down'">
+      <path d="m6 9 6 6 6-6" />
     </template>
 
     <!-- chevron-right -->

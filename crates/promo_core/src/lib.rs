@@ -9,6 +9,7 @@ pub mod export;
 pub mod fenced;
 pub mod plan;
 pub mod prompts;
+pub mod scene_edit;
 pub mod style;
 
 pub use style::{apply_palette, extract_hex, style_anchor};

@@ -148,6 +148,9 @@ export interface AuthView {
   scrubbed: string[];
 }
 
+/** シーンの編集操作 (契約 `SceneEdit.ops`)。 */
+export type SceneOp = "move_up" | "move_down" | "duplicate" | "remove";
+
 export interface CliCheck {
   found: boolean;
   version: string;

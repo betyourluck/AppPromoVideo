@@ -1242,6 +1242,7 @@ pub fn run() {
             list_runs,
             open_run,
             update_scene_prompts,
+            edit_scenes,
             forget_run,
             reburn_caption,
             plate_preview,
@@ -1464,5 +1465,183 @@ mod stale_snapshot_tests {
         fs::write(&a, b"AAA").unwrap();
         let paths = vec![a.to_string_lossy().to_string()];
         assert!(stale_run_snapshots(&run, &paths).is_empty());
+    }
+}
+
+/// シーンの並び替え / 複製 / 削除 (rev43、契約 `SceneEdit`)。
+///
+/// 書き換えは `promo_core::scene_edit::apply_scene_edit` だけが行う (拒否もそこ)。
+/// **ファイルの付け替えは `SceneRemap` の手順だけを見て行う** — 一時名を必ず経由するので
+/// 1↔2 の入れ替えでも潰れない。promo.json と scenes.md を書き直し、書き換え後の promo を返す。
+#[tauri::command]
+fn edit_scenes(run_dir: String, op: String, scene_id: u32) -> Result<PromoJson, String> {
+    use promo_core::scene_edit::{SceneEditError, SceneOp, apply_scene_edit};
+
+    let sop = match op.as_str() {
+        "move_up" => SceneOp::MoveUp,
+        "move_down" => SceneOp::MoveDown,
+        "duplicate" => SceneOp::Duplicate,
+        "remove" => SceneOp::Remove,
+        other => return Err(format!("知らない操作です: {other}")),
+    };
+    let dir = PathBuf::from(&run_dir);
+    let text = std::fs::read_to_string(dir.join("promo.json")).map_err(|e| format!("promo.json を読めません: {e}"))?;
+    let mut promo: PromoJson = serde_json::from_str(&text).map_err(|e| format!("promo.json の形が違います: {e}"))?;
+
+    let remap = apply_scene_edit(&mut promo, sop, scene_id).map_err(|e| match e {
+        SceneEditError::UnknownScene { scene_id } => format!("シーン {scene_id} が見つかりません"),
+        other => other.to_string(),
+    })?;
+
+    // --- ファイルの付け替え。**run 直下と base/ の両方**、参照画像の番号ぶん。 ---
+    for root in [dir.clone(), dir.join("base")] {
+        if !root.is_dir() {
+            continue;
+        }
+        if let Some(gone) = remap.removed {
+            for i in 1..=MAX_REF_PER_SCENE {
+                let p = root.join(promo_core::export::reference_image_name(gone, i));
+                if p.is_file() {
+                    let _ = std::fs::remove_file(&p);
+                }
+            }
+        }
+        for i in 1..=MAX_REF_PER_SCENE {
+            for (from, to) in remap.rename_steps_for(i) {
+                let (a, b) = (root.join(&from), root.join(&to));
+                if a.is_file() {
+                    let _ = std::fs::rename(&a, &b);
+                }
+            }
+        }
+    }
+
+    let json = serde_json::to_string_pretty(&promo).map_err(|e| e.to_string())?;
+    write_atomic(&dir.join("promo.json"), json.as_bytes())?;
+    write_atomic(&dir.join("scenes.md"), scenes_markdown(&promo.summary, &promo.plan).as_bytes())?;
+    Ok(promo)
+}
+
+/// 1 シーンあたりの参照画像の最大枚数 (付け替えで走査する範囲)。
+const MAX_REF_PER_SCENE: u32 = 8;
+
+#[cfg(test)]
+mod scene_edit_io_tests {
+    use super::edit_scenes;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    fn tmp() -> PathBuf {
+        let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let d = std::env::temp_dir().join(format!("apppromo_scene_edit_{}_{}", std::process::id(), n));
+        fs::create_dir_all(d.join("base")).unwrap();
+        d
+    }
+
+    /// promo.json と 1 枚ずつの参照画像 (run 直下と base/) を置く。中身はシーン番号そのもの。
+    fn seed(dir: &Path, promo: &promo_core::PromoJson) {
+        fs::write(dir.join("promo.json"), serde_json::to_string_pretty(promo).unwrap()).unwrap();
+        for s in &promo.plan.scenes {
+            let name = promo_core::export::reference_image_name(s.scene_id, 1);
+            fs::write(dir.join(&name), format!("image of {}", s.scene_id)).unwrap();
+            fs::write(dir.join("base").join(&name), format!("base of {}", s.scene_id)).unwrap();
+        }
+    }
+
+    fn read(dir: &Path, scene_id: u32) -> Option<String> {
+        fs::read_to_string(dir.join(promo_core::export::reference_image_name(scene_id, 1))).ok()
+    }
+
+    fn promo_of(n: u32) -> promo_core::PromoJson {
+        let text = fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/promo_4.json"))
+            .unwrap_or_default();
+        let mut p: promo_core::PromoJson = serde_json::from_str(&text).expect("fixture promo_4.json");
+        p.plan.scenes.truncate(n as usize);
+        p
+    }
+
+    /// **入れ替えても画像が潰れない** (一時名を経由しているか)。run 直下と base/ の両方。
+    #[test]
+    fn swapping_two_scenes_swaps_their_images_without_losing_one() {
+        let dir = tmp();
+        let p = promo_of(4);
+        seed(&dir, &p);
+
+        edit_scenes(dir.to_string_lossy().to_string(), "move_up".into(), 2).unwrap();
+
+        assert_eq!(read(&dir, 1).as_deref(), Some("image of 2"), "2 の画像が 1 番へ");
+        assert_eq!(read(&dir, 2).as_deref(), Some("image of 1"), "1 の画像が 2 番へ — どちらも潰れていない");
+        assert_eq!(read(&dir, 3).as_deref(), Some("image of 3"), "動かないシーンはそのまま");
+        let base = fs::read_to_string(dir.join("base").join("scene_01_ref_01.png")).unwrap();
+        assert_eq!(base, "base of 2", "base/ も同じ付け替え");
+        assert!(!dir.join("scene_01_ref_01.png.tmp").exists(), "一時ファイルを残さない");
+    }
+
+    /// 削除は消えたシーンの画像を消し、後ろを詰める。
+    #[test]
+    fn removing_a_scene_deletes_its_image_and_shifts_the_rest() {
+        let dir = tmp();
+        seed(&dir, &promo_of(4));
+
+        let promo = edit_scenes(dir.to_string_lossy().to_string(), "remove".into(), 2).unwrap();
+
+        assert_eq!(promo.plan.scenes.len(), 3);
+        assert_eq!(read(&dir, 2).as_deref(), Some("image of 3"), "3 の画像が 2 番へ");
+        assert_eq!(read(&dir, 3).as_deref(), Some("image of 4"));
+        assert!(read(&dir, 4).is_none(), "余りを残さない");
+    }
+
+    /// 複製したシーンには**画像が無い** (生成し直すまで出ない)。
+    #[test]
+    fn a_duplicated_scene_has_no_image_yet() {
+        let dir = tmp();
+        seed(&dir, &promo_of(3));
+
+        edit_scenes(dir.to_string_lossy().to_string(), "duplicate".into(), 1).unwrap();
+
+        assert_eq!(read(&dir, 1).as_deref(), Some("image of 1"));
+        assert!(read(&dir, 2).is_none(), "複製したシーンの画像はまだ無い");
+        assert_eq!(read(&dir, 3).as_deref(), Some("image of 2"), "元の 2 は 3 番へ");
+    }
+
+    /// 拒まれた時は **promo.json もファイルも触らない**。
+    #[test]
+    fn a_refused_edit_changes_nothing_on_disk() {
+        let dir = tmp();
+        seed(&dir, &promo_of(3));
+        let before = fs::read_to_string(dir.join("promo.json")).unwrap();
+
+        let err = edit_scenes(dir.to_string_lossy().to_string(), "remove".into(), 1).unwrap_err();
+
+        assert!(err.contains("減らせません"), "{err}");
+        assert_eq!(fs::read_to_string(dir.join("promo.json")).unwrap(), before);
+        assert_eq!(read(&dir, 1).as_deref(), Some("image of 1"));
+    }
+
+    /// scenes.md も書き直す (plan からの導出なので追従不要 = 作り直す)。
+    #[test]
+    fn scenes_markdown_is_rewritten() {
+        let dir = tmp();
+        seed(&dir, &promo_of(4));
+        edit_scenes(dir.to_string_lossy().to_string(), "remove".into(), 2).unwrap();
+        let md = fs::read_to_string(dir.join("scenes.md")).unwrap();
+        assert!(!md.is_empty());
+        assert_eq!(md.matches("## Scene").count(), 3, "3 シーンぶん: {md}");
+    }
+
+    /// **末尾のシーンを消したときだけ孤児が出る。**
+    ///
+    /// 手前のシーンを消す場合は後ろの rename が上書きしていくので気づかないが、末尾を消すと
+    /// 番号の付け替えが 1 つも起きず、そのファイルだけが残る。`base/` も同じ。
+    #[test]
+    fn removing_the_last_scene_deletes_its_image_even_though_nothing_is_renamed() {
+        let dir = tmp();
+        seed(&dir, &promo_of(4));
+
+        edit_scenes(dir.to_string_lossy().to_string(), "remove".into(), 4).unwrap();
+
+        assert_eq!(read(&dir, 3).as_deref(), Some("image of 3"), "残るシーンはそのまま");
+        assert!(read(&dir, 4).is_none(), "消したシーンの画像が残っている (孤児)");
+        assert!(!dir.join("base").join("scene_04_ref_01.png").exists(), "base/ にも孤児を残さない");
     }
 }

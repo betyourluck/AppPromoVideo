@@ -5,7 +5,7 @@
 import { defineStore } from "pinia";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { BriefPreview, CliCheck, FontEntry, ImagesResult, OpenedRun, Progress, PromoJson, RunListItem, RunResult, SnapshotMeta } from "./types";
+import type { BriefPreview, CliCheck, FontEntry, ImagesResult, OpenedRun, Progress, PromoJson, RunListItem, RunResult, SceneOp, SnapshotMeta } from "./types";
 import { mergePaths } from "./snapshots";
 import { t } from "./i18n";
 import {
@@ -227,6 +227,48 @@ export const useStore = defineStore("main", {
         const promo = await invoke<PromoJson>("update_scene_prompts", { runDir, sceneId, motionPrompt, videoPrompt });
         if (this.result) this.result = { ...this.result, promo };
         this.showToast(t("scene.promptsSaved"));
+        return true;
+      } catch (e) {
+        this.error = String(e);
+        this.push("error", String(e));
+        return false;
+      }
+    },
+    /** run の参照画像を読み直す (scene_id の付け替えのあと)。読めない 1 枚で残りを落とさない。 */
+    async refreshSceneImages(runDir: string): Promise<void> {
+      try {
+        const r = await invoke<OpenedRun>("open_run", { runDir });
+        this.images = this.images ? { ...this.images, promo: r.promo, results: r.images } : this.images;
+        const urls: Record<number, string> = {};
+        for (const im of r.images) {
+          if (im.ok && im.path) {
+            try {
+              urls[im.scene_id] = await invoke<string>("image_data_url", { path: im.path });
+            } catch {
+              /* 1 枚読めなくても残りは出す */
+            }
+          }
+        }
+        this.imageUrls = urls;
+      } catch {
+        /* 画像の読み直しに失敗しても、編集そのものは成功している */
+      }
+    },
+    /**
+     * シーンの並び替え / 複製 / 削除 (rev43、契約 `SceneEdit`)。
+     *
+     * **backend が返した promo に差し替える** — 手元で並べ替えを真似ると、scene_id の振り直しや
+     * 手編集の付け替えが食い違う (rev21 / rev37 と同じ作法)。参照画像も backend が付け替える。
+     */
+    async editScenes(op: SceneOp, sceneId: number): Promise<boolean> {
+      const runDir = this.result?.package_dir;
+      if (!runDir) return false;
+      this.error = "";
+      try {
+        const promo = await invoke<PromoJson>("edit_scenes", { runDir, op, sceneId });
+        if (this.result) this.result = { ...this.result, promo };
+        // 参照画像は backend が付け替えたので、**読み直す** (手元の写しは番号がずれている)。
+        await this.refreshSceneImages(runDir);
         return true;
       } catch (e) {
         this.error = String(e);

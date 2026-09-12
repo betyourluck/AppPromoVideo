@@ -1,0 +1,108 @@
+{
+  "project_path": "D:\\Github\\AppPromoVideo",
+  "snapshot_paths": [
+    "C:\\Users\\conan\\AppData\\Roaming\\jp.outcasts.apppromovideo\\snapshots\\clip_1789184844643.png",
+    "C:\\Users\\conan\\AppData\\Roaming\\jp.outcasts.apppromovideo\\snapshots\\clip_1789185311759.png",
+    "C:\\Users\\conan\\AppData\\Roaming\\jp.outcasts.apppromovideo\\snapshots\\clip_1789185324417.png",
+    "C:\\Users\\conan\\AppData\\Roaming\\jp.outcasts.apppromovideo\\snapshots\\clip_1789185737908.png",
+    "C:\\Users\\conan\\Downloads\\snapshot.png"
+  ],
+  "video_concept": "アプリケーションは作るのは今は簡単だが、広めるのが難しい。広めるにはPR動画作成が効果的だが、PR動画の作成はノウハウがいります。\nそれを簡略化できるのが本アプリです。\n操作の簡単さをアピールして欲しい。まずは文字を入力し、解析＝＞シーン構成をクリックする。そして画像生成し、出来たら画像とコピーしたテキストを動画生成ツールのプロンプトに貼り付けて動画になる過程をPRしてください。",
+  "summary": {
+    "app_name": "AppPromoVideo",
+    "one_liner": "選んで押すだけ。PR動画のプロンプトと画像が揃う。",
+    "core_value": "アプリを開発できてもPR動画の構成ノウハウや制作時間が足りない個人開発者・小規模チームに対し、リポジトリとスクショから動画生成AIにそのまま貼れるシーン別プロンプトと参照画像をワンストップで生成し、広報動画の制作コストを劇的に下げる。",
+    "target_audience": "自作アプリの認知を広めたいが、PR動画の企画構成や映像制作のノウハウ・時間が不足している個人開発者や小規模開発チーム。",
+    "differentiators": [
+      "リポジトリとUIスクショから動画生成AI用プロンプト＆参照画像を一括生成",
+      "実画面の画素を背景に合成する正確な製品カット生成機能",
+      "動画生成AI（MiniMax等）へそのまま貼れる形式でのワンクリックコピー",
+      "ローカルLLM CLI（Claude Code / agy等）を活用したセキュアなリポジトリ解析"
+    ],
+    "hook_copy": "アプリは作れる。でも、広め方は誰も教えてくれない。",
+    "visual_identity": {
+      "palette": [
+        "#F8F8F8",
+        "#E8B898",
+        "#687888",
+        "#B8C8C8",
+        "#A88888"
+      ],
+      "mood": "clean, modern, minimalist productivity with focused warm energetic accents",
+      "ui_traits": [
+        "three-pane desktop layout (input, results, progress log)",
+        "Material 3 rounded pills, chips, and elevated cards",
+        "vibrant orange primary action buttons with soft gradient",
+        "electric violet accent tags and focus rings",
+        "clean sans-serif typography with Inter and Noto Sans JP"
+      ]
+    }
+  },
+  "plan": {
+    "total_seconds": 15,
+    "aspect": "16:9",
+    "scenes": [
+      {
+        "scene_id": 1,
+        "cut_kind": "mood",
+        "snapshot_index": null,
+        "motion_prompt": "Very slow subtle push-in toward the center while the warm lamp light flickers softly and gently.",
+        "duration_seconds": 3,
+        "shot_type": "Medium shot",
+        "video_prompt": "A cinematic medium shot of a minimalist wooden desk at night with a steaming coffee cup and creative sketches. Warm amber desk lamp light gently flickers, with soft purple ambient backlighting. The camera slowly pushes in, conveying quiet contemplation and developer dedication.",
+        "copy_text": "アプリは作れる。でも、広め方は誰も教えてくれない。",
+        "image_prompt": "A minimalist developer workspace in a dim modern room. On a clean wooden desk rests a warm ceramic coffee mug with soft steam rising, alongside neat paper sketches and stationery. In the background, soft ambient violet and amber lighting accents create a cozy, thoughtful late-night atmosphere. Cinematic shallow depth of field, warm and minimal.",
+        "plate_tilt": null,
+        "reference_image": "scene_01_ref_01.png"
+      },
+      {
+        "scene_id": 2,
+        "cut_kind": "product",
+        "snapshot_index": 1,
+        "motion_prompt": "Slow steady push-in straight toward the center with a gentle light drift travelling smoothly across the surface.",
+        "duration_seconds": 4,
+        "shot_type": "Eye-level wide shot",
+        "video_prompt": "Eye-level shot of a clean modern desktop software workspace. A software developer types an app description into a sleek application window on a desktop computer, then clicks a glowing orange action button to start analysis. Smooth slow camera push-in under balanced soft studio lighting.",
+        "copy_text": "一行のコンセプトを入力し、「解析 → シーン構成」を押すだけ。",
+        "image_prompt": "A modern clean minimalist workspace backdrop seen directly head-on at eye level. A sleek matte slate desk surface in the foreground with an expansive neutral light gray studio wall behind. A soft diffuse warm glow from the left and a subtle electric violet accent beam on the right frame the composition. Generous empty open space in the middle, perfectly level horizontal lines, architectural studio lighting.",
+        "plate_tilt": null,
+        "reference_image": "scene_02_ref_01.png"
+      },
+      {
+        "scene_id": 3,
+        "cut_kind": "product",
+        "snapshot_index": 2,
+        "motion_prompt": "Subtle smooth push-in with a delicate parallax shift and soft glowing ambient light pulsation.",
+        "duration_seconds": 4,
+        "shot_type": "Eye-level medium shot",
+        "video_prompt": "Eye-level shot of a creative workspace with an application window showing completed video scene plans, structured prompts, and generated visual cards. Warm energetic orange highlights accent the modern application layout as the camera gently glides forward.",
+        "copy_text": "動画構成案とプロンプト、そして参照画像がワンストップで完成。",
+        "image_prompt": "A premium design studio backdrop viewed straight on at eye level. A polished dark oak tabletop with a clean soft-white acoustic panel backdrop. Warm ambient lighting spills from an out-of-frame source, with subtle warm orange and gentle violet edge lighting. Ample empty void in the exact center, completely straight horizontal alignment, clean minimalist aesthetic.",
+        "plate_tilt": null,
+        "reference_image": "scene_03_ref_01.png"
+      },
+      {
+        "scene_id": 4,
+        "cut_kind": "product",
+        "snapshot_index": 3,
+        "motion_prompt": "Gentle forward camera drift with subtle light shimmer across the background surface.",
+        "duration_seconds": 4,
+        "shot_type": "Eye-level medium shot",
+        "video_prompt": "Eye-level shot of an AI video creation suite in a sleek dark theme. Visual assets and scene-by-scene prompts are placed into the video generator, and an orange glowing generate button is activated. Smooth subtle camera push-in in a futuristic high-tech creative environment.",
+        "copy_text": "画像とプロンプトを貼り付けるだけ。あなたのアプリが動画で動き出す。",
+        "image_prompt": "A sophisticated dark-themed creative workstation backdrop seen straight on at eye level. A smooth matte obsidian work table with a soft dark charcoal wall in the background. Focused warm amber accent rim lighting and deep violet atmospheric shadows create a modern cinematic mood. Wide open empty space centered in the composition, perfectly level perspective.",
+        "plate_tilt": null,
+        "reference_image": "scene_04_ref_01.png"
+      }
+    ]
+  },
+  "caption_overrides": {},
+  "plate_overrides": {},
+  "original_copy": {},
+  "plate_mode": "frontal",
+  "run_stats": {
+    "plan_attempts": 1,
+    "violation_kinds": [],
+    "models": []
+  }
+}

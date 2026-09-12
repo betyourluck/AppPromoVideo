@@ -74,7 +74,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 ## 現状 (2026-09-12)
 
-- **spec 01 は Phase 0〜E 着地、rev42 まで反映済み (rev27〜29 は試行)。** crates 179 green / vitest 86 / backend 19 green・clippy clean。
+- **spec 01 は Phase 0〜E 着地、rev43 まで反映済み (rev27〜29 は試行)。** crates 188 green / vitest 90 / backend 25 green・clippy clean。
 - **agy でも通しが成功** (2026-09-12 21:13、ユーザー実機)。解析 → 構成 (1 回目で通過) → 参照画像 → 合成 → 見出しの焼き込み。
   費用の chip は出ない (agy は費用を返さないので描かない)。
 - コミットは Initial `a75c3bc` の上に積んでいる (**本数は数えない** — 書くたび 1 手遅れて嘘になる。`git rev-list --count a75c3bc..HEAD`)。**`origin/main` には rev42 まで push 済み** (private。**週末に public 予定**)。未 push があるかは `git log --oneline origin/main..HEAD` で数える — ここに書くと 1 手遅れる。
@@ -96,13 +96,14 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   agy の `-p` は値を取るので `--output-format` を本文として飲む。rev39 で `CliKind::Agy` を足して対応済み。
 - **GUI は再ビルドしてから触る**。rev13 で dev プロファイルを変えた (debug の画像処理が 71 倍遅かった)。
 
-**編集できるもの (rev9〜37。見出しとはめ込みは各シーンの「見出し / はめ込み…」ボタン → ダイアログ、プロンプトは鉛筆)**
+**編集できるもの (rev9〜43。見出しとはめ込みは各シーンの「見出し / はめ込み…」ボタン → ダイアログ、プロンプトは鉛筆)**
 
 | | |
 |---|---|
 | コピー文 | 書き換え + 「最初の文に戻す」(`original_copy` に LLM の初出を控えてある) |
 | 見出し | フォント / 大きさ / 色 / **縦位置を数値で** (`y_ratio`)。上下の選択は rev18 で撤去 (縦位置が上位互換。面が避ける側は `effective_position` が `y_ratio` から導く) |
 | プロンプト | **鉛筆で編集モードに入ってから** `motion_prompt` / `video_prompt` を書き換える (rev37)。保存すると backend が `promo.json` と `scenes.md` を書き直し、書き換え後の promo を返す。**空は拒む** (検査と食い違わせない)。破棄は入る前の値に戻す |
+| シーンの構成 | **並び替え / 複製 / 削除** (rev43)。`scene_id` は必ず位置 + 1 に振り直され、**手編集 (見出し・はめ込み・最初の文) と参照画像が一緒に動く** — 付け替えは `SceneRemap` 1 つが決める。追加は**複製** (検査が空欄を弾くので白紙は作れない)。3〜8 シーン、唯一の product カットは消せない。**尺は直さない** — 合計のずれを出すだけ |
 | はめ込み | **傾き (yaw・pitch) — つまみは実効値を指す** (`0° (正面)` / `18° (LLM)` / `18°`。rev21) / 大きさ / 横位置 / 縦位置 / **使うスナップショットの選び直し** — 一覧には左の入力ペインに**後から足した画像も出る** (選ぶとその run に写す、rev20)。取り込み口は入力ペイン 1 つ。**同じパスで撮り直したものも出る** — 同じ名前が 2 行並び、下が今のファイル (rev23)。**mood にも足せる** — 既定は「はめ込みなし (絵のまま)」で、選ぶと面が乗る。`cut_kind` は書き換えない (rev24) |
 
 やり直しは `<run>/base/` の**素材**(product は背景 / mood は絵) から**合成ごと**行う。
