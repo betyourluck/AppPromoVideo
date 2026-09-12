@@ -201,6 +201,14 @@ async fn cli_version(executable: &str) -> Option<String> {
     }
 }
 
+/// 費用の表示 (純粋)。**記録が無ければ 0 と書かない** — 費用を返さない CLI がある (rev42、agy 実測)。
+fn cost_text(cost: Option<f64>) -> String {
+    match cost {
+        Some(c) => format!("{c:.3} USD"),
+        None => "費用の記録なし".to_string(),
+    }
+}
+
 /// 種類と実体が食い違っている時に出す 1 行 (純粋。PoC あり)。
 fn kind_mismatch_message(kind: cli_runner::CliKind, executable: &str, version: &str) -> String {
     format!(
@@ -290,7 +298,9 @@ struct RunRequest {
 #[derive(Serialize)]
 struct StageInfo {
     attempts: usize,
-    cost_usd: f64,
+    /// **None = 記録なし** (費用を返さない CLI がある。rev42)。0 で埋めない。
+    #[serde(default)]
+    cost_usd: Option<f64>,
     duration_ms: u64,
     /// 各試行の違反 (人が読む文)。
     violations: Vec<Vec<String>>,
@@ -379,6 +389,8 @@ async fn run_inner(app: &AppHandle, cancel: watch::Receiver<bool>, req: RunReque
         project_path: project.clone(),
         scratch_dir: scratch,
         max_turns: req.cli.max_turns,
+        // スナップショットの置き場も読ませる (rev42)。見つけられないと agy はシェルに逃げる。
+        extra_read_dirs: pipeline::task::snapshot_dirs(&snaps),
         cancel,
         on_event: Box::new(move |e| match e {
             CliEvent::Started { pid } => emit(&h, "cli", format!("CLI 起動 (pid {pid})")),
@@ -395,7 +407,7 @@ async fn run_inner(app: &AppHandle, cancel: watch::Receiver<bool>, req: RunReque
 
     emit(app, "analyze", "解析中 (タスク 1/2)…");
     let (summary, r1) = analyze(&runner, &brief_text, &req.concept, req.language).await.map_err(|e| e.to_string())?;
-    emit(app, "analyze", format!("解析 完了: {:.3} USD / {:.1} s", r1.cost_usd, r1.duration_ms as f64 / 1000.0));
+    emit(app, "analyze", format!("解析 完了: {} / {:.1} s", cost_text(r1.cost_usd), r1.duration_ms as f64 / 1000.0));
 
     emit(app, "plan", "シーン構成中 (タスク 2/2)…");
     let (plan, r2) = plan_scenes(
@@ -413,7 +425,7 @@ async fn run_inner(app: &AppHandle, cancel: watch::Receiver<bool>, req: RunReque
     emit(
         app,
         "plan",
-        format!("シーン構成 完了: {} 回目で通過 / {:.3} USD / {:.1} s", r2.attempts, r2.cost_usd, r2.duration_ms as f64 / 1000.0),
+        format!("シーン構成 完了: {} 回目で通過 / {} / {:.1} s", r2.attempts, cost_text(r2.cost_usd), r2.duration_ms as f64 / 1000.0),
     );
     for (i, vs) in r2.violations_per_attempt.iter().enumerate() {
         for v in vs {
@@ -454,7 +466,7 @@ async fn run_inner(app: &AppHandle, cancel: watch::Receiver<bool>, req: RunReque
             language: wire(&req.language),
             plate_mode: wire(&req.plate_mode),
             scene_count: promo.plan.scenes.len(),
-            cost_usd: r1.cost_usd + r2.cost_usd,
+            cost_usd: pipeline::stages::add_cost(r1.cost_usd, r2.cost_usd),
             image_provider: None,
             image_count: 0,
             plan_attempts: r2.attempts,

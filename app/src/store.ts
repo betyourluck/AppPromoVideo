@@ -183,7 +183,13 @@ export const useStore = defineStore("main", {
           },
         });
         this.result = res;
-        this.showToast(t("store.runDone", { n: res.plan.attempts, cost: (res.analyze.cost_usd + res.plan.cost_usd).toFixed(3) }));
+        const cost =
+          res.analyze.cost_usd == null || res.plan.cost_usd == null ? null : res.analyze.cost_usd + res.plan.cost_usd;
+        this.showToast(
+          cost == null
+            ? t("store.runDoneNoCost", { n: res.plan.attempts })
+            : t("store.runDone", { n: res.plan.attempts, cost: cost.toFixed(3) }),
+        );
         if (this.image.enabled) await this.makeImages();
         await this.loadRuns();
       } catch (e) {
@@ -240,8 +246,8 @@ export const useStore = defineStore("main", {
         this.result = {
           promo: r.promo,
           package_dir: r.package_dir,
-          analyze: { attempts: 0, cost_usd: 0, duration_ms: 0, violations: [] },
-          plan: { attempts: 0, cost_usd: 0, duration_ms: 0, violations: [] },
+          analyze: { attempts: 0, cost_usd: null, duration_ms: 0, violations: [] },
+          plan: { attempts: 0, cost_usd: null, duration_ms: 0, violations: [] },
           brief_chars: 0,
         };
         this.images = { promo: r.promo, results: r.images, palette: [], anchor: "", truncated: null };

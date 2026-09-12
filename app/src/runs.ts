@@ -62,18 +62,20 @@ export function runHeaderStats(stats: RunStats | null | undefined, analyze: Stag
     return {
       attempts: describeAttempts(stats.plan_attempts, stats.violation_kinds),
       attemptsKnown: stats.plan_attempts > 0,
-      cost: stats.cost_usd.toFixed(3),
-      costKnown: true,
+      // 正本にも記録が無いことがある (費用を返さない CLI。rev42)。
+      cost: stats.cost_usd == null ? "—" : stats.cost_usd.toFixed(3),
+      costKnown: stats.cost_usd != null,
       durationsKnown,
     };
   }
-  const cost = analyze.cost_usd + plan.cost_usd;
-  const known = durationsKnown || cost > 0 || plan.attempts > 0;
+  // **片方でも不明なら合計は不明** (backend の add_cost と同じ規律)。
+  const cost = analyze.cost_usd == null || plan.cost_usd == null ? null : analyze.cost_usd + plan.cost_usd;
+  const ran = durationsKnown || (cost ?? 0) > 0 || plan.attempts > 0;
   return {
     attempts: describeAttempts(plan.attempts),
     attemptsKnown: plan.attempts > 0,
-    cost: known ? cost.toFixed(3) : "—",
-    costKnown: known,
+    cost: ran && cost != null ? cost.toFixed(3) : "—",
+    costKnown: ran && cost != null,
     durationsKnown,
   };
 }

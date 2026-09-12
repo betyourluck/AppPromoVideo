@@ -1250,6 +1250,35 @@ GUI は未目視。
 ここでは Red を観測していない。GUI 未目視。
 1 回の run につき `--version` の子プロセスが 1 つ増える (実測でどちらの CLI も即返る)。
 
+## rev42 (2026-09-12、agy の初 live で出た 2 つ — 逃げる理由を消す / 費用を 0 で埋めない)
+
+**agy で初めて通しを走らせた。解析は成功** (`structured_output` を受信、94.3 秒)。構成タスクで 2 件出た。
+
+166. **スナップショットの置き場を `--add-dir` に足す** (`TaskSpec.extra_read_dirs`)。
+     構成タスクが `run_command (Get-ChildItem …snapshots)` に手を伸ばして見張りに止められたが、
+     **なぜ逃げたか**が分かった — スナップショットは app_data にあり `--add-dir` の外で、
+     `find_by_name clip_*.png` と `grep_search clip_` が空振りしてシェルに落ちた。
+     **逃げ道を塞ぐのではなく逃げる理由を消す。** 見張りは厳格なまま (緩めると「確率の保証」に戻る)。
+     フラグごと繰り返す (claude は可変長、agy は repeatable、どちらも「フラグ + 値」の繰り返しを受ける)。
+167. **費用を 0 で埋めない**。`StageReport.cost_usd` / `RunStats.cost_usd` / `RunListItem.cost_usd` /
+     frontend の型を `Option` にした。agy は費用を返さないのに `解析 完了: 0.000 USD` と描いていた —
+     rev36 で潰した「無いものを 0 で埋めない」が、claude しか無かった頃は無害だった場所に残っていた。
+168. **片方の段でも不明なら合計は不明** (`pipeline::stages::add_cost`)。分かっている分だけ足すと
+     「一部しか数えていない総額」という**別種の嘘**になる。backend と frontend で同じ規律を持つ。
+
+**閉じた問い**: **agy の `--add-dir` は読み取りを縛らない。** 同じ run の解析タスクが `--add-dir` の外にある
+スナップショットを `view_file` で問題なく読めた (20:38:27〜38)。縛るのは探索ツールの既定の探索範囲だけ。
+
+**PoC**: pipeline 2 本 (`add_cost` の 4 通り / 費用を返さない Fake で段と合計が None) /
+cli_runner 1 本 (claude・agy の両方で追加フォルダが付き、重複と project は除く) / frontend 3 本 (記録なしは `—`)。
+**検出力を確認** — `runs.ts` を 0 埋めに戻すと 5 本落ちる。
+
+足場: crates 176 → 179 / backend 19 / vitest 83 → 86 / build green / 両ワークスペース clippy clean。
+
+**接地の限界**: **166 が効くかは未検証。** agy が `--add-dir` の追加で探索ツールからスナップショットを
+見つけられるようになるかは、次の live でしか分からない。`--add-dir` を足したことで claude 側の
+読み取り範囲も広がる (ユーザーが入力として選んだファイルの置き場に限る)。GUI 未目視。
+
 ## 検討した代案: Remotion (2026-09-08、採用しない)
 
 React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](https://github.com/remotion-dev/remotion))。
@@ -1360,6 +1389,8 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [x] rev39 (2026-09-12): agy 対応 (154〜160、契約 `IsolationGuarantee` / `AgyStreamLine`)。crates 175 / backend 17 / vitest 81 / build green。**agy での通しは未実施**
 - [x] rev40 (2026-09-12): 種類と実行ファイルの食い違いを画面で止める (161〜162、契約 `CliKindCheck`)。crates 176 / backend 17 / vitest 83 / build green。**GUI 未目視**
 - [x] rev41 (2026-09-12): 食い違ったまま走らせない (163〜165)。run の開始時に止める。crates 176 / backend 19 / vitest 83 / build green。**止める配線は未テスト・GUI 未目視**
+- [x] **agy の初 live** (2026-09-12): 解析は成功 (94.3 s)。構成タスクは見張りが `run_command` で停止 — 設計どおり
+- [x] rev42 (2026-09-12): 逃げる理由を消す / 費用を 0 で埋めない (166〜168)。crates 179 / backend 19 / vitest 86 / build green。**166 が効くかは次の live 待ち**
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度 / `RunStats` の live 記録 (frontal の費用)
 - [ ] Phase E
 

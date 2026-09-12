@@ -67,7 +67,8 @@ export interface RunStats {
   /** 途中で出た違反の種別 (重複なく整列)。 */
   violation_kinds: string[];
   /** analyze + plan の合計 (USD)。 */
-  cost_usd: number;
+  /** **null = 記録なし** — 費用を返さない CLI がある (rev42)。0 で埋めない。 */
+  cost_usd: number | null;
   /** 実際に走ったモデル名 (rev25)。**省略 = 記録なし**。 */
   models?: string[] | null;
 }
@@ -94,7 +95,8 @@ export interface PlateOverride {
 
 export interface StageInfo {
   attempts: number;
-  cost_usd: number;
+  /** **null = 記録なし** — 費用を返さない CLI がある (rev42)。0 で埋めない。 */
+  cost_usd: number | null;
   duration_ms: number;
   violations: string[][];
 }
@@ -192,7 +194,8 @@ export interface RunListItem {
   language: string;
   plate_mode: string;
   scene_count: number;
-  cost_usd: number;
+  /** **null = 記録なし** — 費用を返さない CLI がある (rev42)。0 で埋めない。 */
+  cost_usd: number | null;
   image_provider: string | null;
   image_count: number;
   /** シーン構成が通るまでの回数 (rev15)。**0 = 記録なし** (rev14 以前の行)。 */

@@ -47,7 +47,12 @@ pub struct RunStats {
     #[serde(default)]
     pub violation_kinds: Vec<String>,
     /// analyze + plan の合計 (USD)。再生成が費用に効いたかを promo.json だけで見るために添える。
-    pub cost_usd: f64,
+    ///
+    /// **None = 記録なし。** 費用を返さない CLI (agy) があるので 0 で埋めない — 0 と書くと
+    /// 「無料だった」という存在しない事実になる (rev36 と同じ規律)。
+    /// 片方の段でも不明なら合計は不明にする (分かっている分だけ足すと部分的な総額という別の嘘になる)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost_usd: Option<f64>,
     /// analyze + plan の全試行で CLI が init 行に書いた**実際の**モデル名。重複なく整列 (rev25)。
     /// 入力した文字列 (`sonnet` / 空欄) ではなく解決後の名前。
     /// **None = 記録なし** (rev24 以前の run)。**Some([]) = CLI が名乗らなかった** (stream-json を出さない CLI)。
@@ -59,7 +64,7 @@ impl RunStats {
     pub fn new(
         plan_attempts: usize,
         violations_per_attempt: &[Vec<crate::plan::PlanViolation>],
-        cost_usd: f64,
+        cost_usd: Option<f64>,
         models: &[String],
     ) -> Self {
         let mut kinds: Vec<String> = violations_per_attempt
@@ -440,15 +445,15 @@ mod run_stats_tests {
             vec![PlanViolation::ProductBackdropAngled { scene_id: 4, word: "tilted" }],
             vec![],
         ];
-        let s = RunStats::new(3, &per_attempt, 1.42, &[]);
+        let s = RunStats::new(3, &per_attempt, Some(1.42), &[]);
         assert_eq!(s.plan_attempts, 3);
         assert_eq!(s.violation_kinds, vec!["motion_prompt_empty", "product_backdrop_angled"], "重複なし・整列");
-        assert!((s.cost_usd - 1.42).abs() < 1e-9);
+        assert!((s.cost_usd.unwrap() - 1.42).abs() < 1e-9);
     }
 
     #[test]
     fn a_run_that_passed_first_try_records_no_kinds() {
-        let s = RunStats::new(1, &[vec![]], 0.92, &[]);
+        let s = RunStats::new(1, &[vec![]], Some(0.92), &[]);
         assert_eq!(s.plan_attempts, 1);
         assert!(s.violation_kinds.is_empty(), "一発で通った run は違反ゼロ");
     }
@@ -457,10 +462,10 @@ mod run_stats_tests {
     #[test]
     fn models_are_deduped_and_sorted_and_kept_even_when_empty() {
         let seen: Vec<String> = vec!["claude-sonnet-5".into(), "claude-opus-5".into(), "claude-sonnet-5".into()];
-        let s = RunStats::new(2, &[vec![], vec![]], 0.5, &seen);
+        let s = RunStats::new(2, &[vec![], vec![]], Some(0.5), &seen);
         assert_eq!(s.models, Some(vec!["claude-opus-5".to_string(), "claude-sonnet-5".to_string()]));
         // CLI が名乗らなかった (stream-json を出さない CLI) は Some([]) — None (記録なし) と区別する。
-        assert_eq!(RunStats::new(1, &[vec![]], 0.1, &[]).models, Some(vec![]));
+        assert_eq!(RunStats::new(1, &[vec![]], Some(0.1), &[]).models, Some(vec![]));
     }
 
     /// rev24 以前の `run_stats` には `models` が無い。**None (記録なし)** として読めること —
@@ -490,7 +495,7 @@ mod run_stats_tests {
         p.run_stats = Some(RunStats {
             plan_attempts: 2,
             violation_kinds: vec!["product_backdrop_angled".into()],
-            cost_usd: 1.422,
+            cost_usd: Some(1.422),
             models: Some(vec!["claude-sonnet-5".into()]),
         });
         let back: PromoJson = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();

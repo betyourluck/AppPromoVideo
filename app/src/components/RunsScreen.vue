@@ -156,7 +156,7 @@ async function drop(dir: string, files: boolean) {
             <td>{{ r.app_name }}</td>
             <td>{{ r.scene_count }}</td>
             <td>{{ r.image_count }}<span v-if="r.image_provider" class="muted"> / {{ r.image_provider }}</span></td>
-            <td class="mono">{{ r.cost_usd ? r.cost_usd.toFixed(3) : "—" }}</td>
+            <td class="mono">{{ r.cost_usd == null ? "—" : r.cost_usd.toFixed(3) }}</td>
             <td class="muted">{{ r.plate_mode }}</td>
             <td class="mono" :class="{ retried: describeAttempts(r.plan_attempts, r.violation_kinds).retried }" :title="describeAttempts(r.plan_attempts, r.violation_kinds).title">
               {{ describeAttempts(r.plan_attempts, r.violation_kinds).text }}

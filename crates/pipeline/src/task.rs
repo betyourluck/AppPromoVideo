@@ -30,11 +30,30 @@ pub struct CliTaskRunner {
     pub project_path: PathBuf,
     pub scratch_dir: PathBuf,
     pub max_turns: u32,
+    /// 読ませたい追加フォルダ (rev42)。スナップショットの置き場 — 探索ツールが見つけられないと
+    /// agy はシェル (`run_command`) に逃げ、見張りに止められる。
+    pub extra_read_dirs: Vec<PathBuf>,
     pub cancel: watch::Receiver<bool>,
     /// 進捗の受け口 (Tauri 層が event に写す。CLI なら stderr へ)。
     pub on_event: Box<dyn Fn(CliEvent) + Send + Sync>,
     /// 子に渡さない環境変数の追加分 (OAuth 優先なら ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN)。
     pub env_remove: Vec<String>,
+}
+
+/// スナップショットの**置き場**を重複なく集める (rev42、純粋)。
+///
+/// ユーザーが入力として選んだファイルの親フォルダ。探索ツールがここを見られないと、
+/// agy は `run_command` でシェルに逃げて見張りに止められる (2026-09-12 実機)。
+pub fn snapshot_dirs(snapshots: &[PathBuf]) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+    for s in snapshots {
+        if let Some(d) = s.parent() {
+            if !d.as_os_str().is_empty() && !out.iter().any(|x| x == d) {
+                out.push(d.to_path_buf());
+            }
+        }
+    }
+    out
 }
 
 /// OAuth ログインを使わせるために外す変数 (契約 CliSpec.oauth_only)。
@@ -53,6 +72,7 @@ impl TaskRunner for CliTaskRunner {
                 project_path: &self.project_path,
                 scratch_dir: &self.scratch_dir,
                 max_turns: self.max_turns,
+                extra_read_dirs: &self.extra_read_dirs,
             };
             let inv = build_invocation(&self.spec, &task);
             let opts = RunOptions {

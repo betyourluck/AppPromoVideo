@@ -30,7 +30,9 @@ pub struct RunRecord {
     pub language: String,
     pub plate_mode: String,
     pub scene_count: usize,
-    pub cost_usd: f64,
+    /// **None = 記録なし** (費用を返さない CLI がある。rev42)。既存の行は数値を持つので読み込みは互換。
+    #[serde(default)]
+    pub cost_usd: Option<f64>,
     #[serde(default)]
     pub image_provider: Option<String>,
     #[serde(default)]
@@ -123,7 +125,7 @@ mod tests {
             language: "ja".into(),
             plate_mode: "perspective".into(),
             scene_count: 6,
-            cost_usd: 0.5,
+            cost_usd: Some(0.5),
             image_provider: None,
             image_count: 0,
             plan_attempts: 1,
@@ -198,7 +200,7 @@ mod attempts_tests {
         let r = &idx.runs[0];
         assert_eq!(r.plan_attempts, 0, "記録が無いことは 1 回ではない");
         assert!(r.violation_kinds.is_empty());
-        assert_eq!(r.cost_usd, 1.422, "既存の列は壊れない");
+        assert_eq!(r.cost_usd, Some(1.422), "既存の列は壊れない");
     }
 
     /// 画像の枚数を後から書き足す `upsert` で、attempts を消さない

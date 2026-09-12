@@ -53,6 +53,7 @@ CliInvocation:                      # build_invocation の戻り。純粋 (プ�
   invariants:                       # 純関数のテストで固定 (rev2 査読 3)
     - "allowedTools に Read が入る時は必ず --add-dir <project_path> が付く (claude のみ。agy に --allowedTools は存在しない)"
     - "cwd != project_path (全 kind)"
+    - "`--add-dir` は project + `TaskSpec.extra_read_dirs` (スナップショットの置き場)。フラグごと繰り返す — claude は可変長、agy は repeatable で、どちらも『フラグ + 値』の繰り返しを受ける (rev42)"
     - "本文は argv に現れない (全 kind × schema 有無)"
     - "--dangerously-skip-permissions / --bare は既定で付けない (--bare は OAuth を使わず ANTHROPIC_API_KEY が要る = 『LLM のキー管理不要』と衝突。ユーザーが extra_args に書いた時だけ)"
   # kind 別の既定引数 (凍結):
@@ -92,6 +93,9 @@ IsolationGuarantee:                 # **kind ごとに強さが違う**。2026-0
     allowed: "view_file / list_dir / find_by_name / grep_search (読み取り 4 種) + finish (副作用の無い完了合図。**tool event としては未観測**で、外すと正常な run を殺す恐れがあるため入れてある — live で要確認)"
     action: "許可外の tool event を見た瞬間に early_abort → tree_kill → CliError::ToolNotAllowed"
     limit: "**`state:ACTIVE` を見た時点で、その書き込みはもう始まっている。** 検出であって予防ではない。止められるのは 2 手目以降"
+    measured: "2026-09-12 初 live で実際に働いた — 構成タスクが `run_command (Get-ChildItem …snapshots)` に手を伸ばした瞬間に停止 (生ログの最終行が `ACTIVE run_command`。何も実行されていない)"
+    escape_reason: "**なぜシェルに逃げたか**: スナップショットは app_data にあり `--add-dir` の外。`find_by_name` / `grep_search` は `--add-dir` のフォルダしか探さないので空振りし、シェルに落ちた。**逃げ道を塞ぐのではなく逃げる理由を消す** — rev42 で置き場を `--add-dir` に足した。見張りは厳格なまま (緩めると『確率の保証』に戻る)"
+    read_scope: "**agy の `--add-dir` は読み取りを縛らない** (2026-09-12 実測で確定)。同じ run の解析タスクは `--add-dir` の外にあるスナップショットを `view_file` で問題なく読めた。縛るのは探索ツールの既定の探索範囲だけ"
   ui: "設定で agy を選んでいる間、画面に常時警告を出す (既定は claude のまま)。文言はユーザー起草 (2026-09-12) — 『agy は CLI 側で書き込み系ツールを無効化できません。解析対象のリポジトリが書き換わる可能性があります。信頼できない / 他人のリポジトリには向けないでください。実行は検出後に強制停止しますが、予防ではありません。』"
 
 CliEvent:                           # 実行中に Rust から GUI へ push するストリーム (Tauri event "cli-progress")。runner::run の on_event
@@ -146,7 +150,7 @@ AgyStreamLine:                      # agy --input-format stream-json --output-fo
   # 人が読む本文は agent_response の text_delta を順に連結する (claude の assistant.content[].text に相当)。
   # tool_info = { name, parameters: {...}, output? , error? }。見張り (IsolationGuarantee.watchdog) はここの tool_name を見る。
   result: '{ event: "result", result: { conversation_id, status: "SUCCESS | ERROR", response: String, error?: String, num_turns, duration_seconds: f64, structured_output?: Value, json_schema?: Value, usage: { input_tokens, output_tokens, thinking_tokens, cache_read_tokens, total_tokens } } }'
-  cost: "**無い。** トークン数だけ。`RunOk.cost_usd` は None にする — トークンから費用を計算して埋めない (捏造)。UI は記録が無い chip を出さない (rev36)"
+  cost: "**無い。** トークン数だけ。`RunOk.cost_usd` は None にする — トークンから費用を計算して埋めない (捏造)。**2026-09-12 の初 live で実際に `0.000 USD` と描いてしまった** ので、rev42 で `StageReport.cost_usd` / `RunStats.cost_usd` / `RunListItem.cost_usd` を `Option` にした。**片方の段でも不明なら合計は不明** (`pipeline::stages::add_cost`) — 分かっている分だけ足すと『一部しか数えていない総額』という別の嘘になる"
   duration: "`duration_seconds` は f64 秒 (claude の duration_ms とは単位が違う)"
   structured: "`--json-schema` の出力は **result.structured_output** (claude と同名)。無ければ result.response の fenced_json へ落ちる"
   empty_success: "**status=SUCCESS は成果の保証ではない。** ツールが拒否されて response が空でも SUCCESS を返す (実測)。response も structured_output も空なら CliError::EmptySuccess として扱う"

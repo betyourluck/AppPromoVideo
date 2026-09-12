@@ -115,6 +115,13 @@ pub struct TaskSpec<'a> {
     pub scratch_dir: &'a Path,
     /// claude の --max-turns (走査の深掘り回数の上限)。
     pub max_turns: u32,
+    /// `--add-dir` に足す**読ませたい追加のフォルダ** (rev42)。スナップショットの置き場を渡す。
+    ///
+    /// 2026-09-12 実測: agy は探索ツール (`find_by_name` / `grep_search`) の探索範囲が
+    /// `--add-dir` のフォルダに限られるため、外にあるスナップショットを見つけられず
+    /// **`run_command` でシェルに逃げた** (見張りが停止)。逃げ道を塞ぐのではなく**逃げる理由を消す**。
+    /// ユーザーが入力として明示的に選んだファイルの置き場なので、読ませる範囲としては妥当。
+    pub extra_read_dirs: &'a [PathBuf],
 }
 
 /// 契約 `CliInvocation`。
@@ -167,6 +174,7 @@ pub fn build_invocation(spec: &CliSpec, task: &TaskSpec<'_>) -> CliInvocation {
             };
             args.push("--add-dir".into());
             args.push(project.clone());
+            push_extra_dirs(&mut args, task);
             args.push("--allowedTools".into());
             args.extend(CLAUDE_ALLOWED_TOOLS.iter().map(|s| s.to_string()));
             args.extend(spec.extra_args.iter().cloned());
@@ -205,6 +213,7 @@ pub fn build_invocation(spec: &CliSpec, task: &TaskSpec<'_>) -> CliInvocation {
             };
             args.push("--add-dir".into());
             args.push(project.clone());
+            push_extra_dirs(&mut args, task);
             args.extend(spec.extra_args.iter().cloned());
             CliInvocation {
                 program: spec.executable.clone(),
@@ -251,6 +260,25 @@ pub fn build_invocation(spec: &CliSpec, task: &TaskSpec<'_>) -> CliInvocation {
     }
 }
 
+/// 追加の読み取りフォルダを `--add-dir <dir>` として足す (rev42)。
+///
+/// **フラグごと繰り返す** — claude の `--add-dir` は可変長、agy は repeatable で、
+/// どちらも「フラグ + 値」の繰り返しを受ける。値を並べる書き方は agy が採らない。
+/// 重複と project 自身は除く (同じフォルダを二度渡さない)。
+fn push_extra_dirs(args: &mut Vec<String>, task: &TaskSpec<'_>) {
+    let project = task.project_path.to_string_lossy().to_string();
+    let mut seen: Vec<String> = vec![project];
+    for d in task.extra_read_dirs {
+        let s = d.to_string_lossy().to_string();
+        if s.is_empty() || seen.contains(&s) {
+            continue;
+        }
+        seen.push(s.clone());
+        args.push("--add-dir".into());
+        args.push(s);
+    }
+}
+
 /// schema があれば本文に「JSON だけ出せ」+ schema を足す (fenced_json 経路)。
 fn fenced_body(task: &TaskSpec<'_>) -> (String, Structured) {
     match task.schema {
@@ -281,6 +309,23 @@ mod tests {
             project_path: Path::new("D:/proj"),
             scratch_dir: Path::new("C:/app_data/work"),
             max_turns: 12,
+            extra_read_dirs: &[],
+        }
+    }
+
+    /// rev42: スナップショットの置き場を読ませる。**逃げ道を塞ぐのではなく逃げる理由を消す** —
+    /// agy は探索ツールが `--add-dir` の外を見ないため、外にあるスナップショットを探して
+    /// `run_command` に逃げ、見張りに止められていた (2026-09-12 実機)。
+    #[test]
+    fn extra_read_dirs_are_added_for_claude_and_agy_without_duplicates() {
+        let dirs = [PathBuf::from("C:/app_data/snapshots"), PathBuf::from("D:/proj"), PathBuf::from("C:/app_data/snapshots")];
+        for kind in [CliKind::Claude, CliKind::Agy] {
+            let mut t = task(None);
+            t.extra_read_dirs = &dirs;
+            let inv = build_invocation(&spec(kind), &t);
+            let dirs_in_argv: Vec<&String> =
+                inv.args.iter().enumerate().filter(|(i, _)| *i > 0 && inv.args[i - 1] == "--add-dir").map(|(_, a)| a).collect();
+            assert_eq!(dirs_in_argv, vec!["D:/proj", "C:/app_data/snapshots"], "{kind:?}: project + 追加分、重複なし");
         }
     }
 

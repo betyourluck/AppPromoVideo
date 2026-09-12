@@ -101,7 +101,7 @@ async function copyPackage() {
  * 履歴から開いた run は stage を持たないので、そこを描くと無い記録 (0 回 / 0.000 USD) が出る。
  */
 const header = computed(() => {
-  const empty = { attempts: 0, cost_usd: 0, duration_ms: 0, violations: [] };
+  const empty = { attempts: 0, cost_usd: null, duration_ms: 0, violations: [] };
   return runHeaderStats(store.result?.promo.run_stats, store.result?.analyze ?? empty, store.result?.plan ?? empty);
 });
 

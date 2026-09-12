@@ -81,4 +81,32 @@ describe("describeAttempts", () => {
     expect(got.title).toBe("2 回目で通過 — product_backdrop_angled, motion_prompt_empty");
     expect(describeAttempts(1, []).title).toBe("1 回目で通過");
   });
+
+  // rev42: 費用を返さない CLI (agy) で走らせた run。**0.000 USD と描かない。**
+  it("費用の記録が無ければ chip を出さない", () => {
+    const noCost = { attempts: 1, cost_usd: null, duration_ms: 1000, violations: [] };
+    const h = runHeaderStats(null, noCost, noCost);
+    expect(h.costKnown).toBe(false);
+    expect(h.cost).toBe("—");
+    // 走ったこと自体 (duration) は分かるので、そちらは描く。
+    expect(h.durationsKnown).toBe(true);
+  });
+
+  // 片方でも不明なら合計は不明 (backend の add_cost と同じ規律)。
+  it("片方だけ費用が分かっても合計は出さない", () => {
+    const known = { attempts: 1, cost_usd: 0.5, duration_ms: 1000, violations: [] };
+    const unknown = { attempts: 1, cost_usd: null, duration_ms: 1000, violations: [] };
+    expect(runHeaderStats(null, known, unknown).costKnown).toBe(false);
+    expect(runHeaderStats(null, unknown, known).cost).toBe("—");
+  });
+
+  // 正本 (promo.json) に費用が無い run も同じ。
+  it("正本に費用が無ければ chip を出さない", () => {
+    const stats = { plan_attempts: 1, violation_kinds: [], cost_usd: null, models: null };
+    const empty = { attempts: 0, cost_usd: null, duration_ms: 0, violations: [] };
+    const h = runHeaderStats(stats, empty, empty);
+    expect(h.attemptsKnown).toBe(true);
+    expect(h.costKnown).toBe(false);
+    expect(h.cost).toBe("—");
+  });
 });

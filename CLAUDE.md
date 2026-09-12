@@ -74,8 +74,8 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 ## 現状 (2026-09-12)
 
-- **spec 01 は Phase 0〜E 着地、rev41 まで反映済み (rev27〜29 は試行)。** crates 176 green / vitest 83 / backend 19 green・clippy clean。
-- コミットは Initial `a75c3bc` の上に積んでいる (**本数は数えない** — 書くたび 1 手遅れて嘘になる。`git rev-list --count a75c3bc..HEAD`)。`origin/main` には rev26 まで push 済み — **rev27〜29 (UI の試行、一時コミット) / rev30 (デザインの修正・多言語化) / rev31〜33 (履歴の全画面・比較の並び・チェックボックス、一時コミット) / data_contract.yaml の構文修正 / アプリのアイコン / rev34〜35 (スイッチ・設定の全画面) / rev36 (無い記録を描かない・アイコンのトグル) / rev37 (プロンプトの書き換え) / rev38 (生ログ・i18n の整理) / rev39 (agy 対応) / rev40〜41 (種類の食い違い) は未 push** (private。**週末に public 予定**)。
+- **spec 01 は Phase 0〜E 着地、rev42 まで反映済み (rev27〜29 は試行)。** crates 179 green / vitest 86 / backend 19 green・clippy clean。
+- コミットは Initial `a75c3bc` の上に積んでいる (**本数は数えない** — 書くたび 1 手遅れて嘘になる。`git rev-list --count a75c3bc..HEAD`)。`origin/main` には rev26 まで push 済み — **rev27〜29 (UI の試行、一時コミット) / rev30 (デザインの修正・多言語化) / rev31〜33 (履歴の全画面・比較の並び・チェックボックス、一時コミット) / data_contract.yaml の構文修正 / アプリのアイコン / rev34〜35 (スイッチ・設定の全画面) / rev36 (無い記録を描かない・アイコンのトグル) / rev37 (プロンプトの書き換え) / rev38 (生ログ・i18n の整理) / rev39 (agy 対応) / rev40〜41 (種類の食い違い) / rev42 (agy の初 live の回収) は未 push** (private。**週末に public 予定**)。
 - 通し (解析 → 構成 → 参照画像 → 合成) は **4 リポジトリで live 成功** (Kataribe / Verificator /
   AppPromoVideo 自身 / Fuseforks)。**出口まで到達** — MiniMax i2v の 15 秒が X に投稿された (2026-09-09)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
@@ -85,6 +85,9 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 - **`agy` は隔離の保証が弱い** (rev39)。CLI 側に許可リストが無く、`write_to_file` は**拒否されない** (実測: ファイルが実際に作られた)。
   止まるのは `run_command` だけ。アプリの見張り (`AGY_ALLOWED_TOOLS`) は**検出であって予防ではない** — 契約 `IsolationGuarantee`。
   既定は `claude` のまま。agy を選ぶと設定画面に警告が常時出る。
+  **`--add-dir` は agy の読み取りを縛らない** (実測)。縛るのは探索ツールの探索範囲だけで、そこから外れると
+  agy はシェルに逃げる → rev42 でスナップショットの置き場を `--add-dir` に足した (**逃げ道でなく逃げる理由を消す**)。
+- **費用は `Option`** (rev42)。agy は費用を返さないので 0 で埋めない。**片方の段でも不明なら合計は不明**。
 - **CLI が落ちたら生ログを読む** (rev38)。`<app の作業ディレクトリ>/cli-logs/<UTC>-<pid>.jsonl` に stdout の行がそのまま残り、
   兄弟の `.invocation.json` に**何を起動したか** (program / args / cwd) が残る。最新 20 本、成功した run も。エラーの文言と進捗ログにも出る。
   **2026-09-12 の障害 2 件の真因は同じ** — 起動していたのが `claude` ではなく **`agy`** だった (`.invocation.json` で確定)。

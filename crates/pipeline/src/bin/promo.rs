@@ -365,6 +365,7 @@ async fn run(a: &Args) -> Result<(), String> {
         project_path: a.target.clone(),
         scratch_dir: scratch,
         max_turns: a.max_turns,
+        extra_read_dirs: pipeline::task::snapshot_dirs(&a.snapshots),
         cancel: rx,
         on_event: Box::new(|e| match e {
             CliEvent::Started { pid } => eprintln!("[cli] started pid={pid}"),
@@ -377,12 +378,12 @@ async fn run(a: &Args) -> Result<(), String> {
     };
     eprintln!("== brief: {} chars, tree {} lines ==", brief_text.chars().count(), brief.tree.lines().count());
     let (summary, r1) = analyze(&runner, &brief_text, &a.concept, a.lang).await.map_err(|e| e.to_string())?;
-    eprintln!("== analyze: {:.4} USD, {} ms ==", r1.cost_usd, r1.duration_ms);
+    eprintln!("== analyze: {}, {} ms ==", cost_text(r1.cost_usd), r1.duration_ms);
     eprintln!("{}", serde_json::to_string_pretty(&summary).unwrap());
     let (plan, r2) = plan_scenes(&runner, &summary, &a.concept, a.seconds, a.aspect, a.lang, &brief.snapshots, a.plate_mode)
         .await
         .map_err(|e| e.to_string())?;
-    eprintln!("== plan: attempts {}, {:.4} USD, {} ms ==", r2.attempts, r2.cost_usd, r2.duration_ms);
+    eprintln!("== plan: attempts {}, {}, {} ms ==", r2.attempts, cost_text(r2.cost_usd), r2.duration_ms);
     for (i, vs) in r2.violations_per_attempt.iter().enumerate() {
         if vs.is_empty() {
             eprintln!("   attempt {}: ok", i + 1);
@@ -417,4 +418,12 @@ async fn run(a: &Args) -> Result<(), String> {
     }
     println!("{}", dir.display());
     Ok(())
+}
+
+/// 費用の 1 行。**記録が無ければ 0 と書かない** (agy は費用を返さない)。
+fn cost_text(cost: Option<f64>) -> String {
+    match cost {
+        Some(c) => format!("{c:.4} USD"),
+        None => "費用の記録なし".to_string(),
+    }
 }

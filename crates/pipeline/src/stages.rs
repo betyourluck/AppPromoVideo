@@ -30,12 +30,24 @@ pub enum PipelineError {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct StageReport {
     pub attempts: usize,
-    pub cost_usd: f64,
+    /// **None = 記録なし** (費用を返さない CLI がある)。0 で埋めない。
+    pub cost_usd: Option<f64>,
     pub duration_ms: u64,
     /// 各試行で残った違反 (最後は空なら成功)。
     pub violations_per_attempt: Vec<Vec<PlanViolation>>,
     /// 各試行で CLI が名乗ったモデル (rev25)。重複はここでは消さない — 整列と重複除去は `RunStats::new`。
     pub models: Vec<String>,
+}
+
+/// 費用の足し算。**片方でも不明なら合計は不明。**
+///
+/// 分かっている分だけ足すと「一部しか数えていない総額」という別種の嘘になる。
+/// agy は費用を返さないので (契約 `AgyStreamLine.cost`)、この分岐は実際に通る。
+pub fn add_cost(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+    match (a, b) {
+        (Some(x), Some(y)) => Some(x + y),
+        _ => None,
+    }
 }
 
 fn structured_or_shape(ok: &cli_runner::runner::RunOk, what: &'static str) -> Result<Value, PipelineError> {
@@ -62,7 +74,7 @@ pub async fn analyze(
     let v = structured_or_shape(&ok, "AnalyzedSummary")?;
     let summary: AnalyzedSummary = serde_json::from_value(v.clone())
         .map_err(|e| PipelineError::Shape { what: "AnalyzedSummary", detail: e.to_string(), raw: head(&v.to_string()) })?;
-    Ok((summary, StageReport { attempts: 1, cost_usd: ok.cost_usd.unwrap_or(0.0), duration_ms: ok.duration_ms, violations_per_attempt: vec![vec![]], models: ok.model.clone().into_iter().collect() }))
+    Ok((summary, StageReport { attempts: 1, cost_usd: ok.cost_usd, duration_ms: ok.duration_ms, violations_per_attempt: vec![vec![]], models: ok.model.clone().into_iter().collect() }))
 }
 
 /// タスク 2: シーン構成 + 検査ループ。
@@ -79,12 +91,13 @@ pub async fn plan_scenes(
 ) -> Result<(ScenePlan, StageReport), PipelineError> {
     let base = scene_prompt(summary, concept, total_seconds, aspect, language, snapshots, plate_mode);
     let schema = schema_for_scene_plan();
-    let mut report = StageReport::default();
+    // 費用は「0 回の試行 = 0」から積む。不明を 1 つでも足した時点で不明に落ちる (add_cost)。
+    let mut report = StageReport { cost_usd: Some(0.0), ..Default::default() };
     let mut prompt = base.clone();
     for attempt in 1..=(1 + MAX_REPAIRS) {
         report.attempts = attempt;
         let ok = runner.run_task(&prompt, Some(&schema)).await?;
-        report.cost_usd += ok.cost_usd.unwrap_or(0.0);
+        report.cost_usd = add_cost(report.cost_usd, ok.cost_usd);
         report.duration_ms += ok.duration_ms;
         // rev25: CLI が名乗ったモデルを試行ごとに積む (名乗らない CLI では何も足さない)。
         report.models.extend(ok.model.clone());
@@ -110,7 +123,7 @@ pub async fn plan_scenes(
 /// 別々に手で組んでいた。項目を足すたびに両側を思い出す必要があり、#18 (片側だけ直る) の再発条件だった。
 pub fn run_stats(analyze: &StageReport, plan: &StageReport) -> promo_core::RunStats {
     let models: Vec<String> = analyze.models.iter().chain(&plan.models).cloned().collect();
-    promo_core::RunStats::new(plan.attempts, &plan.violations_per_attempt, analyze.cost_usd + plan.cost_usd, &models)
+    promo_core::RunStats::new(plan.attempts, &plan.violations_per_attempt, add_cost(analyze.cost_usd, plan.cost_usd), &models)
 }
 
 #[cfg(test)]
@@ -127,11 +140,18 @@ mod tests {
     struct Fake {
         replies: Mutex<Vec<Value>>,
         prompts: Mutex<Vec<String>>,
+        /// 費用を返さない CLI (agy) の形。`false` なら毎回 None を返す。
+        reports_cost: bool,
     }
 
     impl Fake {
         fn new(replies: Vec<Value>) -> Self {
-            Self { replies: Mutex::new(replies), prompts: Mutex::new(vec![]) }
+            Self { replies: Mutex::new(replies), prompts: Mutex::new(vec![]), reports_cost: true }
+        }
+
+        /// agy のように費用を返さない CLI。
+        fn without_cost(replies: Vec<Value>) -> Self {
+            Self { replies: Mutex::new(replies), prompts: Mutex::new(vec![]), reports_cost: false }
         }
     }
 
@@ -149,7 +169,7 @@ mod tests {
                 Ok(RunOk {
                     text: v.to_string(),
                     structured: Some(v),
-                    cost_usd: Some(0.01),
+                    cost_usd: if self.reports_cost { Some(0.01) } else { None },
                     duration_ms: 10,
                     model: Some(format!("model-{n}")),
                 })
@@ -213,7 +233,7 @@ mod tests {
         assert!(prompts[1].contains("previous answer was rejected"));
         assert!(prompts[1].contains("mentions the input (`screenshot`)"));
         assert!(prompts[1].contains("Same as the screenshot"), "前回の出力を添えて直させる");
-        assert!((r.cost_usd - 0.02).abs() < 1e-9, "コストは試行の合計");
+        assert!((r.cost_usd.unwrap() - 0.02).abs() < 1e-9, "コストは試行の合計");
     }
 
     /// rev25: 試行ごとに CLI が名乗ったモデルを落とさず運ぶ (再生成の途中で変わっても残る)。
@@ -229,26 +249,52 @@ mod tests {
         assert_eq!(a.models, vec!["model-1".to_string()]);
     }
 
+    /// **費用を返さない CLI があるので、不明を 0 で埋めない** (rev42、agy 実測)。
+    /// 片方でも不明なら合計は不明 — 分かっている分だけ足すと「一部しか数えていない総額」になる。
+    #[test]
+    fn an_unknown_cost_poisons_the_sum_instead_of_counting_as_zero() {
+        assert_eq!(add_cost(Some(0.3), Some(0.7)), Some(1.0));
+        assert_eq!(add_cost(Some(0.3), None), None, "分かっている分だけ足さない");
+        assert_eq!(add_cost(None, Some(0.7)), None);
+        assert_eq!(add_cost(None, None), None);
+    }
+
+    /// 費用を返さない CLI で走らせた段は「記録なし」。**0.000 USD と描かない。**
+    #[tokio::test]
+    async fn a_stage_run_by_a_cli_without_cost_reports_no_cost() {
+        let fake = Fake::without_cost(vec![serde_json::to_value(summary()).unwrap()]);
+        let (_, a) = analyze(&fake, "BRIEF", "concept", Language::Ja).await.unwrap();
+        assert_eq!(a.cost_usd, None, "費用を返さない CLI の段は記録なし");
+
+        let good = plan(vec![scene(1, "A desk"), scene(2, "ok"), scene(3, "ok")]);
+        let fake = Fake::without_cost(vec![good]);
+        let (_, p) = plan_scenes(&fake, &summary(), "concept", 15, Aspect::Landscape, Language::Ja, &[], PlateMode::default()).await.unwrap();
+        assert_eq!(p.cost_usd, None);
+
+        // 合計も記録なしのまま promo.json へ運ばれる。
+        assert_eq!(run_stats(&a, &p).cost_usd, None);
+    }
+
     /// `run_stats` は**全項目**を運ぶ (#18 の処方: 組み立てを関数にして全フィールドを写す PoC を 1 本)。
     #[test]
     fn run_stats_carries_every_field_from_both_stages() {
         let analyze = StageReport {
             attempts: 1,
-            cost_usd: 0.3,
+            cost_usd: Some(0.3),
             duration_ms: 1,
             violations_per_attempt: vec![vec![]],
             models: vec!["claude-sonnet-5".into()],
         };
         let plan = StageReport {
             attempts: 2,
-            cost_usd: 0.7,
+            cost_usd: Some(0.7),
             duration_ms: 2,
             violations_per_attempt: vec![vec![PlanViolation::NoProductCut], vec![]],
             models: vec!["claude-sonnet-5".into(), "claude-sonnet-5".into()],
         };
         let s = run_stats(&analyze, &plan);
         assert_eq!(s.plan_attempts, 2);
-        assert!((s.cost_usd - 1.0).abs() < 1e-9, "analyze + plan の合計");
+        assert!((s.cost_usd.unwrap() - 1.0).abs() < 1e-9, "analyze + plan の合計");
         assert_eq!(s.violation_kinds, vec!["no_product_cut"]);
         assert_eq!(s.models, Some(vec!["claude-sonnet-5".to_string()]), "重複なし");
     }
