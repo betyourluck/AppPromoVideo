@@ -182,6 +182,8 @@ input[type="radio"] {
   cursor: pointer;
 }
 
+/* rev34: 入り切りの**スイッチ**は `components/Switch.vue` (中身は checkbox のまま、つまみは実体のある要素)。 */
+
 input::placeholder,
 textarea::placeholder {
   color: rgb(var(--muted) / 0.7);

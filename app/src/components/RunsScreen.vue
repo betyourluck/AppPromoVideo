@@ -111,9 +111,9 @@ async function drop(dir: string, files: boolean) {
 <template>
   <section ref="screenEl" class="screen">
     <header class="head">
-      <button class="btn small" :title="t('runs.backTitle')" @click="emit('close')">
+      <button class="btn small" :title="t('common.backTitle')" @click="emit('close')">
         <Icon name="chevron-left" :size="14" />
-        <span>{{ t('runs.back') }}</span>
+        <span>{{ t('common.back') }}</span>
       </button>
       <h2 class="title">{{ t('runs.title') }}</h2>
     </header>

@@ -1,8 +1,13 @@
 <script setup lang="ts">
 /**
- * 設定。**2 セクションを分ける** (契約 決定 10): LLM は CLI の認証に委ねるのでキー欄なし、
+ * 設定 (rev35 から**全画面**。ユーザー判断「設定画面もダイアログではなく 1 画面に。スクロールなしで収まるように」)。
+ *
+ * **2 セクションを分ける** (契約 決定 10): LLM は CLI の認証に委ねるのでキー欄なし、
  * 画像生成は OpenAI / Gemini がキー必須で ComfyUI だけ無キー。「完全無キー」と読める文言は置かない。
  * 画像の設定はプロバイダ別スロット (切替で値が漏れない)。キーは backend の .env へ (値は WebView に残さない)。
+ *
+ * rev35 の構成: 3 列 (LLM CLI / 画像生成 / 面と見出し)。**長い説明と認証の診断は既定で畳む** (`<details>`) —
+ * 文言は消さずに、初期表示をスクロールなしに収めるため。**画面全体はスクロールさせず**、狭い窓では列の中だけが動く。
  */
 import { computed, onMounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
@@ -11,6 +16,7 @@ import type { FontEntry } from "../types";
 import { t } from "../i18n";
 import Icon from "./Icon.vue";
 import Rich from "./Rich.vue";
+import Switch from "./Switch.vue";
 import {
   DEFAULT_BASE_URL,
   DEFAULT_CLI_EXE,
@@ -26,7 +32,6 @@ import {
 
 const store = useStore();
 const emit = defineEmits<{ (e: "close"): void }>();
-const tab = ref<"llm" | "image">("llm");
 
 const keys = ref<{ openai: boolean; gemini: boolean }>({ openai: false, gemini: false });
 const keyInput = ref("");
@@ -154,28 +159,28 @@ function close() {
 </script>
 
 <template>
-  <div class="backdrop" @click.self="close">
-    <div class="dlg panel">
-      <div class="row" style="justify-content: space-between">
-        <div class="tabs">
-          <button class="btn small" :class="{ on: tab === 'llm' }" @click="tab = 'llm'">
-            <Icon name="terminal" :size="13" />
-            <span>LLM (CLI)</span>
-          </button>
-          <button class="btn small" :class="{ on: tab === 'image' }" @click="tab = 'image'">
-            <Icon name="sparkles" :size="13" />
-            <span>{{ t('settings.imageTabLabel') }}</span>
-          </button>
-        </div>
-        <button class="btn small" :title="t('common.close')" @click="close">
-          <Icon name="x" :size="14" />
-          <span>{{ t('common.close') }}</span>
-        </button>
-      </div>
+  <section class="screen">
+    <header class="head">
+      <button class="btn small" :title="t('common.backTitle')" @click="close">
+        <Icon name="chevron-left" :size="14" />
+        <span>{{ t('common.back') }}</span>
+      </button>
+      <h2 class="title">{{ t('settings.title') }}</h2>
+    </header>
 
-      <!-- ===== LLM ===== -->
-      <section v-if="tab === 'llm'">
-        <p class="muted note"><Rich :text="t('settings.llmNote')" /></p>
+    <div class="cols">
+      <!-- ===== LLM (CLI) ===== -->
+      <section class="col">
+        <h3 class="col-head">
+          <Icon name="terminal" :size="14" />
+          <span>{{ t('settings.cliTab') }}</span>
+        </h3>
+        <details class="help">
+          <summary>{{ t('settings.help') }}</summary>
+          <p class="muted note"><Rich :text="t('settings.llmNote')" /></p>
+          <p class="muted note">{{ t('settings.toolsNote') }}</p>
+        </details>
+
         <label class="field">
           <span>{{ t('settings.cliKind') }}</span>
           <select :value="store.cli.kind" @change="onKindChange(($event.target as HTMLSelectElement).value as CliKind)">
@@ -197,53 +202,63 @@ function close() {
           <span>{{ t('settings.cliModel') }}</span>
           <input v-model="store.cli.model" placeholder="sonnet / haiku / opus" @change="store.persist()" />
         </label>
-        <div class="row">
-          <label class="field" style="flex: 1">
+        <div class="grid-row">
+          <label class="field">
             <span>{{ t('settings.timeout') }}</span>
             <input v-model.number="store.cli.timeoutSecs" type="number" min="30" @change="store.persist()" />
           </label>
-          <label class="field" style="flex: 1">
+          <label class="field">
             <span>{{ t('settings.maxTurns') }}</span>
             <input v-model.number="store.cli.maxTurns" type="number" min="1" @change="store.persist()" />
           </label>
         </div>
-        <label class="field row" style="gap: 8px">
-          <input v-model="store.cli.oauthOnly" type="checkbox" @change="store.persist()" />
-          <span style="margin: 0">{{ t('settings.oauthOnly') }}</span>
-        </label>
         <label class="field">
           <span>{{ t('settings.extraArgs') }}</span>
           <input v-model="store.cli.extraArgs" class="mono" @change="store.persist()" />
         </label>
-        <div v-if="store.cliCheck" class="authbox mono">
-          <div><b>{{ t('settings.authTitle') }}</b></div>
-          <div>
-            ANTHROPIC_API_KEY:
-            <span :class="store.cliCheck.auth.api_key_present ? 'ok' : 'muted'">
-              {{ store.cliCheck.auth.api_key_present ? t('settings.presentKey', { len: store.cliCheck.auth.api_key_len, fp: store.cliCheck.auth.api_key_fingerprint }) : t('settings.absent') }}
-            </span>
-            <span class="muted"> {{ t('settings.apiKeyPrecedence') }}</span>
+        <label class="field row" style="gap: 8px">
+          <Switch v-model="store.cli.oauthOnly" @change="store.persist()" />
+          <span style="margin: 0">{{ t('settings.oauthOnly') }}</span>
+        </label>
+
+        <details v-if="store.cliCheck" class="help">
+          <summary>{{ t('settings.authTitle') }}</summary>
+          <div class="authbox mono">
+            <div>
+              ANTHROPIC_API_KEY:
+              <span :class="store.cliCheck.auth.api_key_present ? 'ok' : 'muted'">
+                {{ store.cliCheck.auth.api_key_present ? t('settings.presentKey', { len: store.cliCheck.auth.api_key_len, fp: store.cliCheck.auth.api_key_fingerprint }) : t('settings.absent') }}
+              </span>
+              <span class="muted"> {{ t('settings.apiKeyPrecedence') }}</span>
+            </div>
+            <div>ANTHROPIC_AUTH_TOKEN: {{ store.cliCheck.auth.auth_token_present ? t('settings.present') : t('settings.absent') }} · base_url: {{ store.cliCheck.auth.base_url || t('settings.default') }}</div>
+            <div>
+              claude auth status:
+              <span v-if="store.cliCheck.auth.oauth_logged_in === null" class="muted">{{ t('settings.unknown') }}</span>
+              <span v-else :class="store.cliCheck.auth.oauth_logged_in ? 'ok' : 'warn'">{{ store.cliCheck.auth.oauth_logged_in ? t('settings.loggedIn') : t('settings.notLoggedIn') }} ({{ store.cliCheck.auth.oauth_method || '-' }})</span>
+            </div>
+            <div class="muted">{{ t('settings.scrubbed', { vars: store.cliCheck.auth.scrubbed.length ? store.cliCheck.auth.scrubbed.join(', ') : t('settings.absent') }) }}</div>
+            <button class="btn small" style="margin-top: 6px" @click="store.checkCli()">
+              <Icon name="refresh" :size="13" />
+              <span>{{ t('settings.recheck') }}</span>
+            </button>
           </div>
-          <div>ANTHROPIC_AUTH_TOKEN: {{ store.cliCheck.auth.auth_token_present ? t('settings.present') : t('settings.absent') }} · base_url: {{ store.cliCheck.auth.base_url || t('settings.default') }}</div>
-          <div>
-            claude auth status:
-            <span v-if="store.cliCheck.auth.oauth_logged_in === null" class="muted">{{ t('settings.unknown') }}</span>
-            <span v-else :class="store.cliCheck.auth.oauth_logged_in ? 'ok' : 'warn'">{{ store.cliCheck.auth.oauth_logged_in ? t('settings.loggedIn') : t('settings.notLoggedIn') }} ({{ store.cliCheck.auth.oauth_method || '-' }})</span>
-          </div>
-          <div class="muted">{{ t('settings.scrubbed', { vars: store.cliCheck.auth.scrubbed.length ? store.cliCheck.auth.scrubbed.join(', ') : t('settings.absent') }) }}</div>
-          <button class="btn small" style="margin-top: 6px" @click="store.checkCli()">
-            <Icon name="refresh" :size="13" />
-            <span>{{ t('settings.recheck') }}</span>
-          </button>
-        </div>
-        <p class="muted note">{{ t('settings.toolsNote') }}</p>
+        </details>
       </section>
 
-      <!-- ===== 画像 ===== -->
-      <section v-else>
-        <p class="muted note"><Rich :text="t('settings.imageNote')" /></p>
+      <!-- ===== 画像生成 ===== -->
+      <section class="col">
+        <h3 class="col-head">
+          <Icon name="sparkles" :size="14" />
+          <span>{{ t('settings.imageTab') }}</span>
+        </h3>
+        <details class="help">
+          <summary>{{ t('settings.help') }}</summary>
+          <p class="muted note"><Rich :text="t('settings.imageNote')" /></p>
+        </details>
+
         <label class="field row" style="gap: 8px">
-          <input v-model="store.image.enabled" type="checkbox" @change="store.persist()" />
+          <Switch v-model="store.image.enabled" @change="store.persist()" />
           <span style="margin: 0">{{ t('settings.autoImages') }}</span>
         </label>
         <label class="field">
@@ -254,7 +269,6 @@ function close() {
             <option value="comfy">{{ t('settings.providerComfy') }}</option>
           </select>
         </label>
-
         <div v-if="provider !== 'comfy'" class="keybox">
           <span class="chip" :class="keys[provider] ? 'ok' : 'warn'">{{ keys[provider] ? t('settings.keySet') : t('settings.keyNotSet') }}</span>
           <input v-model="keyInput" type="password" :placeholder="t('settings.keyPlaceholder')" style="flex: 1" />
@@ -263,17 +277,18 @@ function close() {
             <span>{{ t('settings.save') }}</span>
           </button>
         </div>
-
-        <label class="field">
-          <span>{{ t('settings.serverUrl') }}</span>
-          <input v-model="slot.baseUrl" :placeholder="DEFAULT_BASE_URL[provider]" @change="store.persist()" />
-        </label>
-        <label class="field">
-          <span>{{ t('settings.model') }} {{ provider === 'comfy' ? t('settings.modelComfy') : '' }}</span>
-          <input v-model="slot.model" :placeholder="DEFAULT_MODEL[provider]" :disabled="provider === 'comfy'" @change="store.persist()" />
-        </label>
-        <div class="row">
-          <label class="field" style="flex: 1">
+        <div class="grid-row">
+          <label class="field">
+            <span>{{ t('settings.serverUrl') }}</span>
+            <input v-model="slot.baseUrl" :placeholder="DEFAULT_BASE_URL[provider]" @change="store.persist()" />
+          </label>
+          <label class="field">
+            <span>{{ t('settings.model') }} {{ provider === 'comfy' ? t('settings.modelComfy') : '' }}</span>
+            <input v-model="slot.model" :placeholder="DEFAULT_MODEL[provider]" :disabled="provider === 'comfy'" @change="store.persist()" />
+          </label>
+        </div>
+        <div class="grid-row">
+          <label class="field">
             <span>{{ t('settings.detail') }}</span>
             <select v-model="store.image.detail" @change="store.persist()">
               <option value="standard">{{ t('settings.detailStandard') }}</option>
@@ -281,11 +296,11 @@ function close() {
               <option value="highest">{{ t('settings.detailHighest') }}</option>
             </select>
           </label>
-          <label class="field" style="flex: 1">
+          <label class="field">
             <span>{{ t('settings.maxScenes') }}</span>
             <input v-model.number="store.image.maxScenes" type="number" min="0" @change="store.persist()" />
           </label>
-          <label class="field" style="flex: 1">
+          <label class="field">
             <span>{{ t('settings.requestedRefs') }}</span>
             <input v-model.number="store.image.requestedRefs" type="number" min="0" max="3" @change="store.persist()" />
           </label>
@@ -294,27 +309,28 @@ function close() {
           <span>{{ t('settings.userPrefix') }}</span>
           <textarea v-model="store.image.userPrefix" rows="2" @change="store.persist()"></textarea>
         </label>
-        <template v-if="provider === 'comfy'">
+        <details v-if="provider === 'comfy'" class="help">
+          <summary>{{ t('settings.comfyDetails') }}</summary>
           <label class="field">
             <span>{{ t('settings.negative') }}</span>
             <input v-model="slot.negative" :disabled="!supportsNegative(provider)" @change="store.persist()" />
           </label>
           <label class="field">
             <span>{{ t('settings.workflowJson') }}</span>
-            <textarea v-model="slot.workflowJson" rows="8" class="mono" @change="store.persist()"></textarea>
+            <textarea v-model="slot.workflowJson" rows="3" class="mono" @change="store.persist()"></textarea>
           </label>
           <div v-if="workflowWarn" class="warn" style="font-size: var(--fs-sm)">{{ workflowWarn }}</div>
-          <div class="row">
-            <label class="field row" style="gap: 6px; flex: 1">
-              <input v-model="store.image.lockSeed" type="checkbox" @change="store.persist()" />
+          <div class="grid-row">
+            <label class="field row" style="gap: 6px">
+              <Switch v-model="store.image.lockSeed" @change="store.persist()" />
               <span style="margin: 0">{{ t('settings.lockSeed') }}</span>
             </label>
-            <label class="field" style="flex: 1">
+            <label class="field">
               <span>seed</span>
               <input v-model.number="store.image.seed" type="number" min="0" :disabled="!store.image.lockSeed" @change="store.persist()" />
             </label>
           </div>
-        </template>
+        </details>
         <div class="row" style="margin-top: 6px">
           <button class="btn small" :disabled="probing" @click="probe">
             <Icon :name="probing ? 'refresh' : 'sparkles'" :size="13" />
@@ -322,9 +338,22 @@ function close() {
           </button>
           <span class="muted" style="font-size: var(--fs-sm); white-space: pre-wrap">{{ probeMsg }}</span>
         </div>
+      </section>
 
-        <h3 class="sub">{{ t('settings.plateHeading') }}</h3>
-        <p class="muted note">{{ t('settings.plateNote') }}</p>
+      <!-- ===== 面と見出し ===== -->
+      <section class="col">
+        <h3 class="col-head">
+          <Icon name="image" :size="14" />
+          <span>{{ t('settings.plateHeading') }}</span>
+        </h3>
+        <details class="help">
+          <summary>{{ t('settings.help') }}</summary>
+          <p class="muted note">{{ t('settings.plateNote') }}</p>
+          <p class="muted note">
+            <template v-if="store.image.plateMode === 'perspective'">{{ t('settings.perspectiveNote') }}</template>
+            <template v-else><Rich :text="t('settings.frontalNote')" /></template>
+          </p>
+        </details>
         <label class="field">
           <span>{{ t('settings.plateMode') }}</span>
           <select v-model="store.image.plateMode" @change="store.persist()">
@@ -332,15 +361,17 @@ function close() {
             <option value="perspective">{{ t('settings.platePerspective') }}</option>
           </select>
         </label>
-        <p class="muted note">
-          <template v-if="store.image.plateMode === 'perspective'">{{ t('settings.perspectiveNote') }}</template>
-          <template v-else><Rich :text="t('settings.frontalNote')" /></template>
-        </p>
 
-        <h3 class="sub">{{ t('settings.captionHeading') }}</h3>
-        <p class="muted note"><Rich :text="t('settings.captionNote')" /></p>
+        <h3 class="col-head sub">
+          <Icon name="edit" :size="14" />
+          <span>{{ t('settings.captionHeading') }}</span>
+        </h3>
+        <details class="help">
+          <summary>{{ t('settings.help') }}</summary>
+          <p class="muted note"><Rich :text="t('settings.captionNote')" /></p>
+        </details>
         <label class="field row" style="gap: 8px">
-          <input v-model="store.image.caption.enabled" type="checkbox" @change="store.persist()" />
+          <Switch v-model="store.image.caption.enabled" @change="store.persist()" />
           <span style="margin: 0">{{ t('settings.captionEnable') }}</span>
         </label>
         <label class="field">
@@ -353,7 +384,7 @@ function close() {
               </option>
             </select>
             <button class="btn small" :disabled="fontsLoading" @click="loadFonts">
-              <Icon :name="fontsLoading ? 'refresh' : 'refresh'" :size="13" />
+              <Icon name="refresh" :size="13" />
               <span>{{ t('settings.reload') }}</span>
             </button>
             <button class="btn small" @click="openFontsFolder">
@@ -362,23 +393,23 @@ function close() {
             </button>
           </div>
         </label>
-        <div class="row">
-          <label class="field" style="flex: 1">
+        <div class="grid-row caption-row">
+          <label class="field">
             <span>{{ t('settings.captionSize') }}</span>
             <input v-model.number="store.image.caption.sizeRatio" type="number" min="0.02" max="0.2" step="0.005" @change="store.persist()" />
           </label>
-          <label class="field" style="flex: 1">
+          <label class="field">
             <span>{{ t('settings.captionColor') }}</span>
             <input v-model="store.image.caption.color" type="color" @change="store.persist()" />
           </label>
-          <label class="field" style="flex: 1">
+          <label class="field">
             <span>{{ t('settings.captionPosition') }}</span>
             <select v-model="store.image.caption.position" @change="store.persist()">
               <option value="bottom">{{ t('settings.bottom') }}</option>
               <option value="top">{{ t('settings.top') }}</option>
             </select>
           </label>
-          <button class="btn small" style="align-self: flex-end; margin-bottom: 8px" @click="previewCaption">
+          <button class="btn small preview-btn" @click="previewCaption">
             <Icon name="image" :size="13" />
             <span>{{ t('settings.preview') }}</span>
           </button>
@@ -387,39 +418,113 @@ function close() {
         <img v-if="captionPreview" :src="captionPreview" alt="caption preview" class="preview" />
       </section>
     </div>
-  </div>
+  </section>
 </template>
 
 <style scoped>
-.backdrop {
-  position: fixed;
-  inset: 0;
-  background: var(--backdrop, rgb(0 0 0 / 0.65));
-  backdrop-filter: blur(8px);
+/* rev35: 全画面。App.vue の .shell (縦の flex) の中でタイトルバーの下を全部使う。**画面全体はスクロールしない**。 */
+.screen {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 12px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.head {
   display: flex;
   align-items: center;
-  justify-content: center;
-  z-index: 40;
+  gap: 12px;
+  flex-shrink: 0;
 }
-.dlg {
-  width: min(760px, 94vw);
-  max-height: 88vh;
+.title {
+  margin: 0;
+  font-size: var(--fs-h-lg);
+  font-weight: var(--fw-bold);
+}
+.cols {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+/* 縮むのは列の中。窓が低い時だけ列がスクロールし、画面そのものは動かない (rev32 と同じ作法)。 */
+.col {
+  min-height: 0;
   overflow: auto;
-  padding: 24px;
-  border-radius: var(--radius-dialog);
-  box-shadow: var(--shadow-lg);
+  padding-right: 8px;
 }
-.tabs {
+.col + .col {
+  border-left: 1px solid rgb(var(--line));
+  padding-left: 16px;
+}
+.col-head {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: var(--fs-h-md);
+  font-weight: var(--fw-bold);
 }
-.tabs .on {
-  border-color: rgb(var(--accent));
-  color: rgb(var(--accent));
+.col-head.sub {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgb(var(--line));
+}
+/* 長い説明と認証の診断は畳んでおく。文言は消さず、初期表示をスクロールなしに収めるため。 */
+.help {
+  margin: 0 0 6px;
+}
+
+/*
+ * rev35: **段を崩さない** (ユーザー報告 2026-09-12、スクリーンショット)。横に並べた項目はラベルの行数が違うことがあり
+ * (「最大ターン (走査の深掘り回数)」「文字の高さ (canvas 比)」)、flex の中央揃えだと入力欄の位置がずれる。
+ * 下端で揃える grid にして、ラベルが何行でも入力欄の高さを合わせる。
+ */
+.grid-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  align-items: end;
+  gap: 8px;
+}
+.grid-row.caption-row {
+  grid-auto-flow: row;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+/* ボタンは label ではないので下余白を持たない。項目 (label.field の 4px) に合わせないと下端が 4px ずれる。 */
+.caption-row .preview-btn {
+  margin-bottom: 4px;
+}
+/* 1 画面に収めるため、項目の余白は既定 (14px / 6px) より詰める。 */
+.col label.field {
+  margin: 8px 0 4px;
+}
+.col label.field > span {
+  margin-bottom: 4px;
+}
+.help > summary {
+  cursor: pointer;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: rgb(var(--muted));
+  list-style: none;
+}
+.help > summary::before {
+  content: "› ";
+}
+.help[open] > summary::before {
+  content: "⌄ ";
+}
+.help > summary:hover {
+  color: rgb(var(--text));
 }
 .note {
   font-size: var(--fs-sm);
   line-height: 1.5;
+  margin: 6px 0;
 }
 .authbox {
   border: 1px solid rgb(var(--line));
@@ -429,14 +534,6 @@ function close() {
   line-height: 1.6;
   margin: 6px 0;
   word-break: break-all;
-}
-.sub {
-  margin: 14px 0 4px;
-  font-size: var(--fs-h-md);
-  letter-spacing: 0.06em;
-  color: rgb(var(--muted));
-  border-top: 1px solid rgb(var(--line));
-  padding-top: 10px;
 }
 .preview {
   width: 100%;

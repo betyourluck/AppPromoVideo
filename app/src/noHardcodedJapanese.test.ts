@@ -51,10 +51,10 @@ describe("直書きの日本語", () => {
 
   it("網そのものが効く — 実物を読んでいて、コメントと文言と開発者向けログを見分ける", () => {
     const paths = sources.map(([p]) => p);
-    expect(paths).toContain("./components/SettingsDialog.vue");
+    expect(paths).toContain("./components/SettingsScreen.vue");
     expect(paths).toContain("./store.ts");
     expect(paths).not.toContain("./i18n.ts");
-    expect(files["./components/SettingsDialog.vue"]).toContain("<template>");
+    expect(files["./components/SettingsScreen.vue"]).toContain("<template>");
 
     // 文言は拾う。
     expect(hardcoded('  return props.snapshots.includes(path) ? "撮り直し" : "入力に追加";')).toHaveLength(1);

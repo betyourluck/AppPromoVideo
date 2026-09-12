@@ -66,6 +66,8 @@ const ja = {
   "common.confirm": "確認",
   "common.restore": "復元",
   "common.undo": "元に戻す",
+  "common.back": "戻る",
+  "common.backTitle": "メイン画面に戻る",
 
   // タイトルバー
   "titleBar.running": "実行中",
@@ -156,6 +158,7 @@ const ja = {
 
   // ダイアログ & 設定
   "settings.title": "設定",
+  "settings.help": "説明",
   "settings.cliTab": "LLM CLI",
   "settings.imageTab": "画像生成",
   "settings.recheck": "再検査",
@@ -178,8 +181,7 @@ const ja = {
   "caption.apply": "適用",
   "caption.closeDialog": "閉じる",
 
-  // 設定ダイアログ (rev30)
-  "settings.imageTabLabel": "画像生成 (API キー)",
+  // 設定 (rev30。rev35 で全画面に)
   "settings.llmNote":
     "テキスト解析はローカルの CLI をサブプロセスで実行します。<b>キーはこのアプリでは持ちません</b> — CLI 側のログイン (claude は <mono>claude auth login</mono>、または環境変数 ANTHROPIC_API_KEY) に委ねます。 対象リポジトリの hook や MCP 設定は読み込みません (作業ディレクトリは app 側)。",
   "settings.cliKind": "CLI の種類",
@@ -227,6 +229,7 @@ const ja = {
   "settings.requestedRefs": "参照枚数 (0 = 既定: OpenAI 1 / 他 3)",
   "settings.userPrefix": "スタイル接頭辞 (空 = スナップショットの palette と解析結果から自動合成)",
   "settings.negative": "ネガティブプロンプト",
+  "settings.comfyDetails": "ComfyUI の詳細 (ネガティブ / ワークフロー JSON / seed)",
   "settings.workflowJson": "ワークフロー JSON (API 形式。%prompt% %negative% %seed% %width% %height% %ref_1..3% を差し替えます)",
   "settings.workflowEmpty": "ワークフロー JSON (API 形式) が空です。ComfyUI で『Save (API Format)』したものを貼ってください。",
   "settings.workflowNoRefs": "%ref_1% が無いので、スナップショットは送っても使われません。",
@@ -288,8 +291,6 @@ const ja = {
   "runs.selectTwo": "比較するには、左端のチェックで run を 2 つ選んでください。",
   "runs.noRecord": "記録なし (rev14 以前の run)",
   "runs.passedOn": "{n} 回目で通過{why}",
-  "runs.back": "戻る",
-  "runs.backTitle": "メイン画面に戻る",
 
   // シーン編集ダイアログ (rev30)
   "caption.retaken": "撮り直し",
@@ -380,6 +381,8 @@ const en: Dict = {
   "common.confirm": "Confirm",
   "common.restore": "Restore",
   "common.undo": "Undo",
+  "common.back": "Back",
+  "common.backTitle": "Back to the main screen",
 
   // TitleBar
   "titleBar.running": "Running",
@@ -470,6 +473,7 @@ const en: Dict = {
 
   // Dialogs & Settings
   "settings.title": "Settings",
+  "settings.help": "Details",
   "settings.cliTab": "LLM CLI",
   "settings.imageTab": "Image Generation",
   "settings.recheck": "Re-check",
@@ -493,7 +497,6 @@ const en: Dict = {
   "caption.closeDialog": "Close",
 
   // Settings dialog (rev30)
-  "settings.imageTabLabel": "Image Generation (API key)",
   "settings.llmNote":
     "Text analysis runs a local CLI as a subprocess. <b>This app holds no keys</b> — authentication is left to the CLI's own login (for claude, <mono>claude auth login</mono> or the ANTHROPIC_API_KEY environment variable). Hooks and MCP settings of the target repository are not loaded (the working directory is on the app side).",
   "settings.cliKind": "CLI type",
@@ -541,6 +544,7 @@ const en: Dict = {
   "settings.requestedRefs": "Reference images (0 = default: OpenAI 1 / others 3)",
   "settings.userPrefix": "Style prefix (empty = composed automatically from the snapshots' palette and the analysis)",
   "settings.negative": "Negative prompt",
+  "settings.comfyDetails": "ComfyUI details (negative / workflow JSON / seed)",
   "settings.workflowJson": "Workflow JSON (API format; %prompt% %negative% %seed% %width% %height% %ref_1..3% are substituted)",
   "settings.workflowEmpty": "The workflow JSON (API format) is empty. Paste one exported from ComfyUI with “Save (API Format)”.",
   "settings.workflowNoRefs": "%ref_1% is missing, so snapshots are sent but not used.",
@@ -602,8 +606,6 @@ const en: Dict = {
   "runs.selectTwo": "To compare, select two runs with the checkboxes on the left.",
   "runs.noRecord": "No record (run from before rev14)",
   "runs.passedOn": "Passed on attempt {n}{why}",
-  "runs.back": "Back",
-  "runs.backTitle": "Back to the main screen",
 
   // Scene editor dialog (rev30)
   "caption.retaken": "Retaken",
@@ -689,6 +691,8 @@ const zhCN: Dict = {
   "common.confirm": "确认",
   "common.restore": "恢复",
   "common.undo": "撤销",
+  "common.back": "返回",
+  "common.backTitle": "返回主界面",
 
   // 标题栏
   "titleBar.running": "运行中",
@@ -779,6 +783,7 @@ const zhCN: Dict = {
 
   // 对话框与设置
   "settings.title": "设置",
+  "settings.help": "说明",
   "settings.cliTab": "LLM CLI",
   "settings.imageTab": "图像生成",
   "settings.recheck": "重新检查",
@@ -802,7 +807,6 @@ const zhCN: Dict = {
   "caption.closeDialog": "关闭",
 
   // 设置对话框 (rev30)
-  "settings.imageTabLabel": "图像生成 (API 密钥)",
   "settings.llmNote":
     "文本分析以子进程方式运行本地 CLI。<b>本应用不保存任何密钥</b> — 认证交由 CLI 自身的登录 (claude 为 <mono>claude auth login</mono>，或环境变量 ANTHROPIC_API_KEY)。不会加载目标仓库的 hook 或 MCP 设置 (工作目录位于应用侧)。",
   "settings.cliKind": "CLI 类型",
@@ -850,6 +854,7 @@ const zhCN: Dict = {
   "settings.requestedRefs": "参考图数量 (0 = 默认: OpenAI 1 / 其他 3)",
   "settings.userPrefix": "风格前缀 (留空 = 根据快照的 palette 与分析结果自动合成)",
   "settings.negative": "负面提示词",
+  "settings.comfyDetails": "ComfyUI 详细设置 (负面提示词 / 工作流 JSON / seed)",
   "settings.workflowJson": "工作流 JSON (API 格式；会替换 %prompt% %negative% %seed% %width% %height% %ref_1..3%)",
   "settings.workflowEmpty": "工作流 JSON (API 格式) 为空。请粘贴在 ComfyUI 中用「Save (API Format)」导出的内容。",
   "settings.workflowNoRefs": "缺少 %ref_1%，因此即使发送快照也不会被使用。",
@@ -911,8 +916,6 @@ const zhCN: Dict = {
   "runs.selectTwo": "如需对比，请用左侧复选框选择两个运行记录。",
   "runs.noRecord": "无记录 (rev14 之前的运行)",
   "runs.passedOn": "第 {n} 次尝试通过{why}",
-  "runs.back": "返回",
-  "runs.backTitle": "返回主界面",
 
   // 分镜编辑对话框 (rev30)
   "caption.retaken": "重新截取",

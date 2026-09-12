@@ -81,7 +81,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey, true));
   display: flex;
   align-items: center;
   justify-content: center;
-  /* すべてのダイアログ (設定 40 / シーン編集 45 / トースト 50 / Lightbox 60) の上。 */
+  /* すべてのダイアログ (シーン編集 45 / トースト 50 / Lightbox 60) の上。履歴と設定は全画面で重ならない。 */
   z-index: 70;
 }
 .mb {

@@ -959,6 +959,62 @@ DOM も CSS も旧版)。自分で vite を起動して読み込み直し、**�
 
 **接地の限界**: スクリーンショットは時間切れで撮れていない。Tauri の WebView では未目視。行の高さが 65 → 40px に詰まったので、表の見た目は変わる。
 
+## rev34 (2026-09-12、設定の入り切りはスイッチ)
+
+**ユーザー** (スイッチの見本の画像つき)「設定画面のチェックボックスですがチェックボックスではなく、スイッチにして下さい」。
+
+136. **`components/Switch.vue`**。中身は `input[type="checkbox"]` のまま (v-model・Tab の移動・読み上げ上の役割を変えない)。枠は input 自身を
+     `appearance: none` で描き、**つまみは兄弟の `<span>`**。設定の 4 か所 (OAuth ログイン / 解析のあと参照画像 / seed 固定 / 見出しの焼き込み) が使う。
+     履歴の比較のチェックは表の複数選択なので**チェックボックスのまま**。
+137. **つまみに疑似要素 (`::after`) を使わない。** 初版は `input[type="checkbox"].switch::after` で描いたが、`<input>` は置換要素で、疑似要素を描くかはブラウザ次第。
+     しかも**描かれたかどうかを外から確かめる手段が無い** (疑似要素には位置を測る API が無く、この環境ではスクリーンショットも撮れない)。実体のある要素なら位置を数値で測れる。
+     ON の色はアクセント (`--accent`、オレンジ)。見本の画像は青緑だったが配色にその色が無いので既存のアクセントに寄せた — **色は私の判断で、確認を取っていない**。
+
+**PoC** (ブラウザ、遷移を 0 秒にしてから測定):
+
+| | 枠 | 枠の色 | つまみ | 左の余り / 右の余り |
+|---|---|---|---|---|
+| 切 | 38x22 | rgba(154,146,172,0.3) | 14x14 | 4 / 20 px |
+| 入 | 38x22 | rgb(236,122,56) = `--accent` | 14x14 | 20 / 4 px |
+
+押すと `store.cli.oauthOnly` が false → true → false と動くことも確かめた (測定の後に元へ戻した)。古い `input.switch` は 0 件。vitest 65 / build green。
+
+**測り方の失敗 2 件 (記録)**: ①最初の測定は「入れても背景が変わらない」と出た。実際は**ペインが描画されていない状態 (`document.hidden`) で遷移が進まず**、
+時刻 0 = 変化前の値を読んでいた。`--trans-fast` を 0s にして測り直すと accent の色と `translateX(16px)` が出た。
+②その次の測定では、ダイアログの中身が古い版のままだった (rev33 と同じ、サーバーが止まってページが取り残されていた)。
+rev33 で入れた「先に今のコードが届いているかを確かめる」手順があったので、今回は 1 回で気づけた。
+
+**接地の限界**: Tauri の WebView では未目視 (→ 2026-09-12 ユーザー目視 OK)。ON の色は私の判断だったが、ユーザーが「アクセントのオレンジで良い。見本は形のサンプル」と確定。
+
+## rev35 (2026-09-12、設定も全画面 — 3 列・スクロールなし)
+
+**ユーザー**「設定画面もダイアログではなく 1 画面にしたい。構成なども考えて、スクロールなしで収まるようにしてください」。
+最初の版のスクリーンショットを見て → 「段が崩れないように調整して下さい」。
+
+138. **`SettingsDialog.vue` → `SettingsScreen.vue`** (`git mv`)。App.vue の `view` に `settings` を足し、履歴と同じくメインの 3 ペインと入れ替える。
+     タブは廃止。未使用だったキー `settings.title` / `cliTab` / `imageTab` を見出しに使い、`settings.imageTabLabel` は撤去。「戻る」は履歴と共通の `common.back` へ移した。
+139. **3 列** (LLM CLI / 画像生成 / 面と見出し)。**画面自体はスクロールしない** (`overflow: hidden`)。収まらない時は列の中だけが動く (rev32 と同じ「何が縮むかを決める」作法)。
+140. **長い説明・認証の診断・ComfyUI の詳細は `<details>` で畳む。** 文言は消していない — 初期表示を 1 画面に収めるため。
+141. **横に並べる項目は下端で揃える** (`.grid-row` = grid + `align-items: end`)。ラベルは 1〜3 行に折り返すので、flex の中央揃えだと入力欄の位置がずれる (ユーザー「段が崩れないように」)。
+     label でないボタン (プレビュー) は `label.field` と同じ下余白 4px を自分で持つ。あわせてサーバー URL とモデルを横並びにし、項目の余白を 14px/6px → 8px/4px に詰めた。
+
+**PoC** (ブラウザ、**ユーザーの窓と同じ 1288x842** と 1600x1017):
+
+| | 画面のスクロール | 列の溢れ (LLM / 画像 / 面と見出し) |
+|---|---|---|
+| 1288x842 gemini | 0 | 0 / 0 / 0 |
+| 1288x842 ComfyUI (詳細は畳んだまま) | 0 | 0 / 0 / 0 |
+| 1288x842 ComfyUI (詳細を開く) | 0 | 0 / **253** / 0 — JSON の入力欄。列の中だけが動く |
+| 1600x1017 | 0 | 0 / 0 / 0 |
+
+段の検証: `.grid-row` 4 本すべてで**入力欄の下端が 1 通り** (ラベルの高さは 21 / 42 / 61px とばらつく)。直す前は見出しの行が 2 通りだった。vitest 65 / build green。
+
+**測り方の失敗 2 件 (記録)**: ①最初の「収まった」は **1600x1017 で測っていた**。ユーザーの窓は 1288x842 で、実際には 2 列目が溢れていた (スクリーンショットで判明)。
+**窓の大きさを決めずに「収まる」とは言えない** (failures.md 末尾)。②テンプレートの変更が届いていないページで測り、`.grid-row` が 0 本と出た — rev33 と同じで `tauri dev` が止まっていた。
+届いているかの確認を入れていたので誤った結論には至らなかった。
+
+**接地の限界**: Tauri の WebView では未目視 (→ 2026-09-12 ユーザー目視 OK。英語表示でも溢れず、2 列目のスクロールバーも消えた)。ComfyUI の詳細を開くと 2 列目はスクロールする。
+
 ## 検討した代案: Remotion (2026-09-08、採用しない)
 
 React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](https://github.com/remotion-dev/remotion))。
@@ -1029,7 +1085,7 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
       live から 2 点を直した: visual_identity を英語固定 / UI が映るシーンを最低 1 つ要求。
       罠: edition 2024 では `gen` が予約語 (モジュール名・変数名に使えない) / rev2 契約の「OpenAI 参照 16 枚」は未検証の主張だった (Kataribe の凍結値は 3、移植テストで判明 → failures #5)。
 - [x] Phase D 実装 (2026-09-08): `app/` (Tauri 2 + Vue 3 + Pinia、CSS 変数テーマ、Tailwind なし)。backend 16 command (lib.rs) + settings_store / env_store (Kataribe の写し、接頭辞 apppromo.)。
-      frontend: settings.ts (perProvider / toBackendCli / toBackendConfig)、settingsMirror.ts、store.ts、TitleBar / InputPane / ScenePanel / LogPanel / SettingsDialog。
+      frontend: settings.ts (perProvider / toBackendCli / toBackendConfig)、settingsMirror.ts、store.ts、TitleBar / InputPane / ScenePanel / LogPanel / SettingsDialog (→ rev35 で全画面の SettingsScreen に改称)。
       検証: vue-tsc + vite build green、vitest 6 green、src-tauri check / clippy / test 3 green。
       罠: Tauri async command は future に Send を要求 → trait に Send 境界 (contract DesktopUi.send_bounds) / State 参照を取る async command は Result 必須 / sccache が syn のビルドで 0xfffffffe (RUSTC_WRAPPER= で回避)。
 - [x] Phase D 目視 FB 1 (2026-09-08): スナップショットのドロップ / Ctrl+V 貼り付け / 横並びサムネイル + クリック拡大 (参照画像も)。
@@ -1060,6 +1116,8 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [ ] rev31 (2026-09-11): 履歴をダイアログから全画面へ (128〜130)。「開く」は読めた時だけメイン画面へ戻る (`openRun` が成否を返す)。vitest 62 / build green。**GUI 未目視**
 - [ ] rev32 (2026-09-12): 比較中は比較対象を表の先頭に (131〜133)。rev31 で表が潰れていた件の回収。vitest 65 / build green。ブラウザで数値を実測、**Tauri の GUI は未目視**
 - [ ] rev33 (2026-09-12): チェックボックスを大きくしない / 表のセルを flex にしない (134〜135)。vitest 65 / build green。ブラウザで数値を実測、**Tauri の GUI は未目視**
+- [ ] rev34 (2026-09-12): 設定の入り切りをスイッチに (136〜137、`Switch.vue`)。vitest 65 / build green。ブラウザで数値を実測。**GUI 目視 OK (ユーザー 2026-09-12)、ON の色はアクセントで確定**
+- [ ] rev35 (2026-09-12): 設定も全画面に (138〜141、`SettingsScreen.vue`。3 列 / 説明は畳む / 段は下端で揃える)。vitest 65 / build green。1288x842 と 1600x1017 で実測。**GUI 目視 OK (ユーザー 2026-09-12、英語表示でも溢れない)**
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度 / `RunStats` の live 記録 (frontal の費用)
 - [ ] Phase E
 
