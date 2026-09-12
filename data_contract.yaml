@@ -241,6 +241,21 @@ Scene:                              # rev3 (2026-09-08、ユーザー FB「ス�
                                     # 各 -35〜35 度。範囲外は違反 (PlateTiltOutOfRange)。省略 = 正面。frontal モードでは無視される
   reference_image: Option<PathBuf>  # 生成後に埋まる
 
+FirstRunTour:                       # 2026-09-12 (rev44)。初回起動のナビゲーション。ユーザー要望
+  why: "何をどの順でやるアプリなのかが、画面を見ただけでは分からない。**手順を教えるだけ** — 案内の中から設定や実行はさせない (ユーザー決定。移植元 Lorekeel と同じ流儀。開いた瞬間に案内は終わるので、案内の中に置く意味が薄い)"
+  origin: "Lorekeel (Kataribe `app/src/tour.ts` + `FirstRunTour.vue`、2026-09-07) の移植。`spotlightBox` / `placeCard` は実機で詰めた判断なので**そのまま写す**。変えたのは ①歩数と対象 ②『初回』の見分け方 ③`spotlightUnion` (複数の要素をまとめて照らす)"
+  steps:                            # 順序が案内の順序。値は `data-tour` 属性
+    input: "入力 — リポジトリ / スナップショット / 動画イメージ・世界観。**実行ボタン以外をまとめて**囲む"
+    settings: "入力ペインの「設定」ボタン — LLM の CLI と画像生成の API キー"
+    run: "「解析 → シーン構成」ボタン — 素材を生成する"
+    result: "出力エリア — 「フォルダを開く」で参照画像を、「全シーンをコピー」でプロンプトを動画生成 AI へ"
+  targets: "対象は `data-tour=\"…\"` を付けた**実物の要素**。案内の部品は `querySelectorAll` で測るだけで、対象側の部品は案内を知らない。**1 歩目は印が 2 つ** (先頭の欄と末尾の行) — 束ねて囲むため。包む div を足すと余白の出方が変わるので足さない (`spotlightUnion`)"
+  first_only: "`shouldShowTour({done, hasProject, runCount})` — 印が無く、**使った痕跡も無い**ときだけ出す。更新で初めて機構が入った人 (リポジトリを選んでいる / run がある) には出さず、**印だけ立てる** — 次に空になっても出さないため"
+  done_key: "`apppromo.tourDone` (localStorage)。`apppromo.` 接頭辞なので設定ミラー (settings.json) の射程に入る"
+  missing_target: "対象が 1 つも見つからない時は画面中央に小さく置いて案内は続ける (レイアウトが変わっても止めない)。**ただし静かに壊れる**ので、印の実在は機械の網 (`tourTargets.test.ts`) が見る"
+  keys: "文言のキーは**字面で書く** (`t(`tour.${step}.title`)` と組み立てない) — 組み立てると型がキーを検めず、未使用キーの網からも見えなくなる"
+  poc: "app src/tour.test.ts (初回の判定 / 矩形 / 束ね / カードの置き場 4 方向 / 三角の追従) / src/tourTargets.test.ts (印の実在・1 歩目は 2 か所・文言 3 言語)"
+
 SceneEdit:                          # 2026-09-12 (rev43)。シーンの追加 / 並び替え / 削除。ユーザー要望
   why: "生成されたシーンの並びや数は人が直したい。ただし `scene_id` は**連番であることが検査で強制**されている (SceneIdNotSequential) ので、並べ替えと削除は必ず**振り直し**を伴う"
   ops: "move_up | move_down | duplicate | remove (どれも対象は 1 シーン)。追加は**複製** — 検査が空欄を弾く (EmptyField) ので白紙のシーンは作れない。隣を写してから直す"

@@ -3,7 +3,7 @@
  * 3 ペイン: 左 = 入力 / 中 = 結果 (要約・シーン表・参照画像) / 右 = 進捗ログ。
  * 状態は store、backend との往復も store。ここはレイアウト、画面の切り替え (メイン / 履歴 / 設定)、ダイアログの開閉だけ。
  */
-import { onMounted, ref } from "vue";
+import { defineAsyncComponent, onMounted, ref } from "vue";
 import TitleBar from "./components/TitleBar.vue";
 import SettingsScreen from "./components/SettingsScreen.vue";
 import RunsScreen from "./components/RunsScreen.vue";
@@ -14,6 +14,10 @@ import MessageBox from "./components/MessageBox.vue";
 import Icon from "./components/Icon.vue";
 import { useStore } from "./store";
 import { nextView } from "./views";
+import { TOUR_DONE_KEY, shouldShowTour } from "./tour";
+
+// 初回起動のナビゲーション (rev44)。初回にしか読まれないので動的 import (chunk 境界)。
+const FirstRunTour = defineAsyncComponent(() => import("./components/FirstRunTour.vue"));
 
 const store = useStore();
 /**
@@ -31,9 +35,39 @@ function go(target: "runs" | "settings") {
   view.value = nextView(view.value, target);
 }
 
+// 初回起動のナビゲーション。判定は tour.ts の shouldShowTour (純関数)。
+const showTour = ref(false);
+async function decideTour() {
+  let done = false;
+  try {
+    done = !!localStorage.getItem(TOUR_DONE_KEY);
+  } catch {
+    return; // storage が読めない環境では出さない (印も立てられないので毎回出てしまう)
+  }
+  if (done) return;
+  // 「使った痕跡」= リポジトリを選んでいる / run がある。数えられなければ 0 として扱う。
+  let runCount = 0;
+  try {
+    await store.loadRuns();
+    runCount = store.runs.length;
+  } catch {
+    /* 索引が読めなくても案内の判定は続ける */
+  }
+  showTour.value = shouldShowTour({ done, hasProject: !!store.project.projectPath.trim(), runCount });
+  if (!showTour.value) {
+    // 既に使っている人には出さない。**印だけ立てる** — 次に空の状態になっても出さないため。
+    try {
+      localStorage.setItem(TOUR_DONE_KEY, "1");
+    } catch {
+      /* 書けなくても実害は無い */
+    }
+  }
+}
+
 onMounted(() => {
   store.listenProgress();
   store.checkCli();
+  void decideTour();
 });
 </script>
 
@@ -60,6 +94,8 @@ onMounted(() => {
     </div>
     <!-- rev26: 確認はアプリ内のメッセージボックス 1 つに集める (ブラウザ標準は URL が出る)。 -->
     <MessageBox />
+    <!-- 初回起動のナビゲーション (rev44)。**手順を教えるだけ** — 案内の中から実行はさせない。 -->
+    <FirstRunTour v-if="showTour" @close="showTour = false" />
   </div>
 </template>
 

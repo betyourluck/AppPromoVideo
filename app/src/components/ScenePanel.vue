@@ -153,7 +153,8 @@ function openRef(sceneId: number) {
 </script>
 
 <template>
-  <div class="panel wrap">
+  <!-- 案内 (rev44) の 4 歩目: 出力エリア全体。 -->
+  <div class="panel wrap" data-tour="result">
     <template v-if="!promo">
       <h2>{{ t('scene.result') }}</h2>
       <div class="empty-guide">

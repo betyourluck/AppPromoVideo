@@ -34,7 +34,9 @@ const canRun = computed(
   <div class="panel input-pane">
     <h2>{{ t('input.title') }}</h2>
 
-    <label class="field">
+    <!-- 案内 (rev44) の 1 歩目。**先頭と末尾の 2 か所**に印を付け、矩形を束ねて
+         「実行ボタン以外」を覆う (包む div を足すと余白の出方が変わるため)。 -->
+    <label class="field" data-tour="input">
       <span>{{ t('input.repo') }}</span>
       <div class="row">
         <input v-model="store.project.projectPath" :disabled="store.running" :placeholder="t('input.repoPlaceholder')" @change="store.persist(); store.previewBrief()" />
@@ -90,7 +92,7 @@ const canRun = computed(
       </div>
     </label>
 
-    <div class="cli-line">
+    <div class="cli-line" data-tour="input">
       <span class="chip" :class="store.cliCheck ? (store.cliCheck.found ? 'ok' : 'warn') : ''">
         <Icon name="terminal" :size="13" />
         {{ t('input.llm') }} {{ store.cli.kind }} {{ store.cliCheck?.found ? store.cliCheck.version : store.cliCheck ? t('input.llmNotFound') : t('input.llmChecking') }}
@@ -99,7 +101,7 @@ const canRun = computed(
         <Icon name="image" :size="13" />
         {{ t('input.image') }} {{ store.image.enabled ? store.image.provider : 'off' }}
       </span>
-      <button class="btn small" :disabled="store.running" @click="emit('open-settings')">
+      <button class="btn small" data-tour="settings" :disabled="store.running" @click="emit('open-settings')">
         <Icon name="settings" :size="13" />
         <span>{{ t('common.settings') }}</span>
       </button>
@@ -108,7 +110,7 @@ const canRun = computed(
 
     <div class="row action-row" style="margin-top: 14px">
       <!-- アプリ固有のコアボタン: テキスト「解析 → シーン構成」は維持 -->
-      <button class="btn primary run-btn" :disabled="!canRun" @click="store.run()">
+      <button class="btn primary run-btn" data-tour="run" :disabled="!canRun" @click="store.run()">
         <Icon :name="store.running ? 'refresh' : 'sparkles'" :size="16" />
         <span>{{ store.running ? t('input.running') : t('input.run') }}</span>
       </button>
