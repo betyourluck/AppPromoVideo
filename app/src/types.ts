@@ -150,6 +150,8 @@ export interface CliCheck {
   found: boolean;
   version: string;
   error: string;
+  /** `--version` の名乗りが設定の「種類」と食い違っている (rev40)。 */
+  kind_mismatch: boolean;
   auth: AuthView;
 }
 

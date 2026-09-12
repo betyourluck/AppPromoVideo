@@ -16,5 +16,6 @@ pub mod tree_kill;
 pub use error::CliError;
 pub use invocation::{
     AIDER_MESSAGE_FILE_FLAG, CliInvocation, CliKind, CliSpec, PromptTransport, Structured, TaskSpec, build_invocation,
+    kind_mismatches_version,
 };
 pub use stream::{ParsedLine, StreamFold, early_abort, fold_lines, parse_line, retry_notice};

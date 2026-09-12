@@ -135,12 +135,14 @@ export const useStore = defineStore("main", {
     async checkCli() {
       const b = toBackendCli(this.cli);
       try {
-        this.cliCheck = await invoke<CliCheck>("check_cli", { executable: b.executable });
+        this.cliCheck = await invoke<CliCheck>("check_cli", { executable: b.executable, kind: b.kind });
       } catch (e) {
         this.cliCheck = {
           found: false,
           version: "",
           error: String(e),
+          // 検査が失敗した時は名乗りが取れていない = 食い違いの証拠が無い。
+          kind_mismatch: false,
           auth: { api_key_present: false, api_key_len: 0, api_key_fingerprint: "", auth_token_present: false, base_url: "", oauth_logged_in: null, oauth_method: "", scrubbed: [] },
         };
       }

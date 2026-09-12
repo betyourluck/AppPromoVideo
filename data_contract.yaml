@@ -67,6 +67,14 @@ CliInvocation:                      # build_invocation の戻り。純粋 (プ�
   # 走査の深さの差 (rev2 査読 3): RepoBrief は全 kind で同一バイト列 = 最低保証。claude の Read/Glob/Grep による深掘りは**上乗せ**であって別経路ではない。aider は --read <file> で追加ファイルを渡す口を持つが v1 では使わない (RepoBrief が本文に入っている)
   # 隔離 (rev2): cwd を app_data/work にすることで対象リポジトリの hook / MCP / CLAUDE.md を拾わない。Read の到達範囲は cwd + --add-dir (Claude Code の permission 境界)。この境界の実効性は Phase B live で「--add-dir 外の既知ファイルを読ませて拒否されるか」で確認する
 
+CliKindCheck:                       # 2026-09-12 (rev40)。設定の「種類」と実行ファイルの実体が食い違っていないか
+  why: "種類が claude のまま実行ファイルだけ agy にでき、**claude の argv が別系統の CLI に飛んでいた**。症状は『-p が次のフラグを本文として飲む』という読み解きにくい形で出て、真因の特定に 2 時間かかった。設定画面のチップも『claude 1.2.2』— ラベルは種類から、版は実体から取った嘘を表示していた"
+  rule: "`cli_runner::kind_mismatches_version(kind, version)` (純関数)。claude = 名乗りに `claude` を含まなければ食い違い / agy = 含んだら食い違い / aider・custom は**判定しない** (名乗りの形を知らない)"
+  grounding: "実測の名乗り — claude `2.1.263 (Claude Code)` / agy `1.2.2`"
+  silence: "**名乗りが空なら何も言わない。** 検査が失敗しただけで、食い違いの証拠は無い (無いものを断定しない)"
+  surface: "`check_cli` が `CliCheck.kind_mismatch` を返し、設定画面が警告バナーとチップの色で出す。実行は止めない — 判断はユーザーのもの"
+  poc: "invocation.rs kind_mismatch_is_judged_from_the_measured_version_strings / app src/kindMismatch.test.ts"
+
 IsolationGuarantee:                 # **kind ごとに強さが違う**。2026-09-12 実測で確定 (旧契約は claude だけを見て全 kind を同じ言葉で括っていた)
   why: "解析対象は**他人のリポジトリになり得る**。書き換え・実行を渡さないことが製品の前提だが、その前提を**どう担保しているか**は kind で違う。同じ不変条件で括ると、agy を選んだ時に対象リポジトリが壊れる"
   structural: "claude。`--allowedTools Read Glob Grep` で Write / Edit / Bash を**そもそも渡さない**。原理的に起きない"

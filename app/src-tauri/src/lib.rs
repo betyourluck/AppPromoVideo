@@ -142,6 +142,10 @@ struct CliCheck {
     found: bool,
     version: String,
     error: String,
+    /// `--version` の名乗りが設定の「種類」と食い違っている (契約 `CliKindCheck`)。
+    /// 2026-09-12: 種類が claude のまま実行ファイルだけ agy にでき、claude の argv が別系統の CLI に飛んでいた。
+    #[serde(default)]
+    kind_mismatch: bool,
     /// 認証の見え方 (値は出さない)。2026-09-08 GUI 実測: 401 の切り分けに「どの資格情報を子が使うか」が要った。
     auth: AuthView,
 }
@@ -186,7 +190,7 @@ fn auth_view_env() -> AuthView {
 }
 
 #[tauri::command]
-async fn check_cli(executable: String) -> CliCheck {
+async fn check_cli(executable: String, kind: Option<cli_runner::CliKind>) -> CliCheck {
     let mut auth = auth_view_env();
     let fut = tokio::process::Command::new(&executable).arg("--version").output();
     let mut check = match tokio::time::timeout(std::time::Duration::from_secs(20), fut).await {
@@ -212,6 +216,9 @@ async fn check_cli(executable: String) -> CliCheck {
                 auth.oauth_method = v.get("authMethod").and_then(|s| s.as_str()).unwrap_or("").to_string();
             }
         }
+    }
+    if let Some(k) = kind {
+        check.kind_mismatch = cli_runner::kind_mismatches_version(k, &check.version);
     }
     check.auth = auth;
     check

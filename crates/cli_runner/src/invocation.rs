@@ -34,6 +34,28 @@ pub enum CliKind {
     Custom,
 }
 
+/// `--version` の名乗りが `kind` と食い違っているか (契約 `CliKindCheck`)。
+///
+/// 2026-09-12 起点: 種類が `claude` のまま実行ファイルだけ `agy` にできてしまい、**claude の argv が
+/// 別系統の CLI に飛んでいた**。argv の形も封筒も違うので、症状は「-p が次のフラグを本文として飲む」
+/// という読み解きにくい形で出る。設定画面のチップも「claude 1.2.2」と、ラベルは種類・版は実体から
+/// 取った嘘を表示していた。
+///
+/// 判定は `--version` の実測に接地する: claude は `2.1.263 (Claude Code)`、agy は `1.2.2`。
+/// **名乗りが空の時は何も言わない** (検査が失敗しただけで、食い違いの証拠は無い)。
+/// aider / custom は名乗りの形を知らないので判定しない。
+pub fn kind_mismatches_version(kind: CliKind, version: &str) -> bool {
+    let v = version.to_lowercase();
+    if v.trim().is_empty() {
+        return false;
+    }
+    match kind {
+        CliKind::Claude => !v.contains("claude"),
+        CliKind::Agy => v.contains("claude"),
+        CliKind::Aider | CliKind::Custom => false,
+    }
+}
+
 /// 契約 `CliSpec` (frontend の localStorage から渡る)。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CliSpec {
@@ -287,6 +309,28 @@ mod tests {
             assert_eq!(inv.args[i + 1], "D:/proj");
             assert_ne!(inv.cwd, PathBuf::from("D:/proj"));
             assert_eq!(inv.cwd, PathBuf::from("C:/app_data/work"));
+        }
+    }
+
+    /// 種類と実体の食い違い (契約 `CliKindCheck`)。文字列は実測の名乗り。
+    #[test]
+    fn kind_mismatch_is_judged_from_the_measured_version_strings() {
+        // 実測: claude 2.1.263 / agy 1.2.2。
+        assert!(!kind_mismatches_version(CliKind::Claude, "2.1.263 (Claude Code)"));
+        assert!(!kind_mismatches_version(CliKind::Agy, "1.2.2"));
+        // 今日の事故の形: 種類は claude のまま実行ファイルが agy。
+        assert!(kind_mismatches_version(CliKind::Claude, "1.2.2"));
+        // 逆向き。
+        assert!(kind_mismatches_version(CliKind::Agy, "2.1.263 (Claude Code)"));
+        // 名乗りが取れていない時は**何も言わない** (検査の失敗であって食い違いの証拠ではない)。
+        for v in ["", "   "] {
+            for k in [CliKind::Claude, CliKind::Agy] {
+                assert!(!kind_mismatches_version(k, v), "{k:?} / {v:?}");
+            }
+        }
+        // 名乗りの形を知らない kind は判定しない。
+        for k in [CliKind::Aider, CliKind::Custom] {
+            assert!(!kind_mismatches_version(k, "anything 1.0"));
         }
     }
 

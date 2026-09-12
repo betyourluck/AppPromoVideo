@@ -1200,6 +1200,33 @@ bash・PowerShell の両方から試したが、**すべて正常に受理され
 `--add-dir` が agy の読み取りを縛るかも未確認 (cwd の外を読むことだけ確認済み)。
 UI のバナーは Tauri の GUI で未目視。
 
+## rev40 (2026-09-12、種類と実行ファイルの食い違いを画面で止める)
+
+**きっかけ**: rev39 を積んで再実行してもらったが、argv は claude のままだった。ビルドは rev39 を
+含んでいた (exe 20:14:41 > コミット 20:13:32) ので、原因は**設定の「種類」が claude のまま**だったこと。
+実行ファイルだけ `agy` にでき、誰も咎めない構造だった — **今日の障害 2 件はすべてここから出ている。**
+しかも設定画面のチップは `claude 1.2.2` と、ラベルは種類・版は実体から取った嘘を出していた。
+
+161. **`kind_mismatches_version(kind, version)`** (純関数、契約 `CliKindCheck`)。実測の名乗りに接地する —
+     claude `2.1.263 (Claude Code)` / agy `1.2.2`。claude は `claude` を含まなければ食い違い、agy は含んだら食い違い。
+     **aider / custom は判定しない** (名乗りの形を知らない)。**名乗りが空なら何も言わない** —
+     検査が失敗しただけで食い違いの証拠は無い (rev36「無い記録を描かない」と同じ規律)。
+162. `check_cli` が `kind` を受け取り `CliCheck.kind_mismatch` を返す。設定画面は警告バナーと
+     チップの色で出す。**実行は止めない** — 判断はユーザーのもの。
+
+**PoC**: invocation.rs 1 本 (実測の名乗り 2 種 × 正逆 + 空 + 対象外 kind) / frontend 2 本 (3 言語に文言があり差し込み口を持つ / markdown の強調を書かない)。
+
+**自分で踏んだ**: 文言に `**強調**` と書いた。`Rich.vue` は `<b>` / `<mono>` しか解さないので、そのまま画面に出る
+(既存の未決 ⑥ と同じ形)。網 (`kindMismatch.test.ts`) を書いて塞いだ。
+**vitest は通ったが build の型検査が落ちた** — `store.ts` の失敗時フォールバックに新しい欄が無かった。
+「vitest と build はセット」の実演がまた 1 件。
+
+足場: crates 175 → 176 / backend 17 / vitest 81 → 83 / build green / 両ワークスペース clippy clean。
+
+**接地の限界**: 判定は**名乗り 2 種の実測**にしか接地していない。claude が名乗りの文言を変えたら誤検出する
+(その時は `version` が `claude` を含まなくなるので「食い違い」と出る)。aider の名乗りは未確認なので判定の外。
+GUI は未目視。
+
 ## 検討した代案: Remotion (2026-09-08、採用しない)
 
 React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](https://github.com/remotion-dev/remotion))。
@@ -1308,6 +1335,7 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [x] rev38 (2026-09-12): 落ちた run の生ログと起動の記録を残す (149〜151・153、契約 `CliRawLog`) / 未使用の i18n キー 13 個を撤去 (152)。crates 167 / backend 17 / vitest 78 / build green。**障害は 2 件とも未解明** — 読めるようにしただけ
 - [x] **19:24 の障害の真因** (2026-09-12): `.invocation.json` と進捗ログの「起動:」で確定 — 実行ファイルが `claude` ではなく **`agy`** だった。agy の `-p` は値を取る
 - [x] rev39 (2026-09-12): agy 対応 (154〜160、契約 `IsolationGuarantee` / `AgyStreamLine`)。crates 175 / backend 17 / vitest 81 / build green。**agy での通しは未実施**
+- [x] rev40 (2026-09-12): 種類と実行ファイルの食い違いを画面で止める (161〜162、契約 `CliKindCheck`)。crates 176 / backend 17 / vitest 83 / build green。**GUI 未目視**
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度 / `RunStats` の live 記録 (frontal の費用)
 - [ ] Phase E
 

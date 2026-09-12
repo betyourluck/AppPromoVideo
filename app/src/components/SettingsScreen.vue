@@ -190,13 +190,17 @@ function close() {
             <option value="custom">{{ t('settings.cliCustom') }}</option>
           </select>
         </label>
+        <!-- 種類と実体の食い違い (rev40)。claude の argv が別系統の CLI に飛ぶ事故を画面で止める。 -->
+        <p v-if="store.cliCheck?.kind_mismatch" class="warn-banner">
+          <Rich :text="t('settings.kindMismatch', { kind: store.cli.kind, version: store.cliCheck.version })" />
+        </p>
         <!-- agy は CLI 側でツールを絞れない (data_contract IsolationGuarantee)。選んでいる間は常時出す。 -->
         <p v-if="store.cli.kind === 'agy'" class="warn-banner"><Rich :text="t('settings.agyWarning')" /></p>
         <label class="field">
           <span>{{ t('settings.executable') }}</span>
           <div class="row">
             <input v-model="store.cli.executable" @change="store.persist(); store.checkCli()" />
-            <span class="chip" :class="store.cliCheck ? (store.cliCheck.found ? 'ok' : 'warn') : ''">
+            <span class="chip" :class="store.cliCheck ? (store.cliCheck.found && !store.cliCheck.kind_mismatch ? 'ok' : 'warn') : ''">
               {{ store.cliCheck ? (store.cliCheck.found ? store.cliCheck.version || 'OK' : t('input.llmNotFound')) : '…' }}
             </span>
           </div>
