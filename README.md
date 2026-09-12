@@ -7,7 +7,7 @@
 [![Rust 2024](https://img.shields.io/badge/Rust-2024%20(1.85%2B)-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 [![Tauri 2](https://img.shields.io/badge/Tauri-v2-24C8DB?style=flat-square&logo=tauri&logoColor=white)](https://v2.tauri.app/)
 [![Vue 3](https://img.shields.io/badge/Vue.js-3.5-4FC08D?style=flat-square&logo=vuedotjs&logoColor=white)](https://vuejs.org/)
-[![Platform Windows](https://img.shields.io/badge/Platform-Windows-0078D6?style=flat-square&logo=windows)](https://microsoft.com)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-0078D6?style=flat-square)](https://v2.tauri.app/)
 [![License MIT](https://img.shields.io/badge/License-MIT-brightgreen?style=flat-square)](LICENSE)
 
 <br />
@@ -36,7 +36,7 @@
 * 🎨 **アプリに寄せる参照画像 (Visual Consistency)**  
   UI スナップショットからカラーパレットとスタイルアンカーを抽出。背景生成＋実スクショ合成（角丸・落ち影・見出し焼き込み）により、アプリの実画面に忠実な参照画像を生成。
 * 🛡️ **安全なローカル CLI 実行 (Secure & Sandboxed)**  
-  LLM の HTTP API を直接叩くのではなく、ローカル端末に認証済みの CLI（`claude -p` / Aider / custom 等）を安全なサブプロセスとして起動。Windows Job Object による子孫プロセスの確実な停止と読み取り専用のサンドボックス設計を徹底。
+  LLM の HTTP API を直接叩くのではなく、ローカル端末に認証済みの CLI（`claude -p` / Aider / custom 等）を安全なサブプロセスとして起動。Windows Job Object / Unix pgid による子孫プロセスの確実な停止と読み取り専用のサンドボックス設計を徹底。
 
 ---
 
@@ -96,7 +96,7 @@ flowchart LR
 
 ### 動作要件
 
-* **OS**: Windows（実機動作確認済み。※Unix 系は未検証）
+* **OS**: Windows / macOS / Linux（クロスプラットフォーム対応）
 * **Rust**: `2024` edition / rust-version `1.85` 以上
 * **Node.js**: 安定版（LTS 推奨。フロントエンドビルド用）
 * **ローカル LLM CLI**: PATH 上に通っており、認証済みの `claude` (Claude Code CLI) または Aider
@@ -220,7 +220,7 @@ Rust ワークスペース（4 crates）と Tauri 2 デスクトップアプリ�
 | Crate / Directory | 役割 | 主な責務・特徴 |
 |---|---|---|
 | [`crates/promo_core`](crates/promo_core) | **純関数の中核ドメイン** | プロセス/HTTP通信を持たない純粋関数。`RepoBrief`（リポジトリ圧縮）、`ScenePlan` の型定義と JSON Schema 機械生成、LLM 不正 JSON の救済 (`fenced_json`)、プロンプトテキスト生成。 |
-| [`crates/cli_runner`](crates/cli_runner) | **安全な CLI サブプロセス実行** | ローカル LLM CLI をサブプロセスとして起動。argv 安全構築（stdin/一時ファイル運搬）、認証環境変数のスクラブ、Windows Job Object による子孫プロセスの確実な強制終了。 |
+| [`crates/cli_runner`](crates/cli_runner) | **安全な CLI サブプロセス実行** | ローカル LLM CLI をサブプロセスとして起動。argv 安全構築（stdin/一時ファイル運搬）、認証環境変数のスクラブ、Windows Job Object / Unix pgid による子孫プロセスの確実な強制終了。 |
 | [`crates/image_gen`](crates/image_gen) | **画像生成 & 合成エンジン** | ComfyUI（ポーリング）、Gemini、OpenAI による参照画像生成。UI スナップショットからの支配色抽出（Palette）、角丸・落ち影合成、フォント見出し焼き込み（Caption）。 |
 | [`crates/pipeline`](crates/pipeline) | **オーケストレーション & CLI** | 各 crate を結線する I/O ハーネス。ファイル収集、LLM 対話、Rust 側検査ループ（違反時の自動再生成）、パッケージ書き出し、および `promo` CLI バイナリの実装。 |
 | [`app/`](app/) | **デスクトップ GUI** | Tauri 2 + Vue 3 + TypeScript。`#[tauri::command]` 経由で backend を呼び出し、進捗は Tauri Event でリアルタイム受信。設定・履歴管理 UI。 |
