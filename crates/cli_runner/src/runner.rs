@@ -17,6 +17,7 @@ use tokio::sync::watch;
 use crate::error::CliError;
 use crate::raw_log::RawLog;
 use crate::invocation::{AIDER_MESSAGE_FILE_FLAG, CliInvocation, CliKind, PromptTransport, Structured};
+use crate::agy;
 use crate::stream::{ParsedLine, early_abort, fold_lines, parse_line, retry_notice};
 use crate::tree_kill::Tree;
 
@@ -190,20 +191,9 @@ pub async fn run(
             l = out_lines.next_line(), if out_open => match l {
                 Ok(Some(line)) => {
                     if let Some(l) = log.as_mut() { l.write_line(&line); }
-                    let parsed = parse_line(&line);
-                    if let Some(err) = early_abort(&parsed) {
+                    if let Some(err) = observe_line(inv.kind, &line, &mut on_event) {
                         raw_lines.push(line);
                         break LoopEnd::Abort(err);
-                    }
-                    match &parsed {
-                        ParsedLine::Text(t) if !t.is_empty() => on_event(CliEvent::Stdout { text: t.clone() }),
-                        ParsedLine::ApiRetry { .. } => {
-                            if let Some(n) = retry_notice(&parsed) { on_event(CliEvent::Progress { text: n }); }
-                        }
-                        ParsedLine::Other(raw) if inv.kind != CliKind::Claude && !raw.is_empty() => {
-                            on_event(CliEvent::Stdout { text: raw.clone() })
-                        }
-                        _ => {}
                     }
                     raw_lines.push(line);
                 }
@@ -268,6 +258,29 @@ pub async fn run(
             let text = if fold.result_text.is_empty() { fold.transcript } else { fold.result_text };
             Ok(RunOk { text, structured, cost_usd: fold.cost_usd, duration_ms: fold.duration_ms.unwrap_or(duration_ms), model: fold.model })
         }
+        CliKind::Agy => {
+            let fold = agy::fold_lines(raw_lines.iter().map(String::as_str))
+                .map_err(|e| failed(annotate_exit(e, &status), stderr_tail.clone()))?;
+            let structured = match (inv.structured, fold.structured) {
+                (Structured::JsonSchema, Some(v)) => Some(v),
+                (Structured::JsonSchema, None) | (Structured::FencedJson, _) => {
+                    promo_core::fenced::parse_json_object(&fold.result_text).ok()
+                }
+                (Structured::None, _) => None,
+            };
+            if let Some(v) = &structured {
+                on_event(CliEvent::Structured { json: v.clone() });
+            }
+            let text = if fold.result_text.is_empty() { fold.transcript } else { fold.result_text };
+            Ok(RunOk {
+                text,
+                structured,
+                // **費用は返らない (トークン数だけ)。計算して埋めない** — 契約 AgyStreamLine.cost。
+                cost_usd: None,
+                duration_ms: fold.duration_ms.unwrap_or(duration_ms),
+                model: None,
+            })
+        }
         CliKind::Aider | CliKind::Custom => {
             if !status.success() {
                 return Err(failed(CliError::ExitStatus { code: status.code(), stderr_tail: stderr_tail.clone() }, stderr_tail));
@@ -317,4 +330,51 @@ pub fn invocation_summary(program: &str, args: &[String]) -> String {
         out.push(a.clone());
     }
     format!("起動: {}", out.join(" "))
+}
+
+/// 1 行を kind に応じて解釈し、UI へ流し、**止めるべきならエラーを返す**。
+///
+/// claude は終端の `assistant.error`、agy は**許可外のツール** (契約 `IsolationGuarantee.watchdog`) で止める。
+/// agy の JSON でない行 (`jetski: …`) は人が読む説明なのでそのまま Stdout に流す (捨てない)。
+fn observe_line(kind: CliKind, line: &str, on_event: &mut impl FnMut(CliEvent)) -> Option<CliError> {
+    match kind {
+        CliKind::Claude => {
+            let parsed = parse_line(line);
+            if let Some(err) = early_abort(&parsed) {
+                return Some(err);
+            }
+            match &parsed {
+                ParsedLine::Text(t) if !t.is_empty() => on_event(CliEvent::Stdout { text: t.clone() }),
+                ParsedLine::ApiRetry { .. } => {
+                    if let Some(n) = retry_notice(&parsed) {
+                        on_event(CliEvent::Progress { text: n });
+                    }
+                }
+                _ => {}
+            }
+            None
+        }
+        CliKind::Agy => {
+            let parsed = agy::parse_line(line);
+            if let Some(err) = agy::early_abort(&parsed) {
+                return Some(err);
+            }
+            match &parsed {
+                agy::AgyLine::Text(t) if !t.is_empty() => on_event(CliEvent::Stdout { text: t.clone() }),
+                // 読み取りツールは進捗として見せる (何を読んだかが分かる)。
+                agy::AgyLine::Tool { name, state, target } if state == "ACTIVE" => {
+                    on_event(CliEvent::Progress { text: format!("ツール: {name} {target}") })
+                }
+                agy::AgyLine::Other(raw) if !raw.is_empty() => on_event(CliEvent::Stdout { text: raw.clone() }),
+                _ => {}
+            }
+            None
+        }
+        CliKind::Aider | CliKind::Custom => {
+            if !line.is_empty() {
+                on_event(CliEvent::Stdout { text: line.to_string() });
+            }
+            None
+        }
+    }
 }

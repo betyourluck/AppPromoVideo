@@ -10,7 +10,8 @@ import type { Aspect, FontEntry, Language } from "./types";
 
 // --- LLM CLI ---------------------------------------------------------------
 
-export type CliKind = "claude" | "aider" | "custom";
+// agy は別系統の CLI (2026-09-12)。**隔離の保証が弱い** — data_contract の IsolationGuarantee を読むこと。
+export type CliKind = "claude" | "aider" | "agy" | "custom";
 
 export interface CliSettings {
   kind: CliKind;
@@ -24,7 +25,7 @@ export interface CliSettings {
   oauthOnly: boolean;
 }
 
-export const DEFAULT_CLI_EXE: Record<CliKind, string> = { claude: "claude", aider: "aider", custom: "" };
+export const DEFAULT_CLI_EXE: Record<CliKind, string> = { claude: "claude", aider: "aider", agy: "agy", custom: "" };
 
 export function defaultCliSettings(): CliSettings {
   return { kind: "claude", executable: "claude", extraArgs: "", model: "", timeoutSecs: 600, maxTurns: 12, oauthOnly: false };
@@ -323,7 +324,8 @@ export function loadCliSettings(): CliSettings {
   const d = defaultCliSettings();
   if (!r) return d;
   return {
-    kind: r.kind === "aider" || r.kind === "custom" ? r.kind : "claude",
+    // 既定は claude のまま (agy は明示的に選んだ時だけ)。
+    kind: r.kind === "aider" || r.kind === "agy" || r.kind === "custom" ? r.kind : "claude",
     executable: typeof r.executable === "string" ? r.executable : d.executable,
     extraArgs: typeof r.extraArgs === "string" ? r.extraArgs : "",
     model: typeof r.model === "string" ? r.model : "",

@@ -31,7 +31,7 @@ PromoProject:                       # 1 案件 = 1 リポジトリ。GUI の入�
 # LLM CLI (サブプロセス)
 # ---------------------------------------------------------------------------
 CliSpec:
-  kind: "claude | aider | custom"
+  kind: "claude | aider | agy | custom"   # agy = 2026-09-12 追加 (別系統の CLI。封筒も argv も claude と別。IsolationGuarantee を見ること)
   executable: String                # 絶対パス or PATH 上の名前。起動前に存在検査 (which 同等) — 無ければ CliError::NotFound
   extra_args: Vec<String>           # ユーザー追加引数 (例 --dangerously-skip-permissions)。kind 既定引数の後ろに付く
   timeout_secs: u64                 # 既定 600。最小 30 (それ未満は 30 に切り上げ)
@@ -51,7 +51,7 @@ CliInvocation:                      # build_invocation の戻り。純粋 (プ�
     diagnostics: "check_cli が AuthView {api_key_present, api_key_len, api_key_fingerprint (FNV 12 桁、値は出さない), auth_token_present, base_url, oauth_logged_in, oauth_method, scrubbed[]} を返し、設定 → LLM タブに表示。run 開始時にも同じ 1 行を進捗ログへ"
     poc: "tests/runner.rs host_coupling_env_is_scrubbed_but_user_config_passes (fake_cli env モード: CLAUDE_CODE_MESSAGING_SOCKET / CLAUDECODE が absent、ANTHROPIC_* 相当が present、env_remove 指定で absent)"
   invariants:                       # 純関数のテストで固定 (rev2 査読 3)
-    - "allowedTools に Read が入る時は必ず --add-dir <project_path> が付く"
+    - "allowedTools に Read が入る時は必ず --add-dir <project_path> が付く (claude のみ。agy に --allowedTools は存在しない)"
     - "cwd != project_path (全 kind)"
     - "本文は argv に現れない (全 kind × schema 有無)"
     - "--dangerously-skip-permissions / --bare は既定で付けない (--bare は OAuth を使わず ANTHROPIC_API_KEY が要る = 『LLM のキー管理不要』と衝突。ユーザーが extra_args に書いた時だけ)"
@@ -66,6 +66,23 @@ CliInvocation:                      # build_invocation の戻り。純粋 (プ�
   #   ③「最初の { から最後の }」は採らない (2 オブジェクトを跨いで拾う — Red で再現済み)。Kataribe failures #29 の no-tools と同型
   # 走査の深さの差 (rev2 査読 3): RepoBrief は全 kind で同一バイト列 = 最低保証。claude の Read/Glob/Grep による深掘りは**上乗せ**であって別経路ではない。aider は --read <file> で追加ファイルを渡す口を持つが v1 では使わない (RepoBrief が本文に入っている)
   # 隔離 (rev2): cwd を app_data/work にすることで対象リポジトリの hook / MCP / CLAUDE.md を拾わない。Read の到達範囲は cwd + --add-dir (Claude Code の permission 境界)。この境界の実効性は Phase B live で「--add-dir 外の既知ファイルを読ませて拒否されるか」で確認する
+
+IsolationGuarantee:                 # **kind ごとに強さが違う**。2026-09-12 実測で確定 (旧契約は claude だけを見て全 kind を同じ言葉で括っていた)
+  why: "解析対象は**他人のリポジトリになり得る**。書き換え・実行を渡さないことが製品の前提だが、その前提を**どう担保しているか**は kind で違う。同じ不変条件で括ると、agy を選んだ時に対象リポジトリが壊れる"
+  structural: "claude。`--allowedTools Read Glob Grep` で Write / Edit / Bash を**そもそも渡さない**。原理的に起きない"
+  detect_only: "agy。**予防できない。起きた後に殺すだけ。**"
+  agy_measured:                     # 2026-09-12 実測 (agy 1.2.2、headless = --input-format stream-json)
+    read: "list_dir / view_file は**無条件に通り、cwd の外も読む** (実測: ~/.gemini/ 配下の無関係なファイルを読んだ)。--add-dir が読み取りを縛るかは未確認"
+    write: "write_to_file は**無条件に通る**。スクラッチパッドに probe.txt (3 バイト) が実際に作られた。**これがこの契約の根拠**であり、仕様に残す"
+    command: "run_command だけは headless で自動拒否される (`permission check failed` → step state=ERROR)。理由は「headless では確認を出せないので auto-denied」"
+    flags: "--mode plan / --sandbox のどちらもツールの面 (57 個) と permission_mode (request-review) を変えない。argv で絞る手は存在しない"
+    not_taken: "agy 自身が案内する settings.json の permissions.allow は**触らない**。①置き場が表に出ていない (まだ存在しない) ②--settings 相当のフラグが無い ③ユーザーの global 設定を勝手に書くのは掟 (ユーザーの変更を上書きしない) に反する。将来やるならパスを確定し、**ユーザーに明示的に作らせる**流れで"
+  watchdog:                         # detect_only の実装 (cli_runner::agy::tool_verdict)
+    policy: "**allow リスト (既定で止める)**。deny リストにしない — 57 個のうち sed_file / multi_replace_file_content / notebook_edit / browser 系 / generate_image 等を列挙し漏らすと穴になる"
+    allowed: "view_file / list_dir / find_by_name / grep_search (読み取り 4 種) + finish (副作用の無い完了合図。**tool event としては未観測**で、外すと正常な run を殺す恐れがあるため入れてある — live で要確認)"
+    action: "許可外の tool event を見た瞬間に early_abort → tree_kill → CliError::ToolNotAllowed"
+    limit: "**`state:ACTIVE` を見た時点で、その書き込みはもう始まっている。** 検出であって予防ではない。止められるのは 2 手目以降"
+  ui: "設定で agy を選んでいる間、画面に常時警告を出す (既定は claude のまま)。文言はユーザー起草 (2026-09-12) — 『agy は CLI 側で書き込み系ツールを無効化できません。解析対象のリポジトリが書き換わる可能性があります。信頼できない / 他人のリポジトリには向けないでください。実行は検出後に強制停止しますが、予防ではありません。』"
 
 CliEvent:                           # 実行中に Rust から GUI へ push するストリーム (Tauri event "cli-progress")。runner::run の on_event
   Started { pid: u32 }
@@ -107,7 +124,24 @@ CliError:                           # 契約 errors。UI はこの列挙で文�
     poc: "tests/runner.rs timeout_kills_the_whole_tree_including_grandchild (fake_cli grandchild が孫 pid を stdout に出す → timeout 2s → process_alive(pid) == false)。process_alive 自体は自分=true / 終了済み=false で検算 (常に false の実装で通ってしまうのを防ぐ)"
   ExitStatus: "{ code: Option<i32>, stderr_tail: String }"
   Auth: "{ message: String }"          # claude stream-json: assistant.error == "authentication_failed" or result.is_error + 本文 (fixtures/claude_auth_failed.jsonl = 2026-09-07 実測)
+  ToolNotAllowed: "{ tool: String, target: String }"   # agy の見張り (IsolationGuarantee.watchdog)。許可外の tool event を見て木ごと止めた。**検出であって予防ではない**
+  EmptySuccess: "{ note: String }"                     # agy が status=SUCCESS を返したが response も structured_output も空。理由は JSON でない行 (`jetski: …`) にしか書かれないので note に運ぶ
   Shape: "{ detail: String, raw: String }"   # stream-json / JSON が読めない。raw 保持 (再生成の燃料)。claude で result 行が無い時は detail に子の**終了コード**も載せる — それまで status を見るのは aider / custom だけで、claude では取得しておきながら捨てていた
+
+AgyStreamLine:                      # agy --input-format stream-json --output-format stream-json の 1 行 (NDJSON)。2026-09-12 実測 (fixtures/agy_json_schema_ok.jsonl)
+  tag: "**`event`** (claude の `type` ではない)。既知の event だけ読み、未知は Other で素通し (捨てない)"
+  input: '{ event: "user", message: { content: String } } を **stdin に 1 行**。`-p` / `--print` は使わない — あれは値 (prompt) を取るので argv に本文が載り、契約 (本文は argv に載せない) を破る。2026-09-12 の障害の正体もこれで、`-p --output-format …` の並びに対し agy が「-p took "--output-format" as its prompt」と言って終了コード 2 で死んでいた'
+  init: '{ event: "init", conversation_id, init: { cwd, tools: [57 個], permission_mode: "request-review" } }'
+  step_update: '{ event: "step_update", step_update: { conversation_id, step_index, state: "ACTIVE | DONE | ERROR", step_type: "user_input | agent_response | tool | finish", text_delta?, tool_name?, tool_info?, duration_seconds?, usage? } }'
+  # 人が読む本文は agent_response の text_delta を順に連結する (claude の assistant.content[].text に相当)。
+  # tool_info = { name, parameters: {...}, output? , error? }。見張り (IsolationGuarantee.watchdog) はここの tool_name を見る。
+  result: '{ event: "result", result: { conversation_id, status: "SUCCESS | ERROR", response: String, error?: String, num_turns, duration_seconds: f64, structured_output?: Value, json_schema?: Value, usage: { input_tokens, output_tokens, thinking_tokens, cache_read_tokens, total_tokens } } }'
+  cost: "**無い。** トークン数だけ。`RunOk.cost_usd` は None にする — トークンから費用を計算して埋めない (捏造)。UI は記録が無い chip を出さない (rev36)"
+  duration: "`duration_seconds` は f64 秒 (claude の duration_ms とは単位が違う)"
+  structured: "`--json-schema` の出力は **result.structured_output** (claude と同名)。無ければ result.response の fenced_json へ落ちる"
+  empty_success: "**status=SUCCESS は成果の保証ではない。** ツールが拒否されて response が空でも SUCCESS を返す (実測)。response も structured_output も空なら CliError::EmptySuccess として扱う"
+  plain_lines: "**JSON でない散文行が stdout に混ざる** (`jetski: no output produced — a tool required the \"command\" permission that headless mode cannot prompt for, so it was auto-denied. …`)。**捨てない** — EmptySuccess の理由はこの行にしか書かれていない。畳みでは終端として扱わず、Other として保持し失敗時の説明に使う (Kataribe #75 と同じ: 受信側の allowlist は既定で通す)"
+  argv: "`--input-format stream-json --output-format stream-json --print-timeout <timeout>s --disable-slash-commands [--model M] [--json-schema S] --add-dir <project>`。**存在しないフラグ**: --max-turns / --verbose / --allowedTools。--print-timeout の既定は 5 分で、解析は実測 4 分 22 秒かかったことがあるので必ず CliSpec.timeout_secs を渡す"
 
 ClaudeStreamLine:                   # claude -p --output-format stream-json の 1 行 (NDJSON)。既知の type だけ読み、未知は Stdout へ流す (捨てない)
   system: '{ subtype: "init | api_retry | hook_started | hook_response | ...", session_id, model }'   # model (init のみ) = **解決後の**実名。`--model sonnet` でも空欄でもここは実名 (rev25、fixture で確認)

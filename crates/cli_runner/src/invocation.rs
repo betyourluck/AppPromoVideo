@@ -8,6 +8,11 @@
 //!   リポジトリになり得るので、cwd に置かず `--add-dir` で読み取りだけ許す。
 //! - aider: `--message-file <path>` (実行時に runner が本文を一時ファイルへ書く) `--no-git --yes-always
 //!   --no-auto-commits [--model M]`。`--message` は採らない (査読 1: 引数長・ログ漏れ)。
+//! - agy: `--input-format stream-json --output-format stream-json --print-timeout <timeout>s
+//!   --disable-slash-commands [--model M] [--json-schema S] --add-dir <project>`。本文は **stdin の NDJSON**
+//!   (`{"event":"user","message":{"content":…}}`)。**`-p` / `--print` は使わない** — あれは値 (prompt) を
+//!   取るので本文が argv に載る (2026-09-12 の障害の正体)。`--max-turns` / `--verbose` / `--allowedTools`
+//!   は agy に**存在しない**。許可リストが無いので隔離は検出のみ (契約 `IsolationGuarantee`)。
 //! - custom: 既定引数なし。本文は stdin。
 //!
 //! 不変条件 (テストで固定): `Read` を許す時は必ず `--add-dir <project>` が付き、cwd は project でない。
@@ -23,6 +28,9 @@ use serde_json::Value;
 pub enum CliKind {
     Claude,
     Aider,
+    /// 別系統の CLI (2026-09-12)。封筒も argv も claude と別 (契約 `AgyStreamLine`)。
+    /// **隔離の保証が弱い** — 契約 `IsolationGuarantee` を読むこと。
+    Agy,
     Custom,
 }
 
@@ -150,6 +158,43 @@ pub fn build_invocation(spec: &CliSpec, task: &TaskSpec<'_>) -> CliInvocation {
                 kind: spec.kind,
             }
         }
+        CliKind::Agy => {
+            let mut args = vec![
+                "--input-format".to_string(),
+                "stream-json".into(),
+                "--output-format".into(),
+                "stream-json".into(),
+                // 既定 5 分。解析は実測 4 分 22 秒かかったことがあるので必ず渡す (契約 AgyStreamLine.argv)。
+                "--print-timeout".into(),
+                format!("{}s", spec.timeout_secs()),
+                // 本文がスキル / スラッシュコマンドに展開されないように塞ぐ (cwd 隔離と同じ趣旨)。
+                "--disable-slash-commands".into(),
+            ];
+            if let Some(m) = model {
+                args.push("--model".into());
+                args.push(m.to_string());
+            }
+            let structured = if let Some(schema) = task.schema {
+                args.push("--json-schema".into());
+                args.push(schema.to_string());
+                Structured::JsonSchema
+            } else {
+                Structured::None
+            };
+            args.push("--add-dir".into());
+            args.push(project.clone());
+            args.extend(spec.extra_args.iter().cloned());
+            CliInvocation {
+                program: spec.executable.clone(),
+                args,
+                // **本文は argv に載せず stdin の NDJSON で運ぶ。**
+                prompt: crate::agy::user_message_line(task.prompt),
+                transport: PromptTransport::Stdin,
+                cwd: task.scratch_dir.to_path_buf(),
+                structured,
+                kind: spec.kind,
+            }
+        }
         CliKind::Aider => {
             let (body, structured) = fenced_body(task);
             let mut args = vec!["--no-git".to_string(), "--yes-always".into(), "--no-auto-commits".into()];
@@ -221,11 +266,12 @@ mod tests {
     #[test]
     fn prompt_body_never_appears_in_argv_for_any_kind() {
         let schema = json!({"type": "object"});
-        for kind in [CliKind::Claude, CliKind::Aider, CliKind::Custom] {
+        for kind in [CliKind::Claude, CliKind::Aider, CliKind::Agy, CliKind::Custom] {
             for sch in [None, Some(&schema)] {
                 let inv = build_invocation(&spec(kind), &task(sch));
                 assert!(inv.args.iter().all(|a| !a.contains("SECRET")), "{kind:?}: {:?}", inv.args);
-                assert!(inv.prompt.starts_with("SECRET PROMPT BODY"));
+                // agy は本文を NDJSON の封筒に包んで stdin に流すので前方一致にならない。
+                assert!(inv.prompt.contains("SECRET PROMPT BODY"), "{kind:?}");
             }
         }
     }
@@ -242,6 +288,32 @@ mod tests {
             assert_ne!(inv.cwd, PathBuf::from("D:/proj"));
             assert_eq!(inv.cwd, PathBuf::from("C:/app_data/work"));
         }
+    }
+
+    /// agy の凍結引数 (契約 `AgyStreamLine.argv`)。**`-p` を付けない**のが要点 —
+    /// agy の `-p` は値 (prompt) を取るので、付けると次のフラグを本文として飲み込む
+    /// (2026-09-12 の障害: `-p took "--output-format" as its prompt`)。
+    #[test]
+    fn agy_frozen_defaults_have_no_print_flag_and_set_the_timeout() {
+        let schema = json!({"type": "object"});
+        let inv = build_invocation(&spec(CliKind::Agy), &task(Some(&schema)));
+        let a = &inv.args;
+        assert_eq!(&a[..4], &["--input-format", "stream-json", "--output-format", "stream-json"]);
+        assert!(!a.iter().any(|x| x == "-p" || x == "--print" || x == "--prompt"), "{a:?}");
+        // agy に存在しないフラグは渡さない。
+        for absent in ["--max-turns", "--verbose", "--allowedTools"] {
+            assert!(!a.iter().any(|x| x == absent), "{absent} は agy に存在しない: {a:?}");
+        }
+        let i = a.iter().position(|x| x == "--print-timeout").expect("--print-timeout が無い (既定 5 分で自ら切れる)");
+        assert_eq!(a[i + 1], "600s");
+        assert!(a.iter().any(|x| x == "--disable-slash-commands"));
+        let i = a.iter().position(|x| x == "--add-dir").unwrap();
+        assert_eq!(a[i + 1], "D:/proj");
+        assert_ne!(inv.cwd, PathBuf::from("D:/proj"));
+        // 本文は stdin の NDJSON。
+        let v: Value = serde_json::from_str(inv.prompt.trim_end()).unwrap();
+        assert_eq!(v["event"], "user");
+        assert_eq!(v["message"]["content"], "SECRET PROMPT BODY");
     }
 
     #[test]

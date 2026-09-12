@@ -4,6 +4,7 @@
 //! Phase 0 は純関数だけ: argv の組み立て ([`invocation`]) と stream-json の解析 ([`stream`])。
 //! spawn / timeout / cancel は Phase A (`tokio::process`)。
 
+pub mod agy;
 pub mod env_scrub;
 pub mod error;
 pub mod invocation;

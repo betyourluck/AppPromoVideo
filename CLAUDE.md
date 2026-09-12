@@ -17,7 +17,8 @@
 - **`crates/cli_runner`** (tokio::process): argv 組み立てと stream-json 解析は純粋関数で PoC。
   spawn / 本文の運搬 (stdin か一時ファイル。**argv には載せない**) / 行ストリーム / timeout /
   cancel (**子孫ごと kill**: Windows Job Object・Unix pgid)。**LLM の HTTP は禁止。**
-  許可ツールは Read / Glob / Grep のみで `--add-dir <repo>` とセット。**cwd は app の作業ディレクトリ**であって
+  許可ツールは Read / Glob / Grep のみで `--add-dir <repo>` とセット (**claude のみ。agy にこのフラグは無い** —
+  契約 `IsolationGuarantee`)。**cwd は app の作業ディレクトリ**であって
   対象リポジトリではない (`-p` は cwd の hook / MCP を無確認で実行する)。
 - **`crates/image_gen`**: Kataribe (`D:/Github/Kataribe/app/src-tauri/src/image_gen.rs`, specs 24-27) の移植。
   `ImageGenerator` trait + OpenAI Images / Gemini / ComfyUI。**`provider.rs` は写しで不触。**
@@ -73,16 +74,18 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 ## 現状 (2026-09-12)
 
-- **spec 01 は Phase 0〜E 着地、rev38 まで反映済み (rev27〜29 は試行)。** crates 167 green / vitest 78 / backend 17 green・clippy clean。
-- コミットは Initial `a75c3bc` の上に積んでいる (**本数は数えない** — 書くたび 1 手遅れて嘘になる。`git rev-list --count a75c3bc..HEAD`)。`origin/main` には rev26 まで push 済み — **rev27〜29 (UI の試行、一時コミット) / rev30 (デザインの修正・多言語化) / rev31〜33 (履歴の全画面・比較の並び・チェックボックス、一時コミット) / data_contract.yaml の構文修正 / アプリのアイコン / rev34〜35 (スイッチ・設定の全画面) / rev36 (無い記録を描かない・アイコンのトグル) / rev37 (プロンプトの書き換え) / rev38 (生ログ・i18n の整理) は未 push** (private。**週末に public 予定**)。
+- **spec 01 は Phase 0〜E 着地、rev39 まで反映済み (rev27〜29 は試行)。** crates 175 green / vitest 81 / backend 17 green・clippy clean。
+- コミットは Initial `a75c3bc` の上に積んでいる (**本数は数えない** — 書くたび 1 手遅れて嘘になる。`git rev-list --count a75c3bc..HEAD`)。`origin/main` には rev26 まで push 済み — **rev27〜29 (UI の試行、一時コミット) / rev30 (デザインの修正・多言語化) / rev31〜33 (履歴の全画面・比較の並び・チェックボックス、一時コミット) / data_contract.yaml の構文修正 / アプリのアイコン / rev34〜35 (スイッチ・設定の全画面) / rev36 (無い記録を描かない・アイコンのトグル) / rev37 (プロンプトの書き換え) / rev38 (生ログ・i18n の整理) / rev39 (agy 対応) は未 push** (private。**週末に public 予定**)。
 - 通し (解析 → 構成 → 参照画像 → 合成) は **4 リポジトリで live 成功** (Kataribe / Verificator /
   AppPromoVideo 自身 / Fuseforks)。**出口まで到達** — MiniMax i2v の 15 秒が X に投稿された (2026-09-09)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
+- **`agy` は隔離の保証が弱い** (rev39)。CLI 側に許可リストが無く、`write_to_file` は**拒否されない** (実測: ファイルが実際に作られた)。
+  止まるのは `run_command` だけ。アプリの見張り (`AGY_ALLOWED_TOOLS`) は**検出であって予防ではない** — 契約 `IsolationGuarantee`。
+  既定は `claude` のまま。agy を選ぶと設定画面に警告が常時出る。
 - **CLI が落ちたら生ログを読む** (rev38)。`<app の作業ディレクトリ>/cli-logs/<UTC>-<pid>.jsonl` に stdout の行がそのまま残り、
   兄弟の `.invocation.json` に**何を起動したか** (program / args / cwd) が残る。最新 20 本、成功した run も。エラーの文言と進捗ログにも出る。
-  **2026-09-12 の障害 2 件はどちらも未解明** — ①18:48 解析が `result 行が無い` で落ちた (timeout / 認証 / `--max-turns` は除外済み)
-  ②19:24 `-p took "--output-format" as its prompt` で終了コード 2。**②は手元で再現しない** (同じ実体に同じ並びを渡しても通る)。
-  次の run の `.invocation.json` で argv を確定する。疑っているのは設定「追加の引数」の 1 語 (未確認)。
+  **2026-09-12 の障害 2 件の真因は同じ** — 起動していたのが `claude` ではなく **`agy`** だった (`.invocation.json` で確定)。
+  agy の `-p` は値を取るので `--output-format` を本文として飲む。rev39 で `CliKind::Agy` を足して対応済み。
 - **GUI は再ビルドしてから触る**。rev13 で dev プロファイルを変えた (debug の画像処理が 71 倍遅かった)。
 
 **編集できるもの (rev9〜37。見出しとはめ込みは各シーンの「見出し / はめ込み…」ボタン → ダイアログ、プロンプトは鉛筆)**

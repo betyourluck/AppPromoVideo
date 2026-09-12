@@ -185,10 +185,13 @@ function close() {
           <span>{{ t('settings.cliKind') }}</span>
           <select :value="store.cli.kind" @change="onKindChange(($event.target as HTMLSelectElement).value as CliKind)">
             <option value="claude">{{ t('settings.cliClaude') }}</option>
+            <option value="agy">{{ t('settings.cliAgy') }}</option>
             <option value="aider">{{ t('settings.cliAider') }}</option>
             <option value="custom">{{ t('settings.cliCustom') }}</option>
           </select>
         </label>
+        <!-- agy は CLI 側でツールを絞れない (data_contract IsolationGuarantee)。選んでいる間は常時出す。 -->
+        <p v-if="store.cli.kind === 'agy'" class="warn-banner"><Rich :text="t('settings.agyWarning')" /></p>
         <label class="field">
           <span>{{ t('settings.executable') }}</span>
           <div class="row">
@@ -546,5 +549,16 @@ function close() {
   gap: 8px;
   align-items: center;
   margin: 6px 0;
+}
+/* agy を選んでいる間だけ出る警告。目立たせるが、色だけに頼らない (文言そのものが警告)。 */
+.warn-banner {
+  border: 1px solid rgb(var(--warn));
+  border-radius: var(--radius-sm, 6px);
+  background: rgb(var(--warn) / 0.08);
+  color: rgb(var(--warn));
+  padding: 8px 10px;
+  margin: 6px 0;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
 }
 </style>

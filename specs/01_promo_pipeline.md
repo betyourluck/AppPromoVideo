@@ -49,6 +49,7 @@ app/                Tauri 2 + Vue 3。HTTP とプロセスは全部 backend。�
   件数・尺・言語 (video_prompt は英語) を検査して弾く (Kataribe の「LLM は提案し、エンジンが裁く」の縮退形)。
 - **走査は CLI の道具に委任、送る土台は Rust が握る。** RepoBrief (tree / README / manifest 先頭) を
   stdin に流し、CLI には Read / Glob / Grep だけ許す。Write / Edit / Bash は許可しない
+  (**claude のみ構造で保証。agy には許可リストが無く検出のみ** — rev39 / 契約 `IsolationGuarantee`)
   (ユーザーのリポジトリを書き換える経路を構造的に持たない)。
 - **参照画像 = スナップショットの添付。** 「色調・レイアウトを抽出して写像」は、画像を参照として
   渡す経路 (Gemini inlineData / OpenAI images/edits / ComfyUI %ref_n%) の上に、VisualIdentity から
@@ -1146,6 +1147,59 @@ bash・PowerShell の両方から試したが、**すべて正常に受理され
 この rev がしたのは**次に落ちた時に読めるようにした**ことだけで、再発の防止ではない。
 生ログは 19:24 の run で初めて実機に出た (パスがエラーに出ることは確認済み)。**中身はまだ読んでいない。**
 
+## rev39 (2026-09-12、agy 対応 — 封筒 + 見張り + 隔離の限界の明記)
+
+**ユーザー決定**: 選択肢 1「封筒 + 見張り + 契約の限界明記 + UI 警告」。理由は本人の言葉で
+「agy 側の挙動が claude と根本的に違うのが確定したので、同じ不変条件で括るのは無理」
+「これを隠して同じ data_contract に入れると、他人のリポジトリを解析した時に壊す未来が見える」。
+
+**実測** (agy 1.2.2、fixtures 3 本を採取):
+
+| ツール | headless での扱い |
+|---|---|
+| `list_dir` / `view_file` | **無条件に通る。cwd の外も読んだ** (`~/.gemini/` 配下の無関係なファイル) |
+| `write_to_file` | **無条件に通る。`probe.txt` が実際に作られた** (3 バイト) |
+| `run_command` | 自動拒否 (`permission check failed` → step state=ERROR) |
+
+`--mode plan` も `--sandbox` もツールの面 (57 個) と `permission_mode` (`request-review`) を変えない。
+**argv で絞る手は存在しない。**
+
+154. **契約を kind ごとに割った** (`IsolationGuarantee`)。claude = `Structural` (`--allowedTools` で
+     そもそも渡さない)、agy = `DetectOnly` (**予防できない。起きた後に殺すだけ**)。
+     旧契約は claude だけを見て全 kind を同じ言葉で括っていた。実測した 3 行 (read / write / command) を
+     根拠として契約に残す — **`probe.txt` の 3 バイトが「検出であって予防ではない」ことの証拠**。
+155. **封筒** (`AgyStreamLine` / `cli_runner::agy`)。タグは `event`、終端は `result.status`。
+     `--json-schema` は `result.structured_output` (claude と同名)。**費用は返らない** (トークン数だけ) ので
+     `cost_usd: None` のまま — トークンから計算して埋めない。`duration_seconds` は f64 秒 (claude は ms)。
+156. **`-p` を付けない**。agy の `-p` は値 (prompt) を取るので、付けると次のフラグを本文として飲み込む
+     (2026-09-12 の障害の正体)。本文は **stdin の NDJSON** (`{"event":"user","message":{"content":…}}`) で運び、
+     契約「本文は argv に載せない」を守る。`--print-timeout` は**必須** (既定 5 分、解析は実測 4 分 22 秒)。
+     `--max-turns` / `--verbose` / `--allowedTools` は agy に**存在しない**ので渡さない。
+157. **見張りは allow リスト** (`AGY_ALLOWED_TOOLS`、既定で止める)。ユーザー案は deny リストだったが、
+     57 個のうち `sed_file` / `multi_replace_file_content` / `notebook_edit` / browser 系 / `generate_image` を
+     数え漏らすとそこが穴になるので反転した。許可外の tool event を見た瞬間に木ごと止め `CliError::ToolNotAllowed`。
+     **`state:ACTIVE` を見た時点でその書き込みは始まっている** — 止められるのは 2 手目以降。
+158. **`EmptySuccess`**。agy は**ツールが拒否されて本文が空でも `status=SUCCESS` を返す** (実測)。
+     本文も構造化出力も空なら成功にしない。**理由は JSON でない散文行にしか書かれていない**
+     (`jetski: … auto-denied`) ので、その行を `note` に運ぶ。
+159. **JSON でない行を捨てない**。ユーザー案は `filter_map` で落とす形だったが、18:48 の障害で唯一の
+     手掛かりだったのがその散文行で、今回も `EmptySuccess` の理由はそこにしかない。
+     畳みで終端扱いしないだけにして `Other` として保持する (Kataribe #75 と同じ判断)。
+160. **UI は既定 claude のまま**。agy を選んでいる間だけ警告バナーを常時出す (文言はユーザー起草、3 言語)。
+
+**PoC**: cli_runner 7 本 (`tests/agy.rs`、**実測 stream をそのまま fixture に**) + argv 1 本 + frontend 3 本。
+**検出力を確認** — 見張きを常時 true に / `EmptySuccess` の判定を殺す / 散文行の保持を外す、の 3 か所で
+それぞれ落ちる。初版の `reads_do_not_trip_the_watchdog` は**空振りで通っていた** (見張りを無効化すると
+`stopped` が空になり `all()` が真) ので、止まった件数を固定して塞いだ。
+
+足場: crates 167 → 175 / backend 17 / vitest 78 → 81 / build green / 両ワークスペース clippy clean。
+
+**接地の限界**: **agy で通しを走らせていない。** fixture は「小さなプロンプト 1 往復」「read + 拒否」
+「write 1 回」の 3 本で、**リポジトリ解析のような長い run の封筒は未観測** (途中で別の event 型が出る可能性がある)。
+`finish` を allow リストに入れてあるが **tool event としては未観測**で、これは推測。
+`--add-dir` が agy の読み取りを縛るかも未確認 (cwd の外を読むことだけ確認済み)。
+UI のバナーは Tauri の GUI で未目視。
+
 ## 検討した代案: Remotion (2026-09-08、採用しない)
 
 React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](https://github.com/remotion-dev/remotion))。
@@ -1252,7 +1306,8 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [ ] rev36 (2026-09-12): 無い記録を描かない (142) / タイトルバーのアイコンはトグル (143〜144)。vitest 72 / build green。ブラウザで実測、**Tauri の GUI は未目視**
 - [ ] rev37 (2026-09-12): プロンプトの書き換え (145〜148、鉛筆で編集モード)。crates 162 / backend 17 / vitest 75 / build green。**Tauri の GUI は未目視 (GUI からの保存は未実施)**
 - [x] rev38 (2026-09-12): 落ちた run の生ログと起動の記録を残す (149〜151・153、契約 `CliRawLog`) / 未使用の i18n キー 13 個を撤去 (152)。crates 167 / backend 17 / vitest 78 / build green。**障害は 2 件とも未解明** — 読めるようにしただけ
-- [ ] **19:24 の障害** (`-p took "--output-format" as its prompt`、終了コード 2)。手元では再現しない。次の run の `.invocation.json` で argv を確定する
+- [x] **19:24 の障害の真因** (2026-09-12): `.invocation.json` と進捗ログの「起動:」で確定 — 実行ファイルが `claude` ではなく **`agy`** だった。agy の `-p` は値を取る
+- [x] rev39 (2026-09-12): agy 対応 (154〜160、契約 `IsolationGuarantee` / `AgyStreamLine`)。crates 175 / backend 17 / vitest 81 / build green。**agy での通しは未実施**
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度 / `RunStats` の live 記録 (frontal の費用)
 - [ ] Phase E
 
