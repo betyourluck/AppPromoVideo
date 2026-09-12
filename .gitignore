@@ -8,3 +8,5 @@ app/src-tauri/target/
 app/src-tauri/gen/schemas/
 # サブエージェントの作業メモ置き場 (成果物ではない)
 blackboard/
+# Claude Code の手元の設定 (launch.json など)。成果物ではない (ユーザー判断 2026-09-12)
+.claude/
