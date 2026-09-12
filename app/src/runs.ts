@@ -7,6 +7,7 @@
  */
 
 import { t } from "./i18n";
+import type { RunStats, StageInfo } from "./types";
 
 export interface AttemptsView {
   /** 表に出す文字。記録が無ければ "—"。 */
@@ -37,4 +38,42 @@ export function describeAttempts(attempts: number, kinds: string[] = []): Attemp
   if (!attempts) return { text: "—", retried: false, title: t("runs.noRecord") };
   const why = kinds.length ? ` — ${kinds.join(", ")}` : "";
   return { text: String(attempts), retried: attempts > 1, title: t("runs.passedOn", { n: attempts, why }) };
+}
+
+/** 結果ペインの見出しに出す数値 (rev36)。`*Known` が false の chip は**出さない** (無い記録を描かない)。 */
+export interface RunHeaderStats {
+  attempts: AttemptsView;
+  attemptsKnown: boolean;
+  cost: string;
+  costKnown: boolean;
+  durationsKnown: boolean;
+}
+
+/**
+ * 見出しの数値は**正本 (promo.json の `run_stats`)** から出す (rev36)。
+ *
+ * 履歴から開いた run は実行時の stage (attempts / cost_usd / duration_ms) を持たないので、
+ * それを描くと「0 回目で通過」「0.000 USD」という**存在しない記録**が出る (ユーザー報告 2026-09-12、スクリーンショット)。
+ * 記録が無い run (rev14 以前) は 0 ではなく「—」— 0 を 1 回と描かない rev15 の規律と同じ。
+ */
+export function runHeaderStats(stats: RunStats | null | undefined, analyze: StageInfo, plan: StageInfo): RunHeaderStats {
+  const durationsKnown = analyze.duration_ms + plan.duration_ms > 0;
+  if (stats) {
+    return {
+      attempts: describeAttempts(stats.plan_attempts, stats.violation_kinds),
+      attemptsKnown: stats.plan_attempts > 0,
+      cost: stats.cost_usd.toFixed(3),
+      costKnown: true,
+      durationsKnown,
+    };
+  }
+  const cost = analyze.cost_usd + plan.cost_usd;
+  const known = durationsKnown || cost > 0 || plan.attempts > 0;
+  return {
+    attempts: describeAttempts(plan.attempts),
+    attemptsKnown: plan.attempts > 0,
+    cost: known ? cost.toFixed(3) : "—",
+    costKnown: known,
+    durationsKnown,
+  };
 }

@@ -1015,6 +1015,37 @@ rev33 で入れた「先に今のコードが届いているかを確かめる�
 
 **接地の限界**: Tauri の WebView では未目視 (→ 2026-09-12 ユーザー目視 OK。英語表示でも溢れず、2 列目のスクロールバーも消えた)。ComfyUI の詳細を開くと 2 列目はスクロールする。
 
+## rev36 (2026-09-12、無い記録を描かない / タイトルバーのアイコンはトグル)
+
+**ユーザー** (スクリーンショット)「履歴から run を開いた直後の結果ペインに `Passed on attempt 0` と `0.000 USD` が出ています。修正お願いします」。
+続けて「設定と履歴の画面の戻るですが、ウィンドウタイトルバーの呼び出しのアイコンを開いているときにもう一度クリックすると戻ると同じ動きになるようにしてください。直感的にその動きが欲しいと感じました」。
+
+142. **見出しの数値は正本 (`promo.json` の `run_stats`) から** (`runs.ts::runHeaderStats`)。履歴から開いた run は実行時の stage
+     (attempts / cost_usd / duration_ms) を持たない。rev31 の `openRun` はそこを 0 で埋めており、結果ペインがその 0 を描いていた =
+     **存在しない記録**。記録が無い run (rev14 以前) は 0 ではなく「—」にし、**chip 自体を出さない**。経過時間の tooltip は stage がある時だけ。
+143. **タイトルバーの呼び出しはトグル** (`views.ts::nextView`)。開いている画面のアイコンをもう一度押すと「戻る」と同じ動き。
+     別の画面を開いている時はメインを経由せず切り替える。設定から離れる時は `store.persist()` (画面の「戻る」と同じ扱い)。
+144. **今どの画面かをアイコンで見せる** — 開いている画面のアイコンはアクセント色 (`.tb-btn.on`)。押せば戻ることが分かる。
+
+**PoC**: `runHeaderStats` 4 本 + `nextView` 3 本。どちらも関数・モジュールが無い状態で Red (`runHeaderStats is not a function` /
+`Cannot find module './views'`) → Green。テストの値は**実物の promo.json** から取った
+(`runs/20260912-035429`: `plan_attempts 3` / `cost_usd 1.6736855` / `violation_kinds [product_backdrop_draws_screen]`、および記録を持たない 2026-09-08 の run)。
+
+**ブラウザ実測** (ユーザーの窓と同じ 1288x842):
+
+| 操作 | 結果 |
+|---|---|
+| 履歴アイコン → もう一度 | 履歴 → メイン (アイコンの色も戻る) |
+| 設定アイコン → もう一度 | 設定 → メイン |
+| 履歴を開いた状態で設定アイコン | 設定へ直接 (メインを経由しない) |
+| `run_stats` を持つ run | `1.674 USD` / `構成 3 回目で通過` (tooltip に違反の種別) |
+| `run_stats` が無い run | 費用と回数の chip は**出ない** (`15s · 16:9` だけ) |
+
+vitest 65 → 72 / build green。
+
+**接地の限界**: Tauri の WebView では未目視 (ブラウザで確認)。実行直後の live で `RunResult.promo` に `run_stats` が載っているかは**未観測** —
+promo.json には rev15 から書かれており型も同じだが、live の 1 本で確かめるまでは推測。
+
 ## 検討した代案: Remotion (2026-09-08、採用しない)
 
 React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](https://github.com/remotion-dev/remotion))。
@@ -1118,6 +1149,7 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [ ] rev33 (2026-09-12): チェックボックスを大きくしない / 表のセルを flex にしない (134〜135)。vitest 65 / build green。ブラウザで数値を実測、**Tauri の GUI は未目視**
 - [ ] rev34 (2026-09-12): 設定の入り切りをスイッチに (136〜137、`Switch.vue`)。vitest 65 / build green。ブラウザで数値を実測。**GUI 目視 OK (ユーザー 2026-09-12)、ON の色はアクセントで確定**
 - [ ] rev35 (2026-09-12): 設定も全画面に (138〜141、`SettingsScreen.vue`。3 列 / 説明は畳む / 段は下端で揃える)。vitest 65 / build green。1288x842 と 1600x1017 で実測。**GUI 目視 OK (ユーザー 2026-09-12、英語表示でも溢れない)**
+- [ ] rev36 (2026-09-12): 無い記録を描かない (142) / タイトルバーのアイコンはトグル (143〜144)。vitest 72 / build green。ブラウザで実測、**Tauri の GUI は未目視**
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度 / `RunStats` の live 記録 (frontal の費用)
 - [ ] Phase E
 

@@ -73,8 +73,8 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 ## 現状 (2026-09-12)
 
-- **spec 01 は Phase 0〜E 着地、rev35 まで反映済み (rev27〜29 は試行)。** crates 159 green / vitest 65 / backend 15 green・clippy clean。
-- コミットは Initial `a75c3bc` の上に 38 本。`origin/main` には rev26 まで push 済み — **rev27〜29 (UI の試行、一時コミット) / rev30 (デザインの修正・多言語化) / rev31〜33 (履歴の全画面・比較の並び・チェックボックス、一時コミット) / data_contract.yaml の構文修正 / アプリのアイコン / rev34〜35 (スイッチ・設定の全画面) は未 push** (private。**週末に public 予定**)。
+- **spec 01 は Phase 0〜E 着地、rev36 まで反映済み (rev27〜29 は試行)。** crates 159 green / vitest 72 / backend 15 green・clippy clean。
+- コミットは Initial `a75c3bc` の上に 39 本。`origin/main` には rev26 まで push 済み — **rev27〜29 (UI の試行、一時コミット) / rev30 (デザインの修正・多言語化) / rev31〜33 (履歴の全画面・比較の並び・チェックボックス、一時コミット) / data_contract.yaml の構文修正 / アプリのアイコン / rev34〜35 (スイッチ・設定の全画面) / rev36 (無い記録を描かない・アイコンのトグル) は未 push** (private。**週末に public 予定**)。
 - 通し (解析 → 構成 → 参照画像 → 合成) は **4 リポジトリで live 成功** (Kataribe / Verificator /
   AppPromoVideo 自身 / Fuseforks)。**出口まで到達** — MiniMax i2v の 15 秒が X に投稿された (2026-09-09)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
@@ -106,6 +106,8 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 **遷移のある見た目は遷移を止めてから測る** (`--trans-fast` を 0s に。描画が止まったページでは遷移が進まず、時刻 0 の値が返る。rev34)。
 **設定も全画面** (rev35、`SettingsScreen.vue`。3 列 = LLM CLI / 画像生成 / 面と見出し。長い説明・認証の診断・ComfyUI の詳細は `<details>` で畳む)。
 **横に並べる項目は下端で揃える** (`.grid-row`、ラベルは 1〜3 行に折り返す)。**「収まる」は窓の大きさとセットで測る** — ユーザーの窓で測る (rev35)。
+**結果ペインの見出しの数値は正本 (`promo.json` の `run_stats`) から** — 記録が無ければ 0 ではなく chip ごと出さない (rev36)。
+**タイトルバーの履歴 / 設定はトグル** — 開いている画面のアイコンをもう一度押すと戻る。開いている間はアクセント色 (rev36)。
 
 **開いている判断**
 
@@ -156,6 +158,6 @@ rev14 のコミット `5929f93` に巻き込んだ。実害は無いが粒度が
 
 ## 再開の手順
 
-1. `cargo test --workspace` (159 green) と `cd app && npx vitest run` (65 green) で足場を確認。
+1. `cargo test --workspace` (159 green) と `cd app && npx vitest run` (72 green) で足場を確認。
 2. `git log --oneline -5` で直前の着地を見る。詳しい経緯は `history.md`。
 3. 上の「開いている判断」に答えが来ていないか確認してから着手する。

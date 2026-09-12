@@ -53,6 +53,23 @@ export interface PromoJson {
   caption_overrides?: Record<number, CaptionOverride>;
   /** scene_id → はめ込みの上書き (rev11)。同上。 */
   plate_overrides?: Record<number, PlateOverride>;
+  /**
+   * 生成時の再生成ループの記録 (契約 `RunStats`、rev15)。**省略 = 記録なし** (rev14 以前の run)。
+   * 索引 (app_data/runs.json) は消えうるキャッシュで、**正本はここ**。履歴から開いた run の数値もここから出す (rev36)。
+   */
+  run_stats?: RunStats | null;
+}
+
+/** 契約 `RunStats` (rev15 / rev25)。promo.json の `run_stats`。 */
+export interface RunStats {
+  /** シーン構成が検査を通るまでにかかった回数。**0 は無い** (記録がある run は 1 以上)。 */
+  plan_attempts: number;
+  /** 途中で出た違反の種別 (重複なく整列)。 */
+  violation_kinds: string[];
+  /** analyze + plan の合計 (USD)。 */
+  cost_usd: number;
+  /** 実際に走ったモデル名 (rev25)。**省略 = 記録なし**。 */
+  models?: string[] | null;
 }
 
 /** 契約 `CaptionOverride`。省略したフィールドは既定に落ちる。 */

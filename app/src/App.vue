@@ -13,6 +13,7 @@ import LogPanel from "./components/LogPanel.vue";
 import MessageBox from "./components/MessageBox.vue";
 import Icon from "./components/Icon.vue";
 import { useStore } from "./store";
+import { nextView } from "./views";
 
 const store = useStore();
 /**
@@ -20,6 +21,15 @@ const store = useStore();
  * メインは v-show で隠すだけ — 戻った時に入力・コピー先の選択・スクロール位置が残る。
  */
 const view = ref<"main" | "runs" | "settings">("main");
+
+/**
+ * タイトルバーの呼び出しは**トグル** (rev36、ユーザー「開いているときにもう一度クリックすると戻ると同じ動きに」)。
+ * 設定から離れる時は保存する — 設定画面の「戻る」と同じ扱いにするため (項目ごとの保存はしているが、揃えておく)。
+ */
+function go(target: "runs" | "settings") {
+  if (view.value === "settings") store.persist();
+  view.value = nextView(view.value, target);
+}
 
 onMounted(() => {
   store.listenProgress();
@@ -29,7 +39,7 @@ onMounted(() => {
 
 <template>
   <div class="shell">
-    <TitleBar :busy="store.running || store.imaging" @open-settings="view = 'settings'" @open-runs="view = 'runs'" />
+    <TitleBar :busy="store.running || store.imaging" :view="view" @open-settings="go('settings')" @open-runs="go('runs')" />
     <div v-show="view === 'main'" class="body">
       <aside class="left">
         <InputPane @open-settings="view = 'settings'" />

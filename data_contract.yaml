@@ -489,6 +489,12 @@ DesktopUi:                          # app/ = Tauri 2 + Vue 3 + Pinia。Tailwind 
     text_inputs: "main.css の input / select / textarea は文字の入力欄の寸法 (幅 100% / 最小の高さ --input-height 44px / 余白) を持つ (rev30 のデザイン修正)"
     checkbox_radio: "input[type=checkbox] / [type=radio] はその寸法を持たない — 16px 四方・余白なし・accent-color は --accent2。部品側で幅や高さを直書きしない (設定ダイアログの style=width:auto は rev33 で外した)"
     switch: "rev34: 入り切りは components/Switch.vue (設定の 4 か所)。中身は checkbox のまま (v-model / Tab の移動 / 読み上げ上の役割を変えない)、枠は input 自身を appearance: none で描き、**つまみは兄弟の span** — <input> の疑似要素はブラウザ次第で、描かれたかを外から確かめられない。枠 38x22 / つまみ 14x14 / 余り 4px、ON は --accent。履歴の比較のチェックは表の複数選択なので checkbox のまま"
+  screens:                          # rev36 (2026-09-12 ユーザー「開いているときにもう一度クリックすると戻ると同じ動きに」)
+    toggle: "タイトルバーの履歴 / 設定のアイコンは**トグル** (views.ts の nextView)。開いている画面のアイコンをもう一度押すとメインへ戻り、別の画面を開いている時はメインを経由せず切り替える。設定から離れる時は store.persist()"
+    active: "開いている画面のアイコンはアクセント色 (.tb-btn.on)。押せば戻ることを見せる"
+  result_header:                    # rev36
+    source: "結果ペインの見出しの数値は**正本 (promo.json の run_stats)** から出す (runs.ts の runHeaderStats)。履歴から開いた run は実行時の stage を持たないので、そこを描くと存在しない記録 (0 回目で通過 / 0.000 USD) になる"
+    no_record: "記録が無い run (rev14 以前) は 0 ではなく「—」で、費用と回数の chip は**出さない**。経過時間の tooltip は stage がある時だけ"
   settings_screen:                  # rev35 (2026-09-12 ユーザー「設定画面もダイアログではなく 1 画面に。スクロールなしで収まるように」)
     shape: "設定 (SettingsScreen.vue) は全画面。タイトルバーの下で 3 ペインと入れ替える (App.vue の view = main | runs | settings)。ダイアログではないので .panel も重なり順も使わない"
     columns: "3 列 = LLM CLI / 画像生成 / 面と見出し。列の間は区切り線。タブは廃止し、見出しに settings.title / cliTab / imageTab を使う (settings.imageTabLabel は撤去)"

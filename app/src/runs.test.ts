@@ -1,5 +1,42 @@
 import { describe, expect, it } from "vitest";
-import { describeAttempts, pinCompared } from "./runs";
+import { describeAttempts, pinCompared, runHeaderStats } from "./runs";
+
+describe("runHeaderStats (rev36、結果ペインの見出しの数値)", () => {
+  // ユーザー報告 2026-09-12 (スクリーンショット): 履歴から run を開くと「Passed on attempt 0」「0.000 USD」と出た。
+  // 開いた run では stage の値が無いので 0 を描いていた。正本は promo.json の run_stats (rev15)。
+  const zero = { attempts: 0, cost_usd: 0, duration_ms: 0, violations: [] };
+  const stage = (attempts: number, cost_usd: number, duration_ms: number) => ({ attempts, cost_usd, duration_ms, violations: [] });
+  // 実物 (D:/PV/.../runs/20260912-035429/promo.json) の値。
+  const stats = { plan_attempts: 3, violation_kinds: ["product_backdrop_draws_screen"], cost_usd: 1.6736855 };
+
+  it("開いた run は promo.json の記録から出す", () => {
+    const got = runHeaderStats(stats, zero, zero);
+    expect(got.attempts.text).toBe("3");
+    expect(got.attempts.title).toBe("3 回目で通過 — product_backdrop_draws_screen");
+    expect(got.cost).toBe("1.674");
+    expect(got.durationsKnown).toBe(false);
+  });
+
+  it("記録の無い run (rev14 以前) は 0 ではなく「—」", () => {
+    const got = runHeaderStats(null, zero, zero);
+    expect(got.attempts.text).toBe("—");
+    expect(got.cost).toBe("—");
+    expect(got.durationsKnown).toBe(false);
+  });
+
+  it("実行直後は経過時間も出せる。費用は正本 (run_stats) を優先する", () => {
+    const got = runHeaderStats(stats, stage(1, 0.6, 12000), stage(3, 1.07, 30000));
+    expect(got.cost).toBe("1.674");
+    expect(got.durationsKnown).toBe(true);
+  });
+
+  it("run_stats を持たない実行直後は stage の合計を出す", () => {
+    const got = runHeaderStats(null, stage(1, 0.6, 12000), stage(2, 1.07, 30000));
+    expect(got.attempts.text).toBe("2");
+    expect(got.cost).toBe("1.670");
+    expect(got.durationsKnown).toBe(true);
+  });
+});
 
 describe("pinCompared (rev32、比較中は比較対象を表の先頭に)", () => {
   // ユーザー報告 2026-09-11 (スクリーンショット): 比較中は表が縮んで上の 2 行しか見えず、

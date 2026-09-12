@@ -6,6 +6,7 @@
 import { computed, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../store";
+import { runHeaderStats } from "../runs";
 import type { Scene } from "../types";
 import { t } from "../i18n";
 import Lightbox from "./Lightbox.vue";
@@ -72,7 +73,14 @@ async function copyPackage() {
   }
 }
 
-const cost = computed(() => (store.result ? store.result.analyze.cost_usd + store.result.plan.cost_usd : 0));
+/**
+ * 見出しの数値 (rev36)。正本は promo.json の `run_stats` で、実行直後の stage は経過時間のためだけに使う。
+ * 履歴から開いた run は stage を持たないので、そこを描くと無い記録 (0 回 / 0.000 USD) が出る。
+ */
+const header = computed(() => {
+  const empty = { attempts: 0, cost_usd: 0, duration_ms: 0, violations: [] };
+  return runHeaderStats(store.result?.promo.run_stats, store.result?.analyze ?? empty, store.result?.plan ?? empty);
+});
 
 // 参照画像の拡大表示 (生成済みのものだけを並べる)。
 const refItems = computed(() =>
@@ -106,8 +114,14 @@ function openRef(sceneId: number) {
         </div>
         <div class="stats">
           <span class="chip">{{ promo.plan.total_seconds }}s · {{ promo.plan.aspect }}</span>
-          <span class="chip" :title="t('scene.durationsTitle', { analyze: store.result!.analyze.duration_ms, plan: store.result!.plan.duration_ms })">{{ cost.toFixed(3) }} USD</span>
-          <span class="chip" :class="store.result!.plan.attempts > 1 ? 'accent' : ''">{{ t('scene.attempts', { attempts: store.result!.plan.attempts }) }}</span>
+          <span
+            v-if="header.costKnown"
+            class="chip"
+            :title="header.durationsKnown ? t('scene.durationsTitle', { analyze: store.result!.analyze.duration_ms, plan: store.result!.plan.duration_ms }) : ''"
+          >{{ header.cost }} USD</span>
+          <span v-if="header.attemptsKnown" class="chip" :class="header.attempts.retried ? 'accent' : ''" :title="header.attempts.title">
+            {{ t('scene.attempts', { attempts: header.attempts.text }) }}
+          </span>
         </div>
       </div>
 
