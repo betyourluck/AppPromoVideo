@@ -74,7 +74,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 ## 現状 (2026-09-12)
 
 - **spec 01 は Phase 0〜E 着地、rev35 まで反映済み (rev27〜29 は試行)。** crates 159 green / vitest 65 / backend 15 green・clippy clean。
-- コミットは Initial `a75c3bc` の上に 37 本。`origin/main` には rev26 まで push 済み — **rev27〜29 (UI の試行、一時コミット) / rev30 (デザインの修正・多言語化) / rev31〜33 (履歴の全画面・比較の並び・チェックボックス、一時コミット) / data_contract.yaml の構文修正 / アプリのアイコン は未 push** (private。**週末に public 予定**)。
+- コミットは Initial `a75c3bc` の上に 38 本。`origin/main` には rev26 まで push 済み — **rev27〜29 (UI の試行、一時コミット) / rev30 (デザインの修正・多言語化) / rev31〜33 (履歴の全画面・比較の並び・チェックボックス、一時コミット) / data_contract.yaml の構文修正 / アプリのアイコン / rev34〜35 (スイッチ・設定の全画面) は未 push** (private。**週末に public 予定**)。
 - 通し (解析 → 構成 → 参照画像 → 合成) は **4 リポジトリで live 成功** (Kataribe / Verificator /
   AppPromoVideo 自身 / Fuseforks)。**出口まで到達** — MiniMax i2v の 15 秒が X に投稿された (2026-09-09)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
