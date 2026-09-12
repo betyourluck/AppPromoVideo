@@ -64,6 +64,12 @@ async function decideTour() {
   }
 }
 
+/** 案内をもう一度 (rev45)。**メイン画面に戻してから**出す — 対象の要素が居ないと照らせない。 */
+function replayTour() {
+  view.value = "main";
+  showTour.value = true;
+}
+
 onMounted(() => {
   store.listenProgress();
   store.checkCli();
@@ -87,7 +93,7 @@ onMounted(() => {
     </div>
     <!-- 「開く」が成功した時と「戻る」で close が来る (失敗した時は履歴画面に残る)。 -->
     <RunsScreen v-if="view === 'runs'" @close="view = 'main'" />
-    <SettingsScreen v-if="view === 'settings'" @close="view = 'main'" />
+    <SettingsScreen v-if="view === 'settings'" @close="view = 'main'" @show-tour="replayTour" />
     <div v-if="store.toast" class="toast">
       <Icon name="check" :size="16" />
       <span>{{ store.toast }}</span>

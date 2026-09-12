@@ -31,7 +31,7 @@ import {
 } from "../settings";
 
 const store = useStore();
-const emit = defineEmits<{ (e: "close"): void }>();
+const emit = defineEmits<{ (e: "close"): void; (e: "show-tour"): void }>();
 
 const keys = ref<{ openai: boolean; gemini: boolean }>({ openai: false, gemini: false });
 const keyInput = ref("");
@@ -166,6 +166,11 @@ function close() {
         <span>{{ t('common.back') }}</span>
       </button>
       <h2 class="title">{{ t('settings.title') }}</h2>
+      <!-- 案内をもう一度 (rev45)。一度使った環境では初回判定で出ないので、**入口がここにしか無い**。 -->
+      <button class="btn small tour-again" :title="t('settings.showTour')" @click="emit('show-tour')">
+        <Icon name="sparkles" :size="13" />
+        <span>{{ t('settings.showTour') }}</span>
+      </button>
     </header>
 
     <div class="cols">
@@ -547,6 +552,9 @@ function close() {
   border-radius: 6px;
   border: 1px solid rgb(var(--line));
   margin-top: 6px;
+}
+.tour-again {
+  margin-left: auto;
 }
 .keybox {
   display: flex;

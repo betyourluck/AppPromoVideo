@@ -60,3 +60,23 @@ describe("案内の文言", () => {
     expect(messages.en["tour.welcomeLead"]).toContain("does not make the video");
   });
 });
+
+describe("案内の入口", () => {
+  /**
+   * rev45: 一度でも使った環境では初回判定で出ない (`shouldShowTour` の設計どおり)。
+   * つまり**入口が設定画面にしか無い** — そこが消えると二度と見られなくなる。
+   */
+  it("設定画面から呼び直せる", () => {
+    const settings = files["./components/SettingsScreen.vue"];
+    expect(settings).toBeTruthy();
+    expect(settings).toContain("emit('show-tour')");
+    expect(settings).toContain("settings.showTour");
+  });
+
+  it("App が受けてメイン画面に戻してから出す", () => {
+    const app = files["./App.vue"];
+    expect(app).toContain('@show-tour="replayTour"');
+    // 対象の要素はメイン画面に居るので、設定画面のまま出すと照らせない。
+    expect(app).toMatch(/function replayTour\(\)[\s\S]*?view\.value = "main"[\s\S]*?showTour\.value = true/);
+  });
+});

@@ -50,6 +50,7 @@ export function setLang(lang: UiLang): void {
 
 const ja = {
   // 共通
+  "settings.showTour": "使い方を見る",
   "tour.welcomeTitle": "PR 動画の素材を、4 つの手順で",
   "tour.welcomeLead": "このアプリはリポジトリと一行のコンセプトから、動画生成 AI にそのまま貼れるプロンプトと参照画像を出します。動画そのものは作りません。",
   "tour.start": "手順を見る",
@@ -382,6 +383,7 @@ type Dict = Record<MessageKey, string>;
 
 const en: Dict = {
   // Common
+  "settings.showTour": "How to use",
   "tour.welcomeTitle": "Promo material in four steps",
   "tour.welcomeLead": "This app turns a repository and a one-line concept into prompts and reference images you can paste straight into a video model. It does not make the video itself.",
   "tour.start": "Show me",
@@ -709,6 +711,7 @@ const en: Dict = {
 
 const zhCN: Dict = {
   // 常用
+  "settings.showTour": "查看用法",
   "tour.welcomeTitle": "四步做出宣传视频素材",
   "tour.welcomeLead": "本应用根据仓库和一行概念，输出可直接粘贴到视频生成 AI 的提示词与参考图像。它不生成视频本身。",
   "tour.start": "查看步骤",

@@ -74,7 +74,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 ## 現状 (2026-09-12)
 
-- **spec 01 は Phase 0〜E 着地、rev44 まで反映済み (rev27〜29 は試行)。** crates 188 green / vitest 110 / backend 25 green・clippy clean。
+- **spec 01 は Phase 0〜E 着地、rev45 まで反映済み (rev27〜29 は試行)。** crates 188 green / vitest 112 / backend 25 green・clippy clean。
 - **agy でも通しが成功** (2026-09-12 21:13、ユーザー実機)。解析 → 構成 (1 回目で通過) → 参照画像 → 合成 → 見出しの焼き込み。
   費用の chip は出ない (agy は費用を返さないので描かない)。
 - コミットは Initial `a75c3bc` の上に積んでいる (**本数は数えない** — 書くたび 1 手遅れて嘘になる。`git rev-list --count a75c3bc..HEAD`)。**`origin/main` には rev42 まで push 済み** (private。**週末に public 予定**)。未 push があるかは `git log --oneline origin/main..HEAD` で数える — ここに書くと 1 手遅れる。
@@ -114,7 +114,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 **編集はダイアログ** (rev16、左が絵・右がつまみ)。絵を大きく見るためで、mood カットにも出る。
 未適用のまま閉じようとすると確認が出る。
 **初回起動のナビゲーション** (rev44、`FirstRunTour.vue`。Lorekeel の移植)。**手順を教えるだけ**で、案内の中から実行はさせない。
-対象は `data-tour` を付けた実物の要素で、1 歩目だけ印が 2 つ (実行ボタン以外を束ねて囲む)。初回だけ出す — 使った痕跡があれば印だけ立てる。
+対象は `data-tour` を付けた実物の要素で、1 歩目だけ印が 2 つ (実行ボタン以外を束ねて囲む)。初回だけ出す — 使った痕跡があれば印だけ立てる。**一度使った環境では出ないので、設定画面の「使い方を見る」が唯一の入口** (rev45)。
 **確認はアプリ内のメッセージボックス** (`dialog.ts` の `ask` + `MessageBox.vue`、rev26)。
 **ブラウザ標準の confirm / alert / prompt は使わない** — 見出しに `localhost:1421 の内容` と出る。`noBrowserDialogs.test.ts` が網。
 **履歴は全画面** (rev31、`RunsScreen.vue`。3 ペインと入れ替え、メインは `v-show`)。「開く」は**読めた時だけ**メイン画面へ戻る (`openRun` が成否を返す)。
