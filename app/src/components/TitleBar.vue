@@ -41,7 +41,7 @@ async function win(method: "minimize" | "toggleMaximize" | "close") {
 
 <template>
   <div data-tauri-drag-region class="tb">
-    <div data-tauri-drag-region class="brand">
+    <div data-tauri-drag-region class="brand brand-line">
       <span class="outcasts">Outcasts</span> AppPromoVideo
       <span v-if="busy" class="chip accent" style="margin-left: 8px">{{ t('titleBar.running') }}</span>
     </div>
@@ -112,17 +112,11 @@ async function win(method: "minimize" | "toggleMaximize" | "close") {
   user-select: none;
 }
 /* ウィンドウ枠の文字は試行の対象外 (rev29、ユーザー判断)。書体・大きさ・太さを試行前の値で固定。 */
+/* 書体・太さ・字間・標の色は main.css の .brand-line / .outcasts (rev46)。ここは置き場の都合だけ。 */
 .brand {
   padding: 0 14px;
-  font-family: var(--font-chrome);
   font-size: var(--fs-chrome);
-  font-weight: var(--fw-chrome);
-  letter-spacing: 0.08em;
   pointer-events: none;
-}
-.outcasts {
-  color: oklch(0.63 0.24 303);
-  text-shadow: 0 0 6px oklch(0.63 0.24 303 / 0.8), 0 0 18px oklch(0.63 0.24 303 / 0.4);
 }
 .spacer {
   flex: 1;

@@ -74,7 +74,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 ## 現状 (2026-09-12)
 
-- **spec 01 は Phase 0〜E 着地、rev45 まで反映済み (rev27〜29 は試行)。** crates 188 green / vitest 112 / backend 25 green・clippy clean。
+- **spec 01 は Phase 0〜E 着地、rev46 まで反映済み (rev27〜29 は試行)。** crates 188 green / vitest 112 / backend 25 green・clippy clean。
 - **agy でも通しが成功** (2026-09-12 21:13、ユーザー実機)。解析 → 構成 (1 回目で通過) → 参照画像 → 合成 → 見出しの焼き込み。
   費用の chip は出ない (agy は費用を返さないので描かない)。
 - コミットは Initial `a75c3bc` の上に積んでいる (**本数は数えない** — 書くたび 1 手遅れて嘘になる。`git rev-list --count a75c3bc..HEAD`)。**`origin/main` には rev42 まで push 済み** (private。**週末に public 予定**)。未 push があるかは `git log --oneline origin/main..HEAD` で数える — ここに書くと 1 手遅れる。
@@ -154,6 +154,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 **文字は `main.css` のトークンを参照する** — 大きさ 項目 `--fs-*` (倍率 `--fs-scale`) / 見出し `--fs-h-*` (倍率 `--fs-scale-heading`) / 太さ `--fw-*` / 書体 `--font-ui`。部品に直書きしない。
 フォールバックの無い `var(--x)` には定義が要る (`cssTokens.test.ts`)。
 **タイトルバーのアプリ名は倍率の対象外** — `--font-chrome` / `--fs-chrome` / `--fw-chrome` (rev29 で試行前の値に固定、rev30 のデザイン修正で Inter / 14px / 600)。
+**ブランドの標「Outcasts」は `main.css` の `.brand-line` / `.outcasts` が唯一の定義** (rev46)。色は `--brand-mark` (oklch の成分)。タイトルバーと初回案内が共有し、**大きさだけ**置き場ごとに決める。
 **書体は同梱する** (rev30、`@fontsource-variable` の Inter / Noto Sans JP を main.ts で import)。宣言名は `Inter Variable` / `Noto Sans JP Variable`。
 **外から読まない** — CSP が通さない (`fonts.test.ts` が網)。
 **画面の文言は `i18n.ts` の辞書を通す** — ja が正本、en / zh-CN は `Record<MessageKey, string>` で型で縛る。強調・等幅は文言に `<b>` / `<mono>` と書いて

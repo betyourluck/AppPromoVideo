@@ -143,7 +143,7 @@ const cardStyle = computed(() => ({
     <Transition name="tour-fade">
       <div v-if="phase === 'welcome'" class="tour-welcome" @click.self="begin">
         <div class="tour-welcome-card">
-          <p class="tour-brand"><span class="tour-brand-mark">Outcasts</span> AppPromoVideo</p>
+          <p class="tour-brand brand-line"><span class="outcasts">Outcasts</span> AppPromoVideo</p>
           <h2 class="tour-title">{{ t('tour.welcomeTitle') }}</h2>
           <p class="tour-lead">{{ t('tour.welcomeLead') }}</p>
           <ol class="tour-minis">
@@ -222,14 +222,11 @@ const cardStyle = computed(() => ({
   box-shadow: var(--shadow-lg);
   animation: tour-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
+/* 色・書体・グローは main.css の .brand-line / .outcasts と共有 (rev46、ユーザー指摘)。
+   **大きさだけ**ここで決める — 幕の見出しとして読める寸法が要る。 */
 .tour-brand {
   margin: 0;
-  font-size: var(--fs-h-lg);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.04em;
-}
-.tour-brand-mark {
-  color: rgb(var(--accent));
+  font-size: calc(var(--fs-chrome) * 1.7);
 }
 .tour-title {
   margin: 14px 0 0;

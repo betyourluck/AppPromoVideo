@@ -40,6 +40,8 @@
   --fw-bold: 700;
   --fw-medium: 500;
   --fw-regular: 400;
+  /* ブランドの標。タイトルバーと初回案内が**同じ定義**を使う (rev46) — 2 か所に書くと必ずずれる。 */
+  --brand-mark: 0.63 0.24 303;
   --font-chrome: "Inter Variable", "Segoe UI", "Noto Sans JP Variable", "Noto Sans JP", system-ui, sans-serif;
   --fs-chrome: 14px;
   --fw-chrome: 600;
@@ -445,4 +447,19 @@ pre.block {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgb(var(--muted) / 0.6);
+}
+
+/* ブランドの標「Outcasts」。色・書体・グローはここが唯一の定義 (rev46、ユーザー指摘)。
+   タイトルバーと初回案内の両方が使う。大きさだけは置き場ごとに決める
+   (タイトルバーは --fs-chrome、案内の幕は見出しとして大きく)。 */
+.brand-line {
+  font-family: var(--font-chrome);
+  font-weight: var(--fw-chrome);
+  letter-spacing: 0.08em;
+}
+.outcasts {
+  color: oklch(var(--brand-mark));
+  text-shadow:
+    0 0 6px oklch(var(--brand-mark) / 0.8),
+    0 0 18px oklch(var(--brand-mark) / 0.4);
 }
