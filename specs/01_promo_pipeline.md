@@ -1436,6 +1436,24 @@ rev33 の「測る前に、今のコードがページに届いているかを�
 **接地の限界**: **配布ビルドでは未確認。** dev サーバーでは印が立たないので、規則の効き目だけを
 手で印を立てて測った。実際に `npm run tauri build` した実行ファイルでの挙動 (右クリック・F5) は見ていない。
 
+## 公開とリリース (2026-09-13)
+
+**public にした。** MIT (`LICENSE`)。公開前の洗い出しで、**追跡ファイルに個人情報が入っていた**のを消した —
+fixture 3 本と specs に Windows のアカウント名、`agy_empty_success.jsonl` はさらに**別のツール構成まで**
+晒していた (agy が cwd の外を読んだ実測なので、読まれた側のパスが封筒に載っていた)。
+実データの**形**は fixture の価値なので保ち、名前だけ中立にした。鍵・トークンの混入は無し。
+
+**`v0.1.0` の CI は初回から 3 OS とも green。** 移植元 (Lorekeel / Fuseforks) が実運用で詰めた workflow を
+写したので、こちらの手柄ではない。Release に installer 7 点。
+
+**配布物の性質 (聞かれる前に書いておく)**:
+- **macOS は未署名・未公証。** Apple の秘密 5 つが未設定。`.dmg` を開いた人は Gatekeeper に止められる
+- **macOS は aarch64 のみ。** `macos-latest` が arm ランナーになったため。**Intel Mac は対象外**
+
+**次の主題: Mac の Homebrew 対応** (ユーザー)。**cask は検疫付きで配るので、未署名のままでは
+Gatekeeper に止まる** — 署名と公証が先に要る。Lorekeel / Fuseforks が同じ道を通っているので、
+着手時はそちらを先に読む (掟)。
+
 ## 検討した代案: Remotion (2026-09-08、採用しない)
 
 React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](https://github.com/remotion-dev/remotion))。

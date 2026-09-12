@@ -1185,3 +1185,20 @@ rev33 で自分が書いて CLAUDE.md にも載せた「測る前に届いてい
 
 **足場**: vitest 112 → 118 / build green。
 **接地の限界**: **配布ビルドでは未確認** — 規則の効き目だけを手で印を立てて測った。
+
+
+## 2026-09-13 — 公開と v0.1.0
+
+public にした。公開前に追跡ファイルを洗ったら**個人情報が入っていた** — Windows のアカウント名が
+fixture 3 本と specs に、さらに `agy_empty_success.jsonl` は**別のツール構成まで**晒していた
+(`.gemini/.../memoria/skills/...`)。agy が cwd の外を読んだ実測なので、**読まれた側のパスが封筒に載った**。
+私が作った fixture で、実データをそのまま焼いたことの代償。形だけ保って名前を中立にした。
+
+`.github/workflows/build.yml` は Lorekeel / Fuseforks からの移植。**初回から 3 OS とも green**で、
+Release に installer 7 点が揃った。通ったのは移植元が実運用で詰めたからで、こちらの手柄ではない。
+
+**配布物の性質を台帳に残した** — macOS は未署名・未公証、かつ **aarch64 のみ** (Intel Mac は対象外)。
+どちらも後から「なぜ動かない」と聞かれる種類の事実で、**出荷物の性質は出荷時にしか正確に書けない**。
+
+**次の主題は Mac の Homebrew 対応。** cask は検疫付きで配るので、未署名のままでは Gatekeeper に止まる —
+署名と公証が先。Lorekeel / Fuseforks が同じ道を通っている。
