@@ -1,4 +1,4 @@
-# AppPromoVideo
+# Outcasts AppPromoVideo
 
 A desktop tool (Tauri 2 + Vue 3 + Rust) that takes an existing app's repository and UI snapshots to generate **scene-by-scene prompts** and **reference images** ready to paste directly into video generation AI (such as Veo, Sora, or MiniMax).
 

@@ -1,4 +1,4 @@
-# AppPromoVideo
+# Outcasts AppPromoVideo
 
 既存アプリのリポジトリと UI スナップショットから、動画生成 AI (Veo / Sora / MiniMax 等) にそのまま貼れる
 **シーン別プロンプト**と**参照画像**を出すデスクトップツール (Tauri 2 + Vue 3 + Rust)。
