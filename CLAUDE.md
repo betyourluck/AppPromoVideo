@@ -74,7 +74,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 ## 現状 (2026-09-12)
 
 - **spec 01 は Phase 0〜E 着地、rev37 まで反映済み (rev27〜29 は試行)。** crates 162 green / vitest 75 / backend 17 green・clippy clean。
-- コミットは Initial `a75c3bc` の上に 40 本。`origin/main` には rev26 まで push 済み — **rev27〜29 (UI の試行、一時コミット) / rev30 (デザインの修正・多言語化) / rev31〜33 (履歴の全画面・比較の並び・チェックボックス、一時コミット) / data_contract.yaml の構文修正 / アプリのアイコン / rev34〜35 (スイッチ・設定の全画面) / rev36 (無い記録を描かない・アイコンのトグル) / rev37 (プロンプトの書き換え) は未 push** (private。**週末に public 予定**)。
+- コミットは Initial `a75c3bc` の上に 42 本。`origin/main` には rev26 まで push 済み — **rev27〜29 (UI の試行、一時コミット) / rev30 (デザインの修正・多言語化) / rev31〜33 (履歴の全画面・比較の並び・チェックボックス、一時コミット) / data_contract.yaml の構文修正 / アプリのアイコン / rev34〜35 (スイッチ・設定の全画面) / rev36 (無い記録を描かない・アイコンのトグル) / rev37 (プロンプトの書き換え) は未 push** (private。**週末に public 予定**)。
 - 通し (解析 → 構成 → 参照画像 → 合成) は **4 リポジトリで live 成功** (Kataribe / Verificator /
   AppPromoVideo 自身 / Fuseforks)。**出口まで到達** — MiniMax i2v の 15 秒が X に投稿された (2026-09-09)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
@@ -140,17 +140,19 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 **画面の文言は `i18n.ts` の辞書を通す** — ja が正本、en / zh-CN は `Record<MessageKey, string>` で型で縛る。強調・等幅は文言に `<b>` / `<mono>` と書いて
 `Rich.vue` で出す (`v-html` は使わない)。コードに日本語を直書きしない (`noHardcodedJapanese.test.ts`。対象外は settings.ts のフォント名と `console.*`)。
 backend 由来のログ・エラーの文言は日本語のまま。
-**試行の未決 (2026-09-11 rev30 時点)**: ①rev27〜35 の採否 — **2026-09-12 にユーザーが GUI を目視 OK** (設定の 1 画面は英語表示でも溢れない。スイッチの色はアクセントで確定)
+**試行の未決 (2026-09-11 rev30 時点)**: ①rev27〜35 の採否 — **2026-09-12 にユーザーが GUI を目視 OK** (設定の 1 画面は英語表示でも溢れない。スイッチの色はアクセントで確定)。
+**rev36・37 は Tauri の GUI で未目視** — 特に**プロンプトの保存を GUI から通していない** (backend のテストでは固定済み)
 ②en / zh-CN の訳は私が書いた (未査読) ③`.muted` (47 か所) に巻き込まれた表の列・ラベルを戻すか ④ログの「medium」を太さと解釈した件
 ⑤タイトルバーの「実行中」chip の大きさ ⑥既存の文言の不具合 2 点を直すか (設定の説明が `**全シーンの既定**` のまま / 「既定は OFF」が実際の ON と違う)
-⑦ユーザーが先に作った未使用キー 17 個を消すか。
+⑦未使用の i18n キー 13 個 (`common.undo` / `runs.delete` など) を消すか。rev35 で 3 個は見出しに使い、`settings.imageTabLabel` は撤去した。
 旧 ②Plex の同梱 と旧 ③WebView2 がユーザーごとのフォントを拾うか は、rev30 で書体を同梱にしたので閉じた。
 現状の形は 3 ペイン + 全画面 2 つ (履歴 rev31 / 設定 rev35) + ダイアログ 1 種 (シーン編集) で、rev16〜21 で
 シーン編集の中身が増えた。**2026-09-11 に初めてメイン画面のスクリーンショットを見た** — 観察 3 点は
 `history.md` の同日エントリ (特に「`画像: off` と `参照画像を生成` が別ペインに離れている」は見本が無くても直せる)。
 シーン編集ダイアログも同日に見た (rev23 / rev24 のユーザー目視。観察 2 点は `history.md`)。
 
-**次の候補**: 傾きと可読性の境目 /
+**次の候補**: GUI からのプロンプト保存の確認 (promo.json と scenes.md が揃うか) / プロンプトに「最初の文に戻す」を付けるか /
+傾きと可読性の境目 /
 mood カットのモチーフ一貫性 / `motion_prompt` の粒度 / ComfyUI と OpenAI の live /
 Unix の `tree_kill` / `--add-dir` 外 Read の拒否確認。
 
