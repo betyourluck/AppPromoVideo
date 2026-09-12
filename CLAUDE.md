@@ -73,19 +73,20 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 ## 現状 (2026-09-12)
 
-- **spec 01 は Phase 0〜E 着地、rev36 まで反映済み (rev27〜29 は試行)。** crates 159 green / vitest 72 / backend 15 green・clippy clean。
-- コミットは Initial `a75c3bc` の上に 39 本。`origin/main` には rev26 まで push 済み — **rev27〜29 (UI の試行、一時コミット) / rev30 (デザインの修正・多言語化) / rev31〜33 (履歴の全画面・比較の並び・チェックボックス、一時コミット) / data_contract.yaml の構文修正 / アプリのアイコン / rev34〜35 (スイッチ・設定の全画面) / rev36 (無い記録を描かない・アイコンのトグル) は未 push** (private。**週末に public 予定**)。
+- **spec 01 は Phase 0〜E 着地、rev37 まで反映済み (rev27〜29 は試行)。** crates 162 green / vitest 75 / backend 17 green・clippy clean。
+- コミットは Initial `a75c3bc` の上に 40 本。`origin/main` には rev26 まで push 済み — **rev27〜29 (UI の試行、一時コミット) / rev30 (デザインの修正・多言語化) / rev31〜33 (履歴の全画面・比較の並び・チェックボックス、一時コミット) / data_contract.yaml の構文修正 / アプリのアイコン / rev34〜35 (スイッチ・設定の全画面) / rev36 (無い記録を描かない・アイコンのトグル) / rev37 (プロンプトの書き換え) は未 push** (private。**週末に public 予定**)。
 - 通し (解析 → 構成 → 参照画像 → 合成) は **4 リポジトリで live 成功** (Kataribe / Verificator /
   AppPromoVideo 自身 / Fuseforks)。**出口まで到達** — MiniMax i2v の 15 秒が X に投稿された (2026-09-09)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
 - **GUI は再ビルドしてから触る**。rev13 で dev プロファイルを変えた (debug の画像処理が 71 倍遅かった)。
 
-**編集できるもの (rev9〜21、各シーンの「見出し / はめ込み…」ボタン → ダイアログ)**
+**編集できるもの (rev9〜37。見出しとはめ込みは各シーンの「見出し / はめ込み…」ボタン → ダイアログ、プロンプトは鉛筆)**
 
 | | |
 |---|---|
 | コピー文 | 書き換え + 「最初の文に戻す」(`original_copy` に LLM の初出を控えてある) |
 | 見出し | フォント / 大きさ / 色 / **縦位置を数値で** (`y_ratio`)。上下の選択は rev18 で撤去 (縦位置が上位互換。面が避ける側は `effective_position` が `y_ratio` から導く) |
+| プロンプト | **鉛筆で編集モードに入ってから** `motion_prompt` / `video_prompt` を書き換える (rev37)。保存すると backend が `promo.json` と `scenes.md` を書き直し、書き換え後の promo を返す。**空は拒む** (検査と食い違わせない)。破棄は入る前の値に戻す |
 | はめ込み | **傾き (yaw・pitch) — つまみは実効値を指す** (`0° (正面)` / `18° (LLM)` / `18°`。rev21) / 大きさ / 横位置 / 縦位置 / **使うスナップショットの選び直し** — 一覧には左の入力ペインに**後から足した画像も出る** (選ぶとその run に写す、rev20)。取り込み口は入力ペイン 1 つ。**同じパスで撮り直したものも出る** — 同じ名前が 2 行並び、下が今のファイル (rev23)。**mood にも足せる** — 既定は「はめ込みなし (絵のまま)」で、選ぶと面が乗る。`cut_kind` は書き換えない (rev24) |
 
 やり直しは `<run>/base/` の**素材**(product は背景 / mood は絵) から**合成ごと**行う。
@@ -158,6 +159,6 @@ rev14 のコミット `5929f93` に巻き込んだ。実害は無いが粒度が
 
 ## 再開の手順
 
-1. `cargo test --workspace` (159 green) と `cd app && npx vitest run` (72 green) で足場を確認。
+1. `cargo test --workspace` (162 green) と `cd app && npx vitest run` (75 green) で足場を確認。
 2. `git log --oneline -5` で直前の着地を見る。詳しい経緯は `history.md`。
 3. 上の「開いている判断」に答えが来ていないか確認してから着手する。

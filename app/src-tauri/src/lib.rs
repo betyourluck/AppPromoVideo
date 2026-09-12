@@ -633,6 +633,27 @@ struct OpenedRun {
     images: Vec<SceneImageInfo>,
 }
 
+/// シーンのプロンプトを書き換える (rev37、契約 `ScenePromptEdit`)。
+///
+/// 書き換えは `promo_core::plan::set_scene_prompts` だけが行う (空の拒否もそこ)。
+/// **promo.json と scenes.md の両方を書き直し**、書き換えた後の `promo` を返す —
+/// frontend が手元で真似ると食い違う (reburn_caption と同じ作法)。
+#[tauri::command]
+fn update_scene_prompts(run_dir: String, scene_id: u32, motion_prompt: String, video_prompt: String) -> Result<PromoJson, String> {
+    let dir = PathBuf::from(&run_dir);
+    let text = std::fs::read_to_string(dir.join("promo.json")).map_err(|e| format!("promo.json を読めません: {e}"))?;
+    let mut promo: PromoJson = serde_json::from_str(&text).map_err(|e| format!("promo.json の形が違います: {e}"))?;
+    promo_core::plan::set_scene_prompts(&mut promo.plan, scene_id, &motion_prompt, &video_prompt).map_err(|e| match e {
+        promo_core::plan::PromptEditError::SceneNotFound(id) => format!("シーン {id} が見つかりません"),
+        promo_core::plan::PromptEditError::EmptyMotion => "motion prompt が空です".to_string(),
+        promo_core::plan::PromptEditError::EmptyVideo => "video prompt が空です".to_string(),
+    })?;
+    let json = serde_json::to_string_pretty(&promo).map_err(|e| e.to_string())?;
+    write_atomic(&dir.join("promo.json"), json.as_bytes())?;
+    write_atomic(&dir.join("scenes.md"), scenes_markdown(&promo.summary, &promo.plan).as_bytes())?;
+    Ok(promo)
+}
+
 /// 過去の run を読み戻す。**索引ではなく `run_dir/promo.json` から読む** (そちらが正本)。
 #[tauri::command]
 fn open_run(run_dir: String) -> Result<OpenedRun, String> {
@@ -1171,6 +1192,7 @@ pub fn run() {
             copy_package,
             list_runs,
             open_run,
+            update_scene_prompts,
             forget_run,
             reburn_caption,
             plate_preview,
@@ -1211,6 +1233,82 @@ mod wire_tests {
         assert_eq!(wire(&Language::Ja), "ja");
         assert_eq!(wire(&PlateMode::Perspective), "perspective");
         assert_eq!(wire(&PlateMode::Frontal), "frontal");
+    }
+}
+
+#[cfg(test)]
+mod prompt_edit_tests {
+    use super::{update_scene_prompts, PromoJson};
+    use promo_core::plan::{AnalyzedSummary, Aspect, CutKind, Scene, ScenePlan, VisualIdentity};
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn scene(id: u32) -> Scene {
+        Scene {
+            scene_id: id,
+            cut_kind: CutKind::Mood,
+            snapshot_index: None,
+            plate_tilt: None,
+            motion_prompt: format!("Slow push-in {id}."),
+            duration_seconds: 5,
+            shot_type: "Wide".into(),
+            video_prompt: format!("Video prompt {id}."),
+            copy_text: "コピー".into(),
+            image_prompt: "i".into(),
+            reference_image: None,
+        }
+    }
+
+    /// promo.json だけを置いた run (scenes.md はまだ無い)。
+    fn run_dir() -> PathBuf {
+        let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let d = std::env::temp_dir().join(format!("apppromo_prompt_{}_{}", std::process::id(), n));
+        fs::create_dir_all(&d).unwrap();
+        let promo = PromoJson {
+            project_path: "D:/proj".into(),
+            snapshot_paths: vec![],
+            video_concept: "calm".into(),
+            caption_overrides: Default::default(),
+            plate_overrides: Default::default(),
+            original_copy: Default::default(),
+            plate_mode: Default::default(),
+            run_stats: None,
+            summary: AnalyzedSummary {
+                app_name: "Task Flow".into(),
+                one_liner: "o".into(),
+                core_value: "c".into(),
+                target_audience: "t".into(),
+                differentiators: vec![],
+                hook_copy: "h".into(),
+                visual_identity: VisualIdentity { palette: vec![], mood: String::new(), ui_traits: vec![] },
+            },
+            plan: ScenePlan { total_seconds: 10, aspect: Aspect::Landscape, scenes: vec![scene(1), scene(2)] },
+        };
+        fs::write(d.join("promo.json"), serde_json::to_string_pretty(&promo).unwrap()).unwrap();
+        d
+    }
+
+    /// 契約 `ScenePromptEdit.files`: promo.json を書き直したら **scenes.md も揃える**。
+    #[test]
+    fn saving_rewrites_promo_json_and_scenes_md() {
+        let dir = run_dir();
+        let got = update_scene_prompts(dir.to_string_lossy().to_string(), 2, "  New motion.  ".into(), "New video prompt.".into()).unwrap();
+        assert_eq!(got.plan.scenes[1].motion_prompt, "New motion.");
+        let saved: PromoJson = serde_json::from_str(&fs::read_to_string(dir.join("promo.json")).unwrap()).unwrap();
+        assert_eq!(saved.plan.scenes[1].video_prompt, "New video prompt.");
+        let md = fs::read_to_string(dir.join("scenes.md")).expect("scenes.md が書かれていない");
+        assert!(md.contains("New video prompt."), "scenes.md に新しい文が無い:\n{md}");
+    }
+
+    /// 空は拒む。**拒んだ時はファイルを触らない** (契約 `ScenePromptEdit.empty`)。
+    #[test]
+    fn an_empty_prompt_is_rejected_and_nothing_is_written() {
+        let dir = run_dir();
+        let before = fs::read_to_string(dir.join("promo.json")).unwrap();
+        let err = update_scene_prompts(dir.to_string_lossy().to_string(), 1, "   ".into(), "v".into()).unwrap_err();
+        assert!(err.contains("motion"), "{err}");
+        assert_eq!(fs::read_to_string(dir.join("promo.json")).unwrap(), before);
+        assert!(!dir.join("scenes.md").exists(), "拒んだのに scenes.md を書いている");
     }
 }
 

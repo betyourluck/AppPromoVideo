@@ -20,6 +20,29 @@ const copiedSceneId = ref<number | null>(null);
 
 const promo = computed(() => store.result?.promo ?? null);
 
+/**
+ * プロンプトの編集モード (rev37、ユーザー「鉛筆を押してシーンの編集モードにしてから書き換えたい」)。
+ * **常に書き換えられる欄にしない** — 読むつもりの操作で壊れるため。入れるのは 1 シーンずつ。
+ * 保存は backend (promo.json と scenes.md を書き直す)。破棄は入る前の値に戻すだけ。
+ */
+const editingSceneId = ref<number | null>(null);
+const draft = ref({ motion: "", video: "" });
+const savingPrompts = ref(false);
+
+function startEdit(s: Scene) {
+  editingSceneId.value = s.scene_id;
+  draft.value = { motion: s.motion_prompt, video: s.video_prompt };
+}
+
+async function savePrompts(sceneId: number) {
+  savingPrompts.value = true;
+  try {
+    if (await store.updateScenePrompts(sceneId, draft.value.motion, draft.value.video)) editingSceneId.value = null;
+  } finally {
+    savingPrompts.value = false;
+  }
+}
+
 /** MiniMax (画像→動画) は画像 + 動きの短文。汎用 t2v は全文 + 別行のメタ (Veo / Sora は指示に従わないので外した)。 */
 function clipboardText(s: Scene): string {
   if (target.value === "minimax") return (s.motion_prompt || s.video_prompt).trim();
@@ -179,6 +202,18 @@ function openRef(sceneId: number) {
             <span class="chip">{{ s.duration_seconds }}s</span>
             <span class="chip">{{ s.shot_type }}</span>
             <span class="copytext">{{ s.copy_text }}</span>
+            <template v-if="editingSceneId === s.scene_id">
+              <button class="btn small primary" :disabled="savingPrompts" :title="t('common.save')" @click="savePrompts(s.scene_id)">
+                <Icon :name="savingPrompts ? 'refresh' : 'check'" :size="13" />
+                <span>{{ t('common.save') }}</span>
+              </button>
+              <button class="btn small" :disabled="savingPrompts" :title="t('common.cancel')" @click="editingSceneId = null">
+                <Icon name="x" :size="13" />
+              </button>
+            </template>
+            <button v-else class="btn small" :disabled="store.running" :title="t('scene.editPrompts')" @click="startEdit(s)">
+              <Icon name="edit" :size="13" />
+            </button>
             <button
               class="btn small copy-btn"
               :disabled="store.running"
@@ -193,10 +228,12 @@ function openRef(sceneId: number) {
           <div class="scene-body">
             <div class="prompts-col">
               <div class="muted prompt-label">{{ t('scene.motionPrompt') }}</div>
-              <pre class="block mono">{{ s.motion_prompt }}</pre>
-              <details class="muted prompt-details">
+              <textarea v-if="editingSceneId === s.scene_id" v-model="draft.motion" class="mono prompt-edit" rows="3"></textarea>
+              <pre v-else class="block mono">{{ s.motion_prompt }}</pre>
+              <details class="muted prompt-details" :open="editingSceneId === s.scene_id">
                 <summary>{{ t('scene.videoPromptFallback') }}</summary>
-                <pre class="block mono">{{ s.video_prompt }}</pre>
+                <textarea v-if="editingSceneId === s.scene_id" v-model="draft.video" class="mono prompt-edit" rows="4"></textarea>
+                <pre v-else class="block mono">{{ s.video_prompt }}</pre>
               </details>
             </div>
             <div class="ref-col">
@@ -366,6 +403,14 @@ function openRef(sceneId: number) {
 .prompt-label {
   font-size: var(--fs-xs);
   margin-bottom: 2px;
+}
+/* 編集モードの入力欄 (rev37)。読むときの `pre.block` と同じ見え方に揃える。 */
+.prompt-edit {
+  width: 100%;
+  font-size: var(--fs-xs);
+  line-height: 1.55;
+  min-height: 0;
+  padding: 8px 10px;
 }
 .prompt-details {
   margin-top: 6px;

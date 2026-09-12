@@ -1046,6 +1046,42 @@ vitest 65 → 72 / build green。
 **接地の限界**: Tauri の WebView では未目視 (ブラウザで確認)。実行直後の live で `RunResult.promo` に `run_stats` が載っているかは**未観測** —
 promo.json には rev15 から書かれており型も同じだが、live の 1 本で確かめるまでは推測。
 
+## rev37 (2026-09-12、プロンプトを書き換えられるように — 鉛筆で編集モード)
+
+**ユーザー**「motion や video prompt は書き換えが可能のほうがよい。ただそのまますぐに書き換えられるのではなく、鉛筆アイコンを押して、
+シーンの編集モードにしてから書き換えられるようにしたい」。
+
+145. **契約を先に凍結** (`data_contract.yaml` の `ScenePromptEdit`)。編集モードを挟む理由 (読むつもりの操作で壊れない) /
+     空は拒む / promo.json と scenes.md を揃える / 「最初の文」は持たない (プロンプトは再生成でやり直せる) を、コードの前に書いた。
+146. **書き換えは 1 か所** — `promo_core::plan::set_scene_prompts(plan, scene_id, motion, video)`。前後の空白を落とし、**空なら拒む**
+     (`motion_prompt_empty` 等の検査と食い違わせない)。**拒んだ時は plan を触らない** — 片方だけ書き換わると画面と promo.json が食い違う。
+147. **command `update_scene_prompts`** が promo.json を書き、**scenes.md も書き直し**、書き換えた後の `PromoJson` を返す
+     (frontend が手元で真似ると食い違う。rev21 の作法)。
+148. **鉛筆で 1 シーンずつ編集モード** (結果ペイン)。モード中は motion / video prompt が入力欄になり、video の折り畳みは自動で開く。
+     保存は**成功した時だけ**モードを閉じ、破棄は入る前の値に戻す。実行中は入れない。
+
+**PoC**:
+- promo_core 3 本 (書き換えと trim / 空は拒み plan を触らない / 知らない scene_id)。関数が無い状態で Red (`cannot find function`) → Green。
+- backend 2 本 (保存で promo.json と **scenes.md** が変わる / 空は拒んで何も書かない)。**検出力も確認** — scenes.md を書く 1 行を外すと
+  `scenes.md が書かれていない` で落ち、戻すと通る (rev23 と同じ作法)。
+- frontend 3 本 (`store.updateScenePrompts`: 成功で backend が返した promo に差し替え / 失敗で false・promo 不変 / run を開いていなければ呼ばない)。
+  `is not a function` の Red → Green。
+
+**ブラウザ実測** (編集モードの見た目と動き):
+
+| | 結果 |
+|---|---|
+| 鉛筆の前 | ボタン「プロンプトを編集 / コピー」、入力欄 0、`pre` 3 |
+| 編集モード | 入力欄 2 (motion + video)、ボタン「保存 / キャンセル / コピー」 |
+| 保存に失敗 (ブラウザは Tauri 無し) | **編集モードのまま**、エラーが残る |
+| 破棄 | 元の文に戻る (下書きは捨てる) |
+| 隣のシーン | 編集モードに入らない (1 シーンずつ) |
+
+足場: crates 159 → 162 / backend 15 → 17 / vitest 72 → 75 / build green。
+
+**接地の限界**: Tauri の WebView では未目視。**保存の成功経路は backend のテストで固定したが、GUI からの保存は未実施**。
+コピー先の文字列は plan から組むので保存後のコピーにも反映されるはずだが、これも GUI では未確認。
+
 ## 検討した代案: Remotion (2026-09-08、採用しない)
 
 React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](https://github.com/remotion-dev/remotion))。
@@ -1150,6 +1186,7 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [ ] rev34 (2026-09-12): 設定の入り切りをスイッチに (136〜137、`Switch.vue`)。vitest 65 / build green。ブラウザで数値を実測。**GUI 目視 OK (ユーザー 2026-09-12)、ON の色はアクセントで確定**
 - [ ] rev35 (2026-09-12): 設定も全画面に (138〜141、`SettingsScreen.vue`。3 列 / 説明は畳む / 段は下端で揃える)。vitest 65 / build green。1288x842 と 1600x1017 で実測。**GUI 目視 OK (ユーザー 2026-09-12、英語表示でも溢れない)**
 - [ ] rev36 (2026-09-12): 無い記録を描かない (142) / タイトルバーのアイコンはトグル (143〜144)。vitest 72 / build green。ブラウザで実測、**Tauri の GUI は未目視**
+- [ ] rev37 (2026-09-12): プロンプトの書き換え (145〜148、鉛筆で編集モード)。crates 162 / backend 17 / vitest 75 / build green。**Tauri の GUI は未目視 (GUI からの保存は未実施)**
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度 / `RunStats` の live 記録 (frontal の費用)
 - [ ] Phase E
 

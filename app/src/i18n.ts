@@ -143,6 +143,8 @@ const ja = {
   "scene.clipboardFailed": "クリップボードに書けません: {error}",
   "scene.durationsTitle": "解析 {analyze} ms / 構成 {plan} ms",
   "scene.refsTruncated": "参照: {detail}",
+  "scene.editPrompts": "プロンプトを編集",
+  "scene.promptsSaved": "プロンプトを保存しました",
 
   // 進捗ペイン
   "log.title": "進捗",
@@ -458,6 +460,8 @@ const en: Dict = {
   "scene.clipboardFailed": "Cannot write to the clipboard: {error}",
   "scene.durationsTitle": "Analyze {analyze} ms / Plan {plan} ms",
   "scene.refsTruncated": "References: {detail}",
+  "scene.editPrompts": "Edit prompts",
+  "scene.promptsSaved": "Prompts saved",
 
   // LogPanel
   "log.title": "Progress",
@@ -768,6 +772,8 @@ const zhCN: Dict = {
   "scene.clipboardFailed": "无法写入剪贴板: {error}",
   "scene.durationsTitle": "分析 {analyze} ms / 分镜 {plan} ms",
   "scene.refsTruncated": "参考: {detail}",
+  "scene.editPrompts": "编辑提示词",
+  "scene.promptsSaved": "提示词已保存",
 
   // 进度面板
   "log.title": "进度",

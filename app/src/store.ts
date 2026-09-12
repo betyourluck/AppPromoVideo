@@ -207,6 +207,26 @@ export const useStore = defineStore("main", {
       }
     },
     /**
+     * シーンのプロンプトを書き換える (rev37、契約 `ScenePromptEdit`)。
+     * **書き換えた後の promo は backend が返す** — 手元で真似ると promo.json や scenes.md と食い違う (rev21 の型)。
+     * 空は backend が拒む。成否を返す — 画面は成功した時だけ編集モードを閉じる。
+     */
+    async updateScenePrompts(sceneId: number, motionPrompt: string, videoPrompt: string): Promise<boolean> {
+      const runDir = this.result?.package_dir;
+      if (!runDir) return false;
+      this.error = "";
+      try {
+        const promo = await invoke<PromoJson>("update_scene_prompts", { runDir, sceneId, motionPrompt, videoPrompt });
+        if (this.result) this.result = { ...this.result, promo };
+        this.showToast(t("scene.promptsSaved"));
+        return true;
+      } catch (e) {
+        this.error = String(e);
+        this.push("error", String(e));
+        return false;
+      }
+    },
+    /**
      * 過去の run を結果ペインに戻す。正本は run_dir/promo.json (索引ではない)。
      * rev31: **成否を返す** — 履歴画面は読めた時だけメイン画面へ戻り、読めなければ残って `error` を出す。
      * 前のエラーは先に消す (残っていると、履歴画面が別の失敗の理由を出してしまう)。

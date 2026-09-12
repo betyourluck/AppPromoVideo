@@ -452,6 +452,46 @@ pub fn clipboard_text(scene: &Scene, aspect: Aspect, target: CopyTarget) -> Stri
     }
 }
 
+
+/// プロンプトの書き換えで起きうること (契約 `ScenePromptEdit`、rev37)。
+#[derive(Debug, PartialEq, Eq)]
+pub enum PromptEditError {
+    /// その `scene_id` が plan に無い。
+    SceneNotFound(u32),
+    /// `motion_prompt` が空 (前後の空白を落として空)。
+    EmptyMotion,
+    /// `video_prompt` が空。
+    EmptyVideo,
+}
+
+/// シーンの `motion_prompt` / `video_prompt` を書き換える**唯一の関数** (rev37、契約 `ScenePromptEdit`)。
+///
+/// 空は拒む — どちらも検査の対象 (`motion_prompt_empty` 等) で、空のまま保存すると次の検査と食い違う。
+/// **拒んだ時は plan を触らない** (片方だけ書き換わると、画面と promo.json が食い違う)。
+pub fn set_scene_prompts(
+    plan: &mut ScenePlan,
+    scene_id: u32,
+    motion: &str,
+    video: &str,
+) -> Result<(), PromptEditError> {
+    let motion = motion.trim();
+    let video = video.trim();
+    if motion.is_empty() {
+        return Err(PromptEditError::EmptyMotion);
+    }
+    if video.is_empty() {
+        return Err(PromptEditError::EmptyVideo);
+    }
+    let scene = plan
+        .scenes
+        .iter_mut()
+        .find(|s| s.scene_id == scene_id)
+        .ok_or(PromptEditError::SceneNotFound(scene_id))?;
+    scene.motion_prompt = motion.to_string();
+    scene.video_prompt = video.to_string();
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -487,6 +527,38 @@ mod tests {
         s.snapshot_index = idx;
         s.image_prompt = backdrop.into();
         s
+    }
+
+    // rev37: プロンプトの書き換え (契約 ScenePromptEdit)。ユーザー「鉛筆で編集モードにしてから書き換えたい」。
+    #[test]
+    fn set_scene_prompts_writes_both_and_trims() {
+        let mut p = plan();
+        assert_eq!(set_scene_prompts(&mut p, 2, "  Slow pan right.  ", "
+A calm desk, slow pan right.
+"), Ok(()));
+        let s = p.scenes.iter().find(|s| s.scene_id == 2).unwrap();
+        assert_eq!(s.motion_prompt, "Slow pan right.");
+        assert_eq!(s.video_prompt, "A calm desk, slow pan right.");
+    }
+
+    #[test]
+    fn set_scene_prompts_rejects_empty_and_does_not_touch_the_plan() {
+        // 空は検査の違反 (motion_prompt_empty)。**拒んだ時は片方だけ書き換えない**。
+        let mut p = plan();
+        let (motion, video) = (p.scenes[0].motion_prompt.clone(), p.scenes[0].video_prompt.clone());
+        assert_eq!(set_scene_prompts(&mut p, 1, "   ", "ok video"), Err(PromptEditError::EmptyMotion));
+        assert_eq!(set_scene_prompts(&mut p, 1, "ok motion", "	
+"), Err(PromptEditError::EmptyVideo));
+        assert_eq!(p.scenes[0].motion_prompt, motion);
+        assert_eq!(p.scenes[0].video_prompt, video);
+    }
+
+    #[test]
+    fn set_scene_prompts_rejects_unknown_scene() {
+        let mut p = plan();
+        let motion = p.scenes[0].motion_prompt.clone();
+        assert_eq!(set_scene_prompts(&mut p, 99, "m", "v"), Err(PromptEditError::SceneNotFound(99)));
+        assert_eq!(p.scenes[0].motion_prompt, motion);
     }
 
     #[test]

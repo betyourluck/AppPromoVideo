@@ -183,6 +183,14 @@ Scene:                              # rev3 (2026-09-08、ユーザー FB「ス�
                                     # 各 -35〜35 度。範囲外は違反 (PlateTiltOutOfRange)。省略 = 正面。frontal モードでは無視される
   reference_image: Option<PathBuf>  # 生成後に埋まる
 
+ScenePromptEdit:                    # rev37 (2026-09-12 ユーザー「motion や video prompt は書き換え可能に。鉛筆でシーンの編集モードにしてから」)
+  why: "生成した文を貼る前に手で整えたい。ただし**常に書き換えられる欄**にすると、読むつもりの操作で壊れる — 編集モードを挟む"
+  mode: "結果ペインのシーンカードの鉛筆で**そのシーンだけ**編集モードへ。モード中は motion_prompt / video_prompt が入力欄。保存で確定、破棄で入る前の値に戻す。実行中は入れない"
+  where: "promo_core::plan::set_scene_prompts(plan, scene_id, motion, video) -> Result<(), PromptEditError> が唯一の書き換え。command update_scene_prompts(run_dir, scene_id, motion_prompt, video_prompt) が呼び、**書き換えた後の PromoJson を返す** (frontend が手元で真似ると食い違う。reburn_caption と同じ作法)"
+  empty: "**空にはできない** (前後の空白を落として空なら拒む)。motion_prompt_empty / video_prompt は検査の対象で、空のまま保存すると次の検査と食い違う。拒んだ時は**片方だけ書き換えない**"
+  files: "promo.json を書き直したら **scenes.md も書き直す** (パッケージの中で食い違わせない)。コピー先の文字列は plan から組むので、保存した時点でコピーにも反映される"
+  no_original: "コピー文の original_copy のような『最初の文』は持たない。プロンプトは再生成でやり直せ、run は隔離されている (rev7)"
+
 PlateMode:                          # rev5 (2026-09-08 Phase E 実測: 背景のパースと貼った面のパースが噛み合わない)。設定で切り替え、**既定 = frontal** (rev22)
   perspective: "scene.plate_tilt に従い、スクショ面を射影変換で傾けてから合成する。背景のアングルと整合する。tilt が 0 / 省略なら frontal と同じ経路 (画素等価)"
   frontal: "**既定** (rev22)。正面固定。plate_tilt を無視し、さらに image_prompt のアングル語 (low angle / top-down / tilted / three-quarter / isometric / overhead 等) を検査で弾いて背景も正対に保つ。絵の変化は乏しくなるが不整合は原理的に出ない"
