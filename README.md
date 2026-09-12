@@ -14,7 +14,7 @@
 
 <br />
 
-<video src="video/promovideo.mp4" controls="controls" muted="muted" width="100%"></video>
+<video src="https://github.com/betyourluck/AppPromoVideo/raw/refs/heads/main/video/promovideo.mp4" controls="controls" muted="muted" width="100%"></video>
 
 <br />
 
