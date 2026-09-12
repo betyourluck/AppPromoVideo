@@ -75,7 +75,9 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 ## 現状 (2026-09-12)
 
 - **spec 01 は Phase 0〜E 着地、rev42 まで反映済み (rev27〜29 は試行)。** crates 179 green / vitest 86 / backend 19 green・clippy clean。
-- コミットは Initial `a75c3bc` の上に積んでいる (**本数は数えない** — 書くたび 1 手遅れて嘘になる。`git rev-list --count a75c3bc..HEAD`)。`origin/main` には rev26 まで push 済み — **rev27〜29 (UI の試行、一時コミット) / rev30 (デザインの修正・多言語化) / rev31〜33 (履歴の全画面・比較の並び・チェックボックス、一時コミット) / data_contract.yaml の構文修正 / アプリのアイコン / rev34〜35 (スイッチ・設定の全画面) / rev36 (無い記録を描かない・アイコンのトグル) / rev37 (プロンプトの書き換え) / rev38 (生ログ・i18n の整理) / rev39 (agy 対応) / rev40〜41 (種類の食い違い) / rev42 (agy の初 live の回収) は未 push** (private。**週末に public 予定**)。
+- **agy でも通しが成功** (2026-09-12 21:13、ユーザー実機)。解析 → 構成 (1 回目で通過) → 参照画像 → 合成 → 見出しの焼き込み。
+  費用の chip は出ない (agy は費用を返さないので描かない)。
+- コミットは Initial `a75c3bc` の上に積んでいる (**本数は数えない** — 書くたび 1 手遅れて嘘になる。`git rev-list --count a75c3bc..HEAD`)。**`origin/main` には rev42 まで push 済み** (private。**週末に public 予定**)。未 push があるかは `git log --oneline origin/main..HEAD` で数える — ここに書くと 1 手遅れる。
 - 通し (解析 → 構成 → 参照画像 → 合成) は **4 リポジトリで live 成功** (Kataribe / Verificator /
   AppPromoVideo 自身 / Fuseforks)。**出口まで到達** — MiniMax i2v の 15 秒が X に投稿された (2026-09-09)。
 - CLI の認証は現行 `claude` なら子セッションからも通る。落ちる時は GUI 設定「OAuth ログインを使う」ON。
