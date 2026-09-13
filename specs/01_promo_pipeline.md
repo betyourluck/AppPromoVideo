@@ -1503,7 +1503,12 @@ Tauri が `tauri.conf.json > version must be a semver string` で拒んだ。3 O
 `Notarization Ticket=stapled`) → `stapler validate` (`The validate action worked!`) → **`spctl -a -vv` = `accepted / source=Notarized Developer ID`**。
 3 つは主張の強さが違い、`spctl` の accepted だけが「Gatekeeper が実際に受け入れる」を意味する。
 
-**接地の限界**: 実機は GitHub の `macos-latest` ランナーで、ユーザーの Mac では未確認。`brew audit --strict` は情報のみ (落とさない)。
+**`brew audit --strict` が 1 件指摘した** — `url` の `verified:` パラメータが非推奨 (8 月の Fuseforks では指摘ゼロだったので、
+その後 Homebrew 側が変えた)。url と homepage が同じホストなので、もともと要らない引数だった。tap の 3 cask から揃えて外し
+(`cc0ca03`)、再実行で `spctl` accepted のまま audit の指摘ゼロ。**tap の検査は新しい cask を足すたびに古い cask の非推奨も拾う** —
+情報のみで落とさない設定なので、ログを読まないと気づかない。
+
+**接地の限界**: 実機は GitHub の `macos-latest` ランナーで、ユーザーの Mac では未確認。
 
 ## 検討した代案: Remotion (2026-09-08、採用しない)
 
