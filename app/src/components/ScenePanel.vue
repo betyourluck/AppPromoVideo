@@ -3,10 +3,11 @@
  * 中央ペイン: 要約 / シーン表 / 参照画像。コピーはプロバイダ別 (契約 ExportPackage.clipboard):
  * Veo / Sora はプロンプトのみ、汎用は別行にメタ。`--ar` はどこにも出さない。
  */
-import { computed, ref } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../store";
 import { runHeaderStats } from "../runs";
+import { currentPhase, elapsedLabel, phaseSteps } from "../runPhase";
 import type { Scene, SceneOp } from "../types";
 import { t } from "../i18n";
 import Lightbox from "./Lightbox.vue";
@@ -21,6 +22,40 @@ const target = ref<Target>("minimax");
 const copiedSceneId = ref<number | null>(null);
 
 const promo = computed(() => store.result?.promo ?? null);
+
+/**
+ * 実行中ブロック (rev49、ユーザー「実行中は画面が固まっているように見える」)。
+ * 段は進捗ログの stage から (`runPhase.ts`)、経過時間は running が立った時刻から 1 秒刻み。
+ * 経過時間は**アニメーションを切った環境 (prefers-reduced-motion) でも動いていることが分かる**ための表示。
+ */
+const phaseKey = { brief: "scene.phaseBrief", analyze: "scene.phaseAnalyze", plan: "scene.phasePlan", images: "scene.phaseImages" } as const;
+const steps = computed(() => phaseSteps(currentPhase(store.log), store.image.enabled));
+const startTs = ref(Date.now());
+const now = ref(Date.now());
+let ticker: number | undefined;
+watch(
+  () => store.running,
+  (running) => {
+    if (running) {
+      startTs.value = Date.now();
+      now.value = startTs.value;
+      ticker = window.setInterval(() => (now.value = Date.now()), 1000);
+    } else if (ticker !== undefined) {
+      window.clearInterval(ticker);
+      ticker = undefined;
+    }
+  },
+  { immediate: true },
+);
+onUnmounted(() => {
+  if (ticker !== undefined) window.clearInterval(ticker);
+});
+const elapsed = computed(() => elapsedLabel(startTs.value, now.value));
+const lastText = computed(() => {
+  const last = store.log[store.log.length - 1];
+  if (!last || last.stage === "error") return "";
+  return last.text.length > 120 ? last.text.slice(0, 120) + "…" : last.text;
+});
 
 /**
  * プロンプトの編集モード (rev37、ユーザー「鉛筆を押してシーンの編集モードにしてから書き換えたい」)。
@@ -156,8 +191,20 @@ function openRef(sceneId: number) {
   <!-- 案内 (rev44) の 4 歩目: 出力エリア全体。 -->
   <div class="panel wrap" data-tour="result">
     <template v-if="!promo">
-      <h2>{{ t('scene.result') }}</h2>
-      <div class="empty-guide">
+      <h2>{{ store.running ? t('scene.runningTitle') : t('scene.result') }}</h2>
+      <!-- rev49: 実行中は案内ではなく、段と経過時間を出す (固まって見せない)。 -->
+      <div v-if="store.running" class="empty-guide running-block" data-testid="running-block">
+        <Icon name="refresh" :size="32" class="guide-icon spin" />
+        <ol class="phases">
+          <li v-for="s in steps" :key="s.phase" :class="s.state">
+            <span class="dot"></span>
+            <span>{{ t(phaseKey[s.phase]) }}</span>
+          </li>
+        </ol>
+        <p class="muted mono elapsed">{{ t('scene.elapsed', { t: elapsed }) }}</p>
+        <p v-if="lastText" class="muted last">{{ lastText }}</p>
+      </div>
+      <div v-else class="empty-guide">
         <Icon name="sparkles" :size="32" class="guide-icon" />
         <p class="muted">{{ t('scene.emptyGuide') }}</p>
       </div>
@@ -223,7 +270,7 @@ function openRef(sceneId: number) {
         </button>
         <!-- アプリ固有の重要アクション: テキスト「参照画像を生成」は維持 -->
         <button class="btn small primary" :disabled="store.imaging || store.running" @click="store.makeImages()">
-          <Icon :name="store.imaging ? 'refresh' : 'image'" :size="13" />
+          <Icon :name="store.imaging ? 'refresh' : 'image'" :size="13" :class="{ spin: store.imaging }" />
           <span>{{ store.imaging ? t('scene.makingImages') : t('scene.makeImages') }}</span>
         </button>
       </div>
@@ -333,6 +380,51 @@ function openRef(sceneId: number) {
 .guide-icon {
   color: rgb(var(--accent2) / 0.5);
   margin-bottom: 12px;
+}
+/* rev49: 実行中ブロック。段の一覧は done / active / todo で描き分ける。 */
+.running-block .guide-icon {
+  color: rgb(var(--accent) / 0.9);
+}
+.phases {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap; /* 狭いペインでは段ごと折り返す (名前の途中で折らない。800px 幅で実測) */
+  justify-content: center;
+  gap: 10px 18px;
+  font-size: var(--fs-md);
+}
+.phases li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  color: rgb(var(--text) / 0.45);
+}
+.phases li.done {
+  color: rgb(var(--text) / 0.7);
+}
+.phases li.active {
+  color: rgb(var(--accent));
+  font-weight: var(--fw-semi);
+}
+.phases .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.phases li.active .dot {
+  box-shadow: 0 0 0 4px rgb(var(--accent) / 0.25);
+}
+.elapsed {
+  margin: 0 0 6px;
+}
+.last {
+  max-width: 560px;
+  margin: 0;
+  font-size: var(--fs-sm);
 }
 .head {
   display: flex;

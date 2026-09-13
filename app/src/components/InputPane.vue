@@ -111,7 +111,7 @@ const canRun = computed(
     <div class="row action-row" style="margin-top: 14px">
       <!-- アプリ固有のコアボタン: テキスト「解析 → シーン構成」は維持 -->
       <button class="btn primary run-btn" data-tour="run" :disabled="!canRun" @click="store.run()">
-        <Icon :name="store.running ? 'refresh' : 'sparkles'" :size="16" />
+        <Icon :name="store.running ? 'refresh' : 'sparkles'" :size="16" :class="{ spin: store.running }" />
         <span>{{ store.running ? t('input.running') : t('input.run') }}</span>
       </button>
       <button v-if="store.running" class="btn danger" @click="store.cancel()">

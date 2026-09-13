@@ -104,7 +104,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   (書いてあるのに入らない、を避ける)。次の版は `wingetcreate update Outcasts.AppPromoVideo --version <V> --urls <MSI URL>` →
   ローカル生成 → `InstallerLocale` が混ざっていたら消す → `wingetcreate submit --token "$(gh auth token)"`。提出前に
   `gh repo sync betyourluck/winget-pkgs --source microsoft/winget-pkgs --branch master`。
-- **spec 01 は Phase 0〜E 着地、rev47 まで反映済み (rev27〜29 は試行)。** crates 188 green / vitest 118 / backend 25 green・clippy clean。
+- **spec 01 は Phase 0〜E 着地、rev49 まで反映済み (rev27〜29 は試行)。** crates 191 green / vitest 127 / backend 25 green・clippy clean。
 - **agy でも通しが成功** (2026-09-12 21:13、ユーザー実機)。解析 → 構成 (1 回目で通過) → 参照画像 → 合成 → 見出しの焼き込み。
   費用の chip は出ない (agy は費用を返さないので描かない)。
 - コミットは Initial `a75c3bc` の上に積んでいる。**本数も push 済みの範囲もここに書かない** — 書くたび 1 手遅れて嘘になる (実際に 2026-09-12、`rev42 まで push 済み` と書いた行の中に 「ここに書くと 1 手遅れる」と併記する矛盾を作った)。数えるなら `git rev-list --count a75c3bc..HEAD` と `git log --oneline origin/main..HEAD`。**公開リポジトリ** (MIT、`LICENSE`)。
@@ -146,6 +146,9 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 どちらも合成・焼き込みと同じ関数から座標を取る。
 **編集はダイアログ** (rev16、左が絵・右がつまみ)。絵を大きく見るためで、mood カットにも出る。
 未適用のまま閉じようとすると確認が出る。
+**実行中は中央ペインに実行中ブロック** (rev49、`ScenePanel` + `runPhase.ts`): 回る矢印 / 段 (brief → analyze → plan → images) / 経過時間 / 最新の進捗 1 行。
+段は進捗 event の `stage` から、**今の run の範囲 (最後の `ui` 行から後ろ) だけ**で導く。矢印の回転は `main.css` の `.spin` (reduced-motion では止まり、経過時間が「動いている」を担う)。
+**動きを測るときは `document.visibilityState` を先に見る** — 隠れたペインでは `getAnimations().currentTime` が 0 のまま (rev34 の同型)。
 **初回起動のナビゲーション** (rev44、`FirstRunTour.vue`。Lorekeel の移植)。**手順を教えるだけ**で、案内の中から実行はさせない。
 対象は `data-tour` を付けた実物の要素で、1 歩目だけ印が 2 つ (実行ボタン以外を束ねて囲む)。初回だけ出す — 使った痕跡があれば印だけ立てる。**一度使った環境では出ないので、設定画面の「使い方を見る」が唯一の入口** (rev45)。
 **確認はアプリ内のメッセージボックス** (`dialog.ts` の `ask` + `MessageBox.vue`、rev26)。

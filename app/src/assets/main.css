@@ -481,3 +481,20 @@ pre.block {
   user-select: text;
   -webkit-user-select: text;
 }
+
+/* rev49: 実行中の印。矢印 (実行ボタン / 参照画像ボタン / 中央の実行中ブロック) を回す。
+   回転を切る環境 (prefers-reduced-motion) では経過時間の表示が「動いている」を担う。 */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spin {
+  animation: spin 1s linear infinite;
+  transform-origin: 50% 50%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}

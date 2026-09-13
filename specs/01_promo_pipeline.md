@@ -1466,6 +1466,36 @@ crates 188 → 191。
 **ユーザー側の処方** (アプリ外): そのプラグインを無効にする (`~/.gemini/config/config.json` の `plugins.googlecloudtools.datacloud_telemetry.enabled: false`) か、
 `hooks.json` の `command` から引用符を外す。この hook は agy の全ツールに掛かるので、**このアプリに限らず agy が動かない**状態。
 
+## rev49 (2026-09-13、実行中を動かして見せる — 矢印の回転と中央の実行中ブロック)
+
+**ユーザー報告** (配布ビルド、スクリーンショット)「実行中は画面が固まっているように見える。ボタンの矢印が回転していないし、
+中央のペインに何か実行中の動くブロックを入れたほうがいい」。
+
+**観察**: 回転は**そもそも定義されていなかった** (`@keyframes` は初回案内と Lightbox のフェードだけ)。中央ペインは
+`v-if="!promo"` で実行中も「左でリポジトリと…」の案内のまま。動いているのは右の進捗ログだけで、
+LLM の解析は数分かかるので、その間ユーザーが見る場所 (中央) に変化が無かった。
+
+187. **回す** — `main.css` に `@keyframes spin` / `.spin` (1s linear infinite)。実行ボタンの矢印 (`InputPane`)、
+     「参照画像を生成」の矢印、中央ブロックの矢印に `:class="{ spin: running }"`。`prefers-reduced-motion: reduce` では止める。
+188. **中央に実行中ブロック** (`ScenePanel`、`!promo && store.running`): 回る矢印 + 段の一覧 (リポジトリを読む → 解析 →
+     シーン構成 → 参照画像 [画像 on の時だけ]) + 経過時間 `m:ss` + 最新の進捗 1 行 (120 字まで、error は出さない)。
+     見出しも「結果」→「実行中」。
+189. **段は進捗 event の `stage` から導く** (`runPhase.ts`、純関数)。backend の `emit` が brief / analyze / plan / images を
+     入れている。**今の run の範囲だけ見る** (最後の `ui` 行 = 実行開始 から後ろ) — ログは run をまたいで残るので、
+     前の run の `images` を今の段と読まないため。段がまだ無ければ最初の段を active にする (固まって見せない)。
+190. **経過時間は回転の代替**: アニメーションを切った環境でも「動いている」が分かる唯一の表示。1 秒刻み、
+     `running` が立った時刻から (履歴の切り替えで部品が後から載った時は載った時刻からの近似)。
+
+**PoC**: `runPhase.test.ts` 9 本 (Red = module 無し → Green)。vitest 118 → 127、build green。
+**実測** (ブラウザのペイン、ユーザーの `tauri dev` の vite に接続、ストアに running と進捗 4 行を注入):
+ブロックあり・見出し「実行中」・段 `done:リポジトリを読む / active:解析 / todo:シーン構成 / todo:参照画像`・経過 0:01 → 0:35 → 0:59 と刻む・
+`.spin` 2 要素 (実行ボタン + ブロック) に `spin 1s`、`getAnimations()[0].currentTime` が 400ms で 417ms 進み transform も変化。
+**罠を 1 つ踏み直した**: 最初の測定はペインが `visibility: hidden` で `currentTime` が 0 のまま (rev34 の「描画が止まったページでは
+時間が進まない」と同型)。スクリーンショットで前面に出してから測り直した。**動きを測るときは `document.visibilityState` を先に見る。**
+狭いペイン (800px) で段の名前が途中で折れたので `white-space: nowrap` + `flex-wrap` (段ごと折り返す) に直した。
+
+**接地の限界**: 配布ビルド (Tauri の WebView2) では未目視。回転の見た目 (速さ・色) はユーザーの目視待ち。
+
 ## 公開とリリース (2026-09-13)
 
 **public にした。** MIT (`LICENSE`)。公開前の洗い出しで、**追跡ファイルに個人情報が入っていた**のを消した —
@@ -1682,6 +1712,7 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [x] rev46 (2026-09-12): ブランドの標を 1 か所に (180)。ブラウザで実効値を突合、1 歩目の枠とカードも実測。vitest 112 / build green
 - [x] rev47 (2026-09-12): 配布ビルドの締め (181〜183、契約 `DesktopGuards`)。右クリックと F5 は既にあり、文字の選択を追加。vitest 118 / build green。**配布ビルドでは未確認**
 - [x] rev48 (2026-09-13): agy のツール失敗を進捗に出す (184〜186、契約 `AgyStreamLine.tool_error` / `IsolationGuarantee.watchdog.escape_visible`)。crates 191 green
+- [x] rev49 (2026-09-13): 実行中を動かして見せる (187〜190)。矢印の回転 + 中央の実行中ブロック (段 / 経過時間 / 最新の進捗)。vitest 127 / build green、ブラウザで実測。**配布ビルドでは未目視**
 - [x] **agy で通しが成功** (2026-09-12 21:13、ユーザー実機): 解析 → 構成 (1 回目で通過) → 参照画像 3 枚 → 合成 → 見出しの焼き込み。
       166 は効いた (`run_command` への逃げは起きなかった)。168 も効いた (**費用の chip が出ていない**)。`runs/20260912-121310`
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度 / `RunStats` の live 記録 (frontal の費用)
