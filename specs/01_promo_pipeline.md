@@ -1490,6 +1490,21 @@ Tauri が `tauri.conf.json > version must be a semver string` で拒んだ。3 O
 
 **残り**: `Upload artifacts` step (7 日限りの artifact) は Release Assets と同じものの複製で、Fuseforks は撤去した。こちらはまだ残っている。
 
+### Homebrew tap (2026-09-13 午後)
+
+ユーザーが `v0.1.1` を publish → `betyourluck/homebrew-tap` に `Casks/apppromovideo.rb` を足した (`4617ea8`)。
+形は Fuseforks / Lorekeel の cask と同じ: `version` / `sha256` (Release API の `digest`、dmg は落としていない) /
+`url` に `verified:` / `livecheck :github_latest` / `depends_on arch: :arm64` / `app "AppPromoVideo.app"` / `zap` は
+`jp.outcasts.apppromovideo` の下 6 か所。**`auto_updates` は付けない** (updater が無いので、付けると `brew upgrade` から外れる) /
+**`depends_on macos:` は書かない** (OS 下限を測っていない)。**v0.1.0 は載せない** — 未署名で、検疫付きでは Gatekeeper が拒む。
+
+`verify-cask.yml` (手動、`cask=apppromovideo`) は初回で全段 success:
+`brew info` (Ruby の評価) → `brew install --cask` (検疫付き) → `codesign -dvv` (`Authority=Developer ID Application: … (6XU323VJZN)`,
+`Notarization Ticket=stapled`) → `stapler validate` (`The validate action worked!`) → **`spctl -a -vv` = `accepted / source=Notarized Developer ID`**。
+3 つは主張の強さが違い、`spctl` の accepted だけが「Gatekeeper が実際に受け入れる」を意味する。
+
+**接地の限界**: 実機は GitHub の `macos-latest` ランナーで、ユーザーの Mac では未確認。`brew audit --strict` は情報のみ (落とさない)。
+
 ## 検討した代案: Remotion (2026-09-08、採用しない)
 
 React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](https://github.com/remotion-dev/remotion))。

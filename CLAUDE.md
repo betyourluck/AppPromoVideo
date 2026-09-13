@@ -89,9 +89,12 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   `verify-notary.yml` (手動、Fuseforks から移植) で公証の資格情報だけを 1 分で検証できる。署名した配布物には実名が載る (Fuseforks で承知済み)。
   **タグは `X.Y.Z` の形で打つ** — `v0.1.1-` (末尾ハイフン) は semver でなく、以前は cargo test を終えた後の build で 3 OS 一斉に落ちた。
   今は Extract の段で拒む (failures.md 2026-09-13)。
-- **次の主題: Mac の Homebrew 対応** (2026-09-13 ユーザー)。署名済みの dmg は出たので、**tap に cask を足す段階**。
-  Lorekeel / Fuseforks が同じ道を通っている (tap は `betyourluck/homebrew-tap`、`verify-cask.yml` の `spctl` の accepted だけが
-  「Gatekeeper が実際に受け入れる」を意味する。`--no-quarantine` は使わない)。公式 homebrew-cask は注目度の門 (225 stars) で対象外。
+- **Homebrew で入る (2026-09-13)**: `brew install --cask betyourluck/tap/apppromovideo` (完全修飾名は省略できない)。
+  cask は `D:/Github/homebrew-tap/Casks/apppromovideo.rb` (v0.1.1 から。v0.1.0 は未署名なので載せない)。
+  tap の `verify-cask.yml` を実機 (macos-latest) で回し、**`spctl -a -vv` が `accepted / source=Notarized Developer ID`** —
+  これだけが「Gatekeeper が実際に受け入れる」の証拠 (codesign と stapler は構造物の主張)。
+  **新版を出したら cask の `version` と `sha256` (Release API の `digest`) を更新する** — Fuseforks / Lorekeel と同じ手順で、
+  `auto_updates` は付けていないので更新は `brew upgrade` が拾う。公式 homebrew-cask は注目度の門 (225 stars) で対象外。
 - **spec 01 は Phase 0〜E 着地、rev47 まで反映済み (rev27〜29 は試行)。** crates 188 green / vitest 118 / backend 25 green・clippy clean。
 - **agy でも通しが成功** (2026-09-12 21:13、ユーザー実機)。解析 → 構成 (1 回目で通過) → 参照画像 → 合成 → 見出しの焼き込み。
   費用の chip は出ない (agy は費用を返さないので描かない)。

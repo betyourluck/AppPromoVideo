@@ -1226,3 +1226,13 @@ semver の検査を足し (手元の bash で Red/Green)、誤タグを消して
 Release `v0.1.1` は draft で 7 点。アプリのコードは変わっていない (版番号と workflow だけ)。
 
 **次**: Homebrew の tap に cask を足す (`betyourluck/homebrew-tap`、`verify-cask.yml` の `spctl` を本命に)。
+
+## 2026-09-13 (午後・続) — Homebrew tap に載った
+
+ユーザーが `v0.1.1` を publish。tap に cask を足し、`verify-cask.yml` を実機ランナーで回して
+`spctl -a -vv` の `accepted / source=Notarized Developer ID` まで確認した (初回で通過)。
+これで **次の主題「Mac の Homebrew 対応」は閉じた** — `brew install --cask betyourluck/tap/apppromovideo`。
+
+朝の問い「Apple での登録はどうすればいいか」から、登録済みの発見 → secret 5 つ → 公証の資格情報の検証 → v0.1.1 の
+署名ビルド (誤タグで 1 回落ちた) → publish → cask → Gatekeeper の受け入れ確認まで、1 日で通した。
+通ったのは Fuseforks が同じ道を先に歩いて台帳に残していたからで、こちらで新しく解いた問題は semver 検査の 1 つだけ。
