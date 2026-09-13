@@ -96,6 +96,14 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   これだけが「Gatekeeper が実際に受け入れる」の証拠 (codesign と stapler は構造物の主張)。
   **新版を出したら cask の `version` と `sha256` (Release API の `digest`) を更新する** — Fuseforks / Lorekeel と同じ手順で、
   `auto_updates` は付けていないので更新は `brew upgrade` が拾う。公式 homebrew-cask は注目度の門 (225 stars) で対象外。
+- **winget は提出済み・マージ待ち (2026-09-13)**: `Outcasts.AppPromoVideo` 0.1.1 を [winget-pkgs PR #434054](https://github.com/microsoft/winget-pkgs/pull/434054)
+  で New-Package 提出 (Fuseforks は 12 日でマージ、Lorekeel の PR #427244 は 2026-09-01 提出で未マージ)。**MSI のみ・`InstallerLocale` を書かない・
+  `Scope: machine`** (Fuseforks / Lorekeel と同じ 3 判断。`InstallerLocale: en-US` を書くと日本語環境の `winget upgrade` が落ちる)。
+  `ProductCode` は版ごとに変わるので**次の版は必ず新しい MSI から読み直す** (PowerShell の `WindowsInstaller.Installer` COM で読める)。
+  マニフェストの正本は winget-pkgs 側、手元の `manifests/` は `.gitignore`。**マージされるまで README に winget を書かない**
+  (書いてあるのに入らない、を避ける)。次の版は `wingetcreate update Outcasts.AppPromoVideo --version <V> --urls <MSI URL>` →
+  ローカル生成 → `InstallerLocale` が混ざっていたら消す → `wingetcreate submit --token "$(gh auth token)"`。提出前に
+  `gh repo sync betyourluck/winget-pkgs --source microsoft/winget-pkgs --branch master`。
 - **spec 01 は Phase 0〜E 着地、rev47 まで反映済み (rev27〜29 は試行)。** crates 188 green / vitest 118 / backend 25 green・clippy clean。
 - **agy でも通しが成功** (2026-09-12 21:13、ユーザー実機)。解析 → 構成 (1 回目で通過) → 参照画像 → 合成 → 見出しの焼き込み。
   費用の chip は出ない (agy は費用を返さないので描かない)。

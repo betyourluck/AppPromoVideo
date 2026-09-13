@@ -10,3 +10,6 @@ app/src-tauri/gen/schemas/
 blackboard/
 # Claude Code の手元の設定 (launch.json など)。成果物ではない (ユーザー判断 2026-09-12)
 .claude/
+
+# winget のマニフェストは正本が winget-pkgs 側 (wingetcreate の作業物。Fuseforks / Lorekeel と同じ流儀)
+manifests/

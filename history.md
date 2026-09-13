@@ -1242,3 +1242,10 @@ Release `v0.1.1` は draft で 7 点。アプリのコードは変わってい�
 どちらもユーザー裁定。`v0.1.0` は未署名版なので draft のまま消した (タグは残す)。`Upload artifacts` は Release Assets の
 7 日限りの複製で、Fuseforks が private 時代に 500 MB の枠超えでビルドを落とした型 — このリポジトリは public で枠の実害は無いが、
 同じ形は同じ理由で置かない。撤去した名前で台帳を grep し、spec 01 の「残り」1 行を回収した。
+
+## 2026-09-13 (夕・続) — winget を提出
+
+ユーザー指示で `Outcasts.AppPromoVideo` 0.1.1 を winget-pkgs へ New-Package 提出 (PR #434054)。
+Fuseforks / Lorekeel の台帳をそのまま継承 (MSI のみ・`InstallerLocale` 無し・`Scope: machine`)。
+`ProductCode` は MSI を落として COM で読み、SHA256 は digest と突合。`winget validate` 通過 → `wingetcreate submit --token`。
+マージまでは README に書かない。

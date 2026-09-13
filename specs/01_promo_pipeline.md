@@ -1513,6 +1513,27 @@ Tauri が `tauri.conf.json > version must be a semver string` で拒んだ。3 O
 
 **接地の限界**: 実機は GitHub の `macos-latest` ランナーで、ユーザーの Mac では未確認。
 
+### winget (2026-09-13 午後、提出 = マージ待ち)
+
+ユーザー「winget も登録しておきましょう。名前は Outcasts AppPromoVideo。locale は英語限定にしない」。
+`Outcasts.AppPromoVideo` 0.1.1 を [PR #434054](https://github.com/microsoft/winget-pkgs/pull/434054) で提出した。
+手順と判断は Fuseforks (2026-08-17 提出 → 08-29 マージ) と Lorekeel (PR #427244) の継承で、新しく決めたことは無い:
+
+- **MSI のみ** (`ProductCode` / `UpgradeCode` で更新・削除の検出が構造で決まる。NSIS は ARP の照合頼みで `CompanyName` が空)
+- **`InstallerLocale` を書かない** (ユーザー指示と一致。en-US を宣言すると日本語環境のインストール記録 ja-JP と突き合わされ
+  `winget upgrade` が `UPDATE_NOT_APPLICABLE` で落ちる — Fuseforks が実機で踏んだ)
+- **`Scope: machine`** (MSI の `ALLUSERS = 1` を Property 表から実読)
+- 識別子は `Outcasts.` 名前空間 (MSI の `Manufacturer = outcasts`、Tauri が `jp.outcasts.apppromovideo` から導出。Fuseforks と同じで、
+  Lorekeel だけ `lorekeel` になっている)
+
+**版ごとの値 (0.1.1)**: `ProductCode = {6E9D3FB4-09D8-4154-800A-5E243A26C8DC}` / `UpgradeCode = {49E79E4E-3F8F-5695-A081-6F8C1607EAAF}`
+(不変。tauri-bundler が `uuid_v5(DNS, "AppPromoVideo.exe.app.x64")` で導出 — **`productName` を変えると変わり、新版が旧版を差し替えられなくなる**) /
+SHA256 は手元の実ファイルと Release API の `digest` で二経路一致。`ProductCode` は PowerShell の `WindowsInstaller.Installer` COM で
+Property 表から読んだ (`wingetcreate new` は対話式なので使わず、Lorekeel の 0.5.19 と同じ形で手書き → `winget validate` → `wingetcreate submit --token`)。
+
+**残**: マージ待ち (New-Package の中央値 15 日) → マージ後にカタログ配信 (別途 2 時間弱) → `winget search apppromovideo` で実機確認 →
+README 英日に winget を追記。**提出中に新版が出ても PR は差し替えない** (Lorekeel 2026-09-01 の裁定)。
+
 ## 検討した代案: Remotion (2026-09-08、採用しない)
 
 React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](https://github.com/remotion-dev/remotion))。
