@@ -1472,6 +1472,24 @@ history は Lorekeel / fuseforks の Accepted を返した。
 `v0.1.0` の配布物は未署名のまま — **署名済みの dmg は次のタグから**。
 署名した配布物には `codesign -dvv` で読める実名が載る (個人登録の CN。Fuseforks で承知済みの判断)。
 
+### `v0.1.1` — 署名と公証が通った (2026-09-13 昼)
+
+**3 OS とも green、Release は draft で 7 点。** macOS のログ:
+`Signing with identity "Developer ID Application: kosei takahashi (…)"` (実行ファイル → .app → zip の順) →
+`Notarizing Finished with status Accepted for id fc88c4ca-…` → `Stapling app...` → dmg も署名。
+証明書の取り込みは**この実ビルドで初めて検証された** (verify-notary は公証の資格情報しか見ない)。
+
+**アプリのコードは 1 行も変わっていない。** 差分は版番号 3 か所 (`tauri.conf.json` / `package.json` / `src-tauri/Cargo.toml`) と
+`build.yml` の semver 検査だけ。Fuseforks v0.1.9 と同じ**「配布物の性質だけが変わった版」** — Windows と Linux には更新する理由が無い。
+Release の説明にはそう書く (書かないと全体に掛かると読まれる)。**署名の射程は macOS だけ**で、Windows の installer は未署名のまま。
+
+**途中で 1 回落ちた** — ユーザーが打ったタグが `v0.1.1-` (末尾ハイフン) で、`APP_VERSION=0.1.1-` が semver でなく
+Tauri が `tauri.conf.json > version must be a semver string` で拒んだ。3 OS とも **cargo test を終えた後の build で**落ちたので
+10 分以上無駄になった。Extract の段に semver の検査を足し (手元の bash で `v0.1.1-` / `v0.1.1.` を拒み `v0.1.1` / `v0.2` / `v1.0.0-rc.1` を
+通すことを確認)、誤タグは削除して `v0.1.1` を打ち直した。Apple の秘密には到達していなかったので、署名の成否とは無関係。
+
+**残り**: `Upload artifacts` step (7 日限りの artifact) は Release Assets と同じものの複製で、Fuseforks は撤去した。こちらはまだ残っている。
+
 ## 検討した代案: Remotion (2026-09-08、採用しない)
 
 React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](https://github.com/remotion-dev/remotion))。

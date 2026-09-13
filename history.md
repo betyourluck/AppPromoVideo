@@ -1215,3 +1215,14 @@ Accepted の履歴を返した)。**証明書の取り込みは実ビルドで�
 **観察**: 三点測量の 1 点目 (Fuseforks の CLAUDE.md) で「登録済み」が分かった。手順を一から答えていたら、
 既に持っている証明書を二重に発行させるところだった。**「どうすれば」の問いには、まず「もう持っていないか」を測る。**
 
+## 2026-09-13 (午後) — v0.1.1、署名と公証が通った
+
+ユーザーの「CI」で私がタグを打つ段取りにしたが、ユーザーが先に `v0.1.1-` (末尾ハイフン) を push しており、
+3 OS とも build で落ちた (`version must be a semver string`)。Extract の段で検めていなかったので、
+cargo test を終えた後 10 分以上たってからの失敗だった。**検査は入口に置く** — 落ちるなら数秒で、原因が分かる文言で。
+semver の検査を足し (手元の bash で Red/Green)、誤タグを消して `v0.1.1` を打ち直した。
+
+2 回目は 3 OS green。macOS のログで署名 → 公証 Accepted → staple → dmg 署名を確認。**証明書の取り込みはこの実ビルドが初検証**。
+Release `v0.1.1` は draft で 7 点。アプリのコードは変わっていない (版番号と workflow だけ)。
+
+**次**: Homebrew の tap に cask を足す (`betyourluck/homebrew-tap`、`verify-cask.yml` の `spctl` を本命に)。
