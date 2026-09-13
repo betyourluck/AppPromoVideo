@@ -78,11 +78,17 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 - **公開した (2026-09-13)。** MIT (`LICENSE`)、`origin` は public。`v0.1.0` のタグで CI が**初回から 3 OS とも green**、
   Release に installer 7 点 (exe / msi / deb / rpm / AppImage / dmg / app.tar.gz)。
-  **配布物の性質**: ①**macOS は未署名・未公証** — Apple の秘密 5 つが未設定なので Gatekeeper が止める
+  **配布物の性質**: ①**`v0.1.0` の macOS は未署名・未公証** (ビルド時に Apple の秘密が無かった)
   ②**macOS は aarch64 のみ** (`macos-latest` が arm ランナー。Intel Mac は対象外)。
   どちらも後から「なぜ動かない」と聞かれる種類なので、Release の説明に書いておくこと。
+- **Apple の秘密 5 つは入った (2026-09-13 昼、ユーザー)。** 登録は新規ではなく **Fuseforks で取った Developer ID
+  (Team `6XU323VJZN`、証明書は 2031-08 まで) の流用** — 証明書はアカウント単位でアプリごとには要らない。
+  材料は `~/.apple-signing/`。`verify-notary.yml` (手動、Fuseforks から移植) で **公証の資格情報は通った**
+  (`notarytool history` が Accepted の履歴を返した)。**証明書の取り込みは未検証** — それを試すのは実ビルドだけなので、
+  次のタグで初めて分かる。署名した配布物には実名が載る (Fuseforks で承知済み)。
 - **次の主題: Mac の Homebrew 対応** (2026-09-13 ユーザー)。**cask は検疫付きで配るので、
-  未署名のままだと Gatekeeper に止まる** — 署名と公証が先に要る (Lorekeel / Fuseforks が同じ道を通っている)。
+  未署名のままだと Gatekeeper に止まる** — 署名と公証が先 (秘密は入ったので、次のタグで署名済みの dmg を出してから)。
+  Lorekeel / Fuseforks が同じ道を通っている (tap は `betyourluck/homebrew-tap`、`verify-cask.yml` の `spctl` が本命)。
 - **spec 01 は Phase 0〜E 着地、rev47 まで反映済み (rev27〜29 は試行)。** crates 188 green / vitest 118 / backend 25 green・clippy clean。
 - **agy でも通しが成功** (2026-09-12 21:13、ユーザー実機)。解析 → 構成 (1 回目で通過) → 参照画像 → 合成 → 見出しの焼き込み。
   費用の chip は出ない (agy は費用を返さないので描かない)。

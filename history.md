@@ -1202,3 +1202,16 @@ Release に installer 7 点が揃った。通ったのは移植元が実運用�
 
 **次の主題は Mac の Homebrew 対応。** cask は検疫付きで配るので、未署名のままでは Gatekeeper に止まる —
 署名と公証が先。Lorekeel / Fuseforks が同じ道を通っている。
+
+## 2026-09-13 (昼) — Apple の秘密と公証の資格情報の検証
+
+ユーザーの問い「Apple での登録はどうすればいいか」。答えは**登録済み** — Fuseforks の v0.1.9 で取った
+Developer ID (Team `6XU323VJZN`) が `~/.apple-signing/` に残っており、証明書はアカウント単位なので流用できる。
+足りなかったのはリポジトリの secret だけ (Fuseforks には 5 つ、こちらは 0)。ユーザーが手元の材料から 5 つを入れた。
+
+`verify-notary.yml` を Fuseforks から移植し、手動実行 1 回で通過 (APPLE_PASSWORD 19 文字、`notarytool history` が
+Accepted の履歴を返した)。**証明書の取り込みは実ビルドでしか試せない**ので、署名の成否は次のタグで分かる。
+
+**観察**: 三点測量の 1 点目 (Fuseforks の CLAUDE.md) で「登録済み」が分かった。手順を一から答えていたら、
+既に持っている証明書を二重に発行させるところだった。**「どうすれば」の問いには、まず「もう持っていないか」を測る。**
+

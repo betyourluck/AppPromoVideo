@@ -1454,6 +1454,24 @@ fixture 3 本と specs に Windows のアカウント名、`agy_empty_success.js
 Gatekeeper に止まる** — 署名と公証が先に要る。Lorekeel / Fuseforks が同じ道を通っているので、
 着手時はそちらを先に読む (掟)。
 
+### 署名と公証の準備 (2026-09-13 昼)
+
+**Apple への登録は要らなかった。** Fuseforks の v0.1.9 (2026-08-17) で取った Developer ID Application
+証明書 (Team `6XU323VJZN`、G2 Sub-CA、期限 2031-08-17) は**アカウント単位**で、アプリごとには要らない。
+材料は `~/.apple-signing/` に残っていた (p12 / base64 / 証明書パスワード)。**GitHub の secret は読み戻せない**ので
+Fuseforks から写すのではなく、手元の材料から AppPromoVideo に 5 つを入れ直した (ユーザーが実行。
+パスワード類は対話で貼り付け、証明書パスワードは `tr -d '
+'` で末尾改行を落とす — Fuseforks で 1 文字ずれた事故の対)。
+
+**`verify-notary.yml` を Fuseforks から移植した** (手動。公証の資格情報 3 つだけを `notarytool history` で
+1 分で検証する。値は出さず、在るかと文字数だけ)。**初回で通過** — APPLE_PASSWORD は 19 文字 (App 固有パスワードの形)、
+history は Lorekeel / fuseforks の Accepted を返した。
+
+**接地の限界**: この workflow が検証したのは**公証の資格情報だけ**。`APPLE_CERTIFICATE` /
+`APPLE_CERTIFICATE_PASSWORD` の取り込み (keychain への import) は実ビルドでしか試せない。
+`v0.1.0` の配布物は未署名のまま — **署名済みの dmg は次のタグから**。
+署名した配布物には `codesign -dvv` で読める実名が載る (個人登録の CN。Fuseforks で承知済みの判断)。
+
 ## 検討した代案: Remotion (2026-09-08、採用しない)
 
 React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](https://github.com/remotion-dev/remotion))。
