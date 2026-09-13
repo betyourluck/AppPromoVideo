@@ -1236,3 +1236,9 @@ Release `v0.1.1` は draft で 7 点。アプリのコードは変わってい�
 朝の問い「Apple での登録はどうすればいいか」から、登録済みの発見 → secret 5 つ → 公証の資格情報の検証 → v0.1.1 の
 署名ビルド (誤タグで 1 回落ちた) → publish → cask → Gatekeeper の受け入れ確認まで、1 日で通した。
 通ったのは Fuseforks が同じ道を先に歩いて台帳に残していたからで、こちらで新しく解いた問題は semver 検査の 1 つだけ。
+
+## 2026-09-13 (夕) — v0.1.0 の Release を削除、Upload artifacts を撤去
+
+どちらもユーザー裁定。`v0.1.0` は未署名版なので draft のまま消した (タグは残す)。`Upload artifacts` は Release Assets の
+7 日限りの複製で、Fuseforks が private 時代に 500 MB の枠超えでビルドを落とした型 — このリポジトリは public で枠の実害は無いが、
+同じ形は同じ理由で置かない。撤去した名前で台帳を grep し、spec 01 の「残り」1 行を回収した。

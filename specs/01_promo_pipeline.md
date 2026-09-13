@@ -1488,7 +1488,10 @@ Tauri が `tauri.conf.json > version must be a semver string` で拒んだ。3 O
 10 分以上無駄になった。Extract の段に semver の検査を足し (手元の bash で `v0.1.1-` / `v0.1.1.` を拒み `v0.1.1` / `v0.2` / `v1.0.0-rc.1` を
 通すことを確認)、誤タグは削除して `v0.1.1` を打ち直した。Apple の秘密には到達していなかったので、署名の成否とは無関係。
 
-**残り**: `Upload artifacts` step (7 日限りの artifact) は Release Assets と同じものの複製で、Fuseforks は撤去した。こちらはまだ残っている。
+**`Upload artifacts` step は撤去した** (2026-09-13 ユーザー裁定、Fuseforks `2a0e47a` と同じ)。Release Assets と同じものの
+7 日限りの複製で、private リポでは Actions ストレージの 500 MB を数タグで超える (Fuseforks の v0.0.5 が実際に落ちた)。
+成果物は Release の Assets が正。**`v0.1.0` の Release (draft、未署名版) も同日ユーザー裁定で削除した** — タグ `v0.1.0` は残す
+(タグは履歴、Release は配布物)。公開されている版は `v0.1.1` のみ。
 
 ### Homebrew tap (2026-09-13 午後)
 

@@ -78,9 +78,10 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 - **公開した (2026-09-13)。** MIT (`LICENSE`)、`origin` は public。`v0.1.0` のタグで CI が**初回から 3 OS とも green**、
   Release に installer 7 点 (exe / msi / deb / rpm / AppImage / dmg / app.tar.gz)。
-  **配布物の性質**: ①**`v0.1.0` の macOS は未署名・未公証** (ビルド時に Apple の秘密が無かった)
-  ②**macOS は aarch64 のみ** (`macos-latest` が arm ランナー。Intel Mac は対象外)。
-  どちらも後から「なぜ動かない」と聞かれる種類なので、Release の説明に書いておくこと。
+  **配布物の性質**: ①**`v0.1.0` の macOS は未署名・未公証**だったので、その Release (draft) は削除した (2026-09-13 ユーザー。
+  タグは残す — タグは履歴、Release は配布物)。**公開されている版は `v0.1.1` のみ**。
+  ②**macOS は aarch64 のみ** (`macos-latest` が arm ランナー。Intel Mac は対象外)。後から「なぜ動かない」と聞かれる種類なので、
+  Release の説明に書いておくこと。③**`Upload artifacts` は置かない** — Release Assets が正 (Fuseforks と同じ。理由は `build.yml` のコメント)。
 - **`v0.1.1` (2026-09-13) = macOS の署名と公証が通った最初の版。** Release は draft、7 点。CI ログで
   `Signing with identity "Developer ID Application: …"` → `Notarizing Finished with status Accepted` → `Stapling app...` を確認。
   **アプリのコードは 1 行も変わっていない** (版番号 3 か所と workflow だけ) — Fuseforks v0.1.9 と同じ「配布物の性質だけが変わった版」。
