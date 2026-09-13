@@ -61,6 +61,14 @@ jobs:
             *.*)   VERSION="${VERSION}.0" ;;   # X.Y → X.Y.0
             *)     VERSION="${VERSION}.0.0" ;; # X   → X.0.0
           esac
+          # **ここで semver を検める。** 検めないと、Tauri が `tauri.conf.json > version`
+          # で拒むのは cargo test を終えた後の build で、3 OS が 10 分以上走ってから落ちる
+          # (実測 2026-09-13: タグ `v0.1.1-` の末尾ハイフンが `0.1.1-` になった)。
+          # 落ちるなら数秒で、原因がタグの綴りだと分かる文言で落とす。
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "タグ '$GITHUB_REF_NAME' から作った '$VERSION' は semver ではない (X.Y.Z の形にする)"
+            exit 1
+          fi
           echo "APP_VERSION=${VERSION}" >> "$GITHUB_ENV"
           echo "semver: ${VERSION}"
 
