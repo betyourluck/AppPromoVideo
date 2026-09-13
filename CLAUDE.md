@@ -74,7 +74,11 @@ cd app && npx vitest run && npm run build    # frontend の単体テストと型
 cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 ```
 
-## 現状 (2026-09-12)
+## 現状 (2026-09-13 深夜)
+
+- **次の公開はかなり先** (2026-09-13 ユーザー)。rev48〜49 は main にあるが配布物には乗っていない。次のタグを打つ時の手順:
+  タグ `vX.Y.Z` → CI (draft、3 OS) → publish → tap の `version` / `sha256` (Release API の `digest`) → `wingetcreate update` (マージ後)。
+- **winget は PR #434054 (0.1.1) がマージ待ち。** マージされたら README 英日に winget を追記する (それまで書かない)。
 
 - **公開した (2026-09-13)。** MIT (`LICENSE`)、`origin` は public。`v0.1.0` のタグで CI が**初回から 3 OS とも green**、
   Release に installer 7 点 (exe / msi / deb / rpm / AppImage / dmg / app.tar.gz)。
@@ -219,6 +223,6 @@ rev14 のコミット `5929f93` に巻き込んだ。実害は無いが粒度が
 
 ## 再開の手順
 
-1. `cargo test --workspace` (162 green) と `cd app && npx vitest run` (75 green) で足場を確認。
+1. `cargo test --workspace` (191 green) と `cd app && npx vitest run && npm run build` (127 green) で足場を確認。**並べて走らせるなら絶対パス** (cwd が `app/src-tauri` に残る事故を 3 回踏んだ)。
 2. `git log --oneline -5` で直前の着地を見る。詳しい経緯は `history.md`。
 3. 上の「開いている判断」に答えが来ていないか確認してから着手する。
