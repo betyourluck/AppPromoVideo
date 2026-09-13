@@ -1,7 +1,7 @@
 //! agy の封筒と見張りの PoC。**実測した stream をそのまま fixture にしている** (2026-09-12、agy 1.2.2)。
 
 use cli_runner::CliError;
-use cli_runner::agy::{AgyLine, early_abort, fold_lines, parse_line, tool_is_allowed, user_message_line};
+use cli_runner::agy::{AgyLine, early_abort, fold_lines, parse_line, tool_is_allowed, tool_notice, user_message_line};
 
 /// `--json-schema` つきで成功した run。
 const OK: &str = include_str!("../fixtures/agy_json_schema_ok.jsonl");
@@ -10,6 +10,10 @@ const OK: &str = include_str!("../fixtures/agy_json_schema_ok.jsonl");
 const EMPTY: &str = include_str!("../fixtures/agy_empty_success.jsonl");
 /// **write_to_file が拒否されずに通った** run (probe.txt が実際に作られた)。見張りの被験体。
 const WRITE: &str = include_str!("../fixtures/agy_write_allowed.jsonl");
+/// 2026-09-13 ユーザー実機 (パスは中立化)。agy 側の PreToolUse hook が壊れていて `view_file` が
+/// `state: ERROR` で失敗し、agy がシェル (`run_command`) へ逃げた。見張りは 2 手目で止めたが、
+/// **逃げた理由 (1 手目の失敗) が進捗ログに出ていなかった** ので、ユーザーには見張りのエラーしか見えなかった。
+const ESCAPE: &str = include_str!("../fixtures/agy_tool_error_escape.jsonl");
 
 #[test]
 fn ok_fixture_folds_into_text_and_structured_output() {
@@ -97,4 +101,57 @@ fn the_user_message_is_ndjson_with_an_event_tag() {
     let v: serde_json::Value = serde_json::from_str(line.trim_end()).unwrap();
     assert_eq!(v["event"], "user");
     assert_eq!(v["message"]["content"], "解析してください\n2 行目");
+}
+
+#[test]
+fn a_failed_tool_step_carries_its_error_message() {
+    let err = ESCAPE
+        .lines()
+        .map(parse_line)
+        .find_map(|l| match l {
+            AgyLine::Tool { name, state, error, .. } if state == "ERROR" => Some((name, error)),
+            _ => None,
+        })
+        .expect("ERROR の tool 行がある");
+    assert_eq!(err.0, "view_file");
+    let msg = err.1.expect("error.message が運ばれる");
+    // 1 行目だけ (stderr のスタックトレースは生ログにある)。
+    assert!(msg.starts_with("JSON hook \"jsonhook__vendor.telemetry_PreToolUse_0_0\" failed"), "{msg}");
+    assert!(!msg.contains('\n') && !msg.contains('\r'), "複数行を進捗に流さない: {msg:?}");
+}
+
+#[test]
+fn the_progress_log_names_the_failure_before_the_watchdog_fires() {
+    // 進捗に出る行を順に集め、見張りが止めた位置も取る。
+    let mut notices = Vec::new();
+    let mut abort = None;
+    for line in ESCAPE.lines() {
+        let parsed = parse_line(line);
+        if let Some(n) = tool_notice(&parsed) {
+            notices.push(n);
+        }
+        if abort.is_none() {
+            abort = early_abort(&parsed);
+        }
+    }
+    assert_eq!(
+        notices,
+        vec![
+            "ツール: view_file D:/repo/README_jp.md".to_string(),
+            "ツール失敗: view_file D:/repo/README_jp.md — JSON hook \"jsonhook__vendor.telemetry_PreToolUse_0_0\" failed: command failed: exit status 1, stderr: node:internal/modules/cjs/loader:1479".to_string(),
+            "ツール: run_command Get-Content D:\\repo\\README_jp.md -TotalCount 100".to_string(),
+        ]
+    );
+    assert!(matches!(abort, Some(CliError::ToolNotAllowed { ref tool, .. }) if tool == "run_command"));
+}
+
+#[test]
+fn a_successful_tool_step_produces_no_failure_notice() {
+    let failures: Vec<String> = OK
+        .lines()
+        .map(parse_line)
+        .filter_map(|l| tool_notice(&l))
+        .filter(|n| n.starts_with("ツール失敗"))
+        .collect();
+    assert!(failures.is_empty(), "{failures:?}");
 }

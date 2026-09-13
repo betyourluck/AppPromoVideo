@@ -361,9 +361,12 @@ fn observe_line(kind: CliKind, line: &str, on_event: &mut impl FnMut(CliEvent)) 
             }
             match &parsed {
                 agy::AgyLine::Text(t) if !t.is_empty() => on_event(CliEvent::Stdout { text: t.clone() }),
-                // 読み取りツールは進捗として見せる (何を読んだかが分かる)。
-                agy::AgyLine::Tool { name, state, target } if state == "ACTIVE" => {
-                    on_event(CliEvent::Progress { text: format!("ツール: {name} {target}") })
+                // 読み取りツールは進捗として見せる (何を読んだかが分かる)。失敗も見せる —
+                // 見張りが止めた時、逃げた理由はその 1 行にしか無い (`agy::tool_notice`)。
+                agy::AgyLine::Tool { .. } => {
+                    if let Some(text) = agy::tool_notice(&parsed) {
+                        on_event(CliEvent::Progress { text });
+                    }
                 }
                 agy::AgyLine::Other(raw) if !raw.is_empty() => on_event(CliEvent::Stdout { text: raw.clone() }),
                 _ => {}

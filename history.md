@@ -1249,3 +1249,11 @@ Release `v0.1.1` は draft で 7 点。アプリのコードは変わってい�
 Fuseforks / Lorekeel の台帳をそのまま継承 (MSI のみ・`InstallerLocale` 無し・`Scope: machine`)。
 `ProductCode` は MSI を落として COM で読み、SHA256 は digest と突合。`winget validate` 通過 → `wingetcreate submit --token`。
 マージまでは README に書かない。
+
+## 2026-09-13 (夜) — rev48: 見張りが止めた理由を進捗に出す
+
+ユーザーが配布ビルドで agy を試し、`view_file` の直後に見張り (`run_command`) で止まった。生ログを読むと `view_file` は
+`state: ERROR` — 同日に入った Gemini プラグインの PreToolUse hook が引用符ごとのパスで node を呼び、全ツールが失敗していた。
+見張りは設計どおり。見えていなかったのは 1 手目の失敗で、`ERROR` の tool 行を進捗に出していなかった (rev48 で修正、fixture で固定)。
+**止める機構の隣に、止める前に何が起きたかを置く。** agy 側の処方はプラグインの無効化で、ユーザーに提示。
+台帳の書き込みで cwd が `app/src-tauri` に残る事故を**また**踏んだ (並列の backend 検証)。書けていないことを git status で見てから絶対パスで書き直した。

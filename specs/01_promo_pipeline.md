@@ -1436,6 +1436,36 @@ rev33 の「測る前に、今のコードがページに届いているかを�
 **接地の限界**: **配布ビルドでは未確認。** dev サーバーでは印が立たないので、規則の効き目だけを
 手で印を立てて測った。実際に `npm run tauri build` した実行ファイルでの挙動 (右クリック・F5) は見ていない。
 
+## rev48 (2026-09-13、ツールの失敗を進捗に出す — 見張りが止めた理由)
+
+**ユーザー報告** (配布ビルドで agy を試した): 進捗が `ツール: view_file …` の直後に
+`CLI が許可されていないツールを使いました (run_command: Get-Content …)` で止まった。
+
+**観察** (生ログ `cli-logs/…jsonl`): `view_file` は `state: ERROR` で失敗していた。理由は agy 側の PreToolUse hook
+(`~/.gemini/config/plugins/googlecloudtools.datacloud_telemetry/hooks.json`、同日 16:33 に入ったプラグイン、`matcher: "*"`) —
+`command` が `node "C:\…\telemetry_hook_bundle.js" …` と引用符付きで、agy が引用符を剥がさず**引用符ごと相対パス**として
+node に渡している (`Cannot find module '…\datacloud_telemetry\"C:\…\telemetry_hook_bundle.js"'`)。全ツールが失敗するので
+agy はシェルへ逃げ、見張り (rev39) が 2 手目で止めた。**見張りは設計どおり動いた。** 問題は、逃げた理由 (1 手目の失敗) が
+進捗に出ておらず、ユーザーには見張りのエラーしか見えなかったこと。
+
+**判断**: 逃げる理由は agy の環境 (プラグインの hook) にあり、アプリでは消せない (rev42 の「逃げる理由を消す」は
+`--add-dir` のように**こちらの argv で決まる理由**にだけ効く)。アプリができるのは**理由を名指しする**こと。
+
+184. **`AgyLine::Tool` に `error: Option<String>` を足す** — `state: ERROR` の `tool_info.error.message` の 1 行目。
+     スタックトレースは生ログにあるので運ばない。
+185. **`agy::tool_notice` (純関数)** が進捗の文言を決める: `ACTIVE` → `ツール: <name> <target>` / `ERROR` →
+     `ツール失敗: <name> <target> — <1 行目>`。`observe_line` はこれを呼ぶだけ。
+186. **`ToolNotAllowed` の文言は変えない。** 読み取りコマンド (`Get-Content`) でも「書き換えが起きた可能性」と言うが、
+     見張りはコマンドの中身を判定しない (できない) ので、文言を弱めると判定していると誤読される。
+     直前の `ツール失敗:` 行が理由を示す。
+
+**PoC**: `fixtures/agy_tool_error_escape.jsonl` (実機ログのパスを中立化) で Red (フィールドと関数が無い) → Green。
+成功 fixture で `ツール失敗` が出ないことも対で置いた (rev43〜44 の「不在を測るなら存在の証明を対で」)。
+crates 188 → 191。
+
+**ユーザー側の処方** (アプリ外): そのプラグインを無効にする (`~/.gemini/config/config.json` の `plugins.googlecloudtools.datacloud_telemetry.enabled: false`) か、
+`hooks.json` の `command` から引用符を外す。この hook は agy の全ツールに掛かるので、**このアプリに限らず agy が動かない**状態。
+
 ## 公開とリリース (2026-09-13)
 
 **public にした。** MIT (`LICENSE`)。公開前の洗い出しで、**追跡ファイルに個人情報が入っていた**のを消した —
@@ -1651,6 +1681,7 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [x] rev45 (2026-09-12): 案内をもう一度見る口 (179)。初回判定が既存ユーザーを弾くので入口が無かった (実機で発覚)。vitest 112 / build green
 - [x] rev46 (2026-09-12): ブランドの標を 1 か所に (180)。ブラウザで実効値を突合、1 歩目の枠とカードも実測。vitest 112 / build green
 - [x] rev47 (2026-09-12): 配布ビルドの締め (181〜183、契約 `DesktopGuards`)。右クリックと F5 は既にあり、文字の選択を追加。vitest 118 / build green。**配布ビルドでは未確認**
+- [x] rev48 (2026-09-13): agy のツール失敗を進捗に出す (184〜186、契約 `AgyStreamLine.tool_error` / `IsolationGuarantee.watchdog.escape_visible`)。crates 191 green
 - [x] **agy で通しが成功** (2026-09-12 21:13、ユーザー実機): 解析 → 構成 (1 回目で通過) → 参照画像 3 枚 → 合成 → 見出しの焼き込み。
       166 は効いた (`run_command` への逃げは起きなかった)。168 も効いた (**費用の chip が出ていない**)。`runs/20260912-121310`
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度 / `RunStats` の live 記録 (frontal の費用)

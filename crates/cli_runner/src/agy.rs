@@ -18,7 +18,11 @@ pub enum AgyLine {
     /// `step_update` の `agent_response` が運ぶ人が読む断片。
     Text(String),
     /// `step_update` の `tool`。見張り (契約 `IsolationGuarantee.watchdog`) が見る。
-    Tool { name: String, state: String, target: String },
+    ///
+    /// `error` は `state: "ERROR"` の時の `tool_info.error.message` の **1 行目**。
+    /// ツールが失敗すると agy はシェル (`run_command`) へ逃げ、見張りはそこで止める —
+    /// **逃げた理由はこの 1 行にしか無い** (2026-09-13 実機: 壊れた PreToolUse hook で全ツールが失敗していた)。
+    Tool { name: String, state: String, target: String, error: Option<String> },
     Result {
         status: String,
         response: String,
@@ -71,6 +75,7 @@ pub fn parse_line(line: &str) -> AgyLine {
                     name: s.get("tool_name").and_then(Value::as_str).unwrap_or("").to_string(),
                     state: s.get("state").and_then(Value::as_str).unwrap_or("").to_string(),
                     target: tool_target(s.get("tool_info")),
+                    error: tool_error(s.get("tool_info")),
                 },
                 _ => AgyLine::Text(s.get("text_delta").and_then(Value::as_str).unwrap_or("").to_string()),
             }
@@ -95,6 +100,30 @@ fn tool_target(info: Option<&Value>) -> String {
         return String::new();
     };
     params.values().find_map(|v| v.as_str()).unwrap_or("").to_string()
+}
+
+/// `tool_info.error.message` の 1 行目 (空なら None)。stderr のスタックトレースは生ログに残るので運ばない。
+fn tool_error(info: Option<&Value>) -> Option<String> {
+    let msg = info.and_then(|i| i.pointer("/error/message")).and_then(Value::as_str)?;
+    let first = msg.lines().next().unwrap_or("").trim_end_matches('\r').trim();
+    (!first.is_empty()).then(|| first.to_string())
+}
+
+/// 進捗ログに出す 1 行。`ACTIVE` は「何を読んだか」、`ERROR` は「なぜ次の手が要ったか」。
+///
+/// 見張り (`early_abort`) が許可外のツールで止めた時、ユーザーに見えるのはそのエラーだけで、
+/// **その直前にツールが失敗していた事実**が無いと「なぜシェルに逃げたか」が読めない
+/// (2026-09-13 実機: `view_file` が hook の故障で ERROR → `run_command` → 見張り。進捗には
+/// `ツール: view_file` しか出ておらず、原因は生ログを開くまで分からなかった)。
+pub fn tool_notice(line: &AgyLine) -> Option<String> {
+    match line {
+        AgyLine::Tool { name, state, target, .. } if state == "ACTIVE" => Some(format!("ツール: {name} {target}")),
+        AgyLine::Tool { name, state, target, error } if state == "ERROR" => {
+            let why = error.as_deref().unwrap_or("(理由なし)");
+            Some(format!("ツール失敗: {name} {target} — {why}"))
+        }
+        _ => None,
+    }
 }
 
 /// 許可外のツールか (契約 `IsolationGuarantee.watchdog`)。

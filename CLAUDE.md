@@ -114,6 +114,9 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 - **CLI の「種類」と実行ファイルは別の設定**。食い違うと別系統の argv が飛ぶ (今日の障害の根)。
   rev40 から `--version` の名乗りと突き合わせる (`CliKindCheck`)。設定画面で警告し、**rev41 から run の開始時に止める** —
   警告を設定画面にだけ置いた rev40 では誰も見ず、同じ事故が 3 回続いた。**警告は人が見に行く場所ではなく、必ず通る場所に置く。**
+- **agy のツールが失敗すると進捗に `ツール失敗: …` が出る** (rev48)。見張りが `run_command` で止めた時は、その直前の行が逃げた理由。
+  2026-09-13 実機の理由は agy 側の PreToolUse hook (Gemini プラグイン `googlecloudtools.datacloud_telemetry`) の引用符の壊れで、
+  **アプリ外**。処方はプラグインの無効化 (`~/.gemini/config/config.json`)。
 - **`agy` は隔離の保証が弱い** (rev39)。CLI 側に許可リストが無く、`write_to_file` は**拒否されない** (実測: ファイルが実際に作られた)。
   止まるのは `run_command` だけ。アプリの見張り (`AGY_ALLOWED_TOOLS`) は**検出であって予防ではない** — 契約 `IsolationGuarantee`。
   既定は `claude` のまま。agy を選ぶと設定画面に警告が常時出る。
