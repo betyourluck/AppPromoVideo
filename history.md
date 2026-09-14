@@ -1309,3 +1309,9 @@ vitest を並べた検証で**また `cd` を書かず**に何も出力されず
 配布物は 0.1.2 の名前で出ている。main 側はユーザー指示で後から 3 か所 + `Cargo.lock` を 0.1.2 に揃えた (タグは動かさない)。
 Release の説明に「macOS 版は Apple Silicon (aarch64) のみ」を足した (ユーザー承認)。最初は `$TMPDIR` が空で notes ファイルを作れず、scratchpad の絶対パスで作り直した。
 v0.1.1 の説明も読んだ — aarch64 の注記は無く、テンプレートの作者向けメモ (Customization Notes / アレンジのポイント) と「(v0.1.0)」の表記が残っている。書き換えは未承認なので触っていない。
+リリースノートを英日で書いて draft に反映した (rev48〜53)。反映前に実装と突き合わせて 2 点直した — 進捗ログは UI が英語でも日本語で出るので
+英語版にも `ツール失敗: …` と実物の文字を書く / 参照画像の段は画像生成 ON の時だけ。ユーザーが publish (05:24 UTC)。
+publish 後に dmg の digest が draft の時と同じことと URL が 200 を返すことを確かめ、tap の cask を 0.1.2 に (`3de4ddd`)。verify-cask を実機で起動。
+結果 (run 34809584095): インストール → 署名 → staple → `spctl` が `accepted / source=Notarized Developer ID` まで success。入ったのは 0.1.2 の dmg (ログの URL で確認)。
+`brew audit` は「exception while auditing: GitHub API rate limit exceeded」で中断 — runner の未認証 API の上限で、cask の指摘は出ていない。
+step は continue-on-error なので job は success と出る。**success の表示と、検査が実際に走ったかは別** — informational の step は中身を読む。

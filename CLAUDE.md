@@ -78,7 +78,10 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 - **`v0.1.2` (2026-09-14、ユーザーがタグ) = rev48〜53 が乗った版。** タグは `1535af0`。CI 3 OS green (run 34808086566)、
   ログで `Signing` → `Notarizing Finished with status Accepted` → `Stapling app...` を確認、Release は draft で 7 点。
-  説明に「macOS 版は Apple Silicon (aarch64) のみ」を足した。**publish 待ち** → tap の `version` / `sha256` (dmg の digest) →
+  説明に「macOS 版は Apple Silicon (aarch64) のみ」を足し、リリースノート (英日、rev48〜53) を書いた。**ユーザーが publish (05:24 UTC)** →
+  tap の cask を 0.1.2 に (tap `3de4ddd`。sha256 = Release API の dmg の digest、URL が 200 を返すことを確認)。
+  verify-cask (run 34809584095、macos-latest) で 0.1.2 の dmg が入り、**`spctl` = `accepted` / `source=Notarized Developer ID`**。
+  `brew audit` は runner の GitHub API レート制限 (未認証 60 回) で中断した — cask への指摘ではない (informational の step)。
   winget は PR #434054 (0.1.1) のマージ後に `wingetcreate update`。版番号 3 か所 + `Cargo.lock` は**タグの後に**上げた —
   配布物は CI の `Sync app version to tag` が `tauri.conf.json` をタグに揃えるので 0.1.2 で出ている。
   次のタグを打つ時の手順: 版番号 → タグ `vX.Y.Z` → CI (draft、3 OS) → 説明を確認 → publish → tap の `version` / `sha256` (Release API の `digest`) → `wingetcreate update` (マージ後)。
@@ -87,7 +90,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 - **公開した (2026-09-13)。** MIT (`LICENSE`)、`origin` は public。`v0.1.0` のタグで CI が**初回から 3 OS とも green**、
   Release に installer 7 点 (exe / msi / deb / rpm / AppImage / dmg / app.tar.gz)。
   **配布物の性質**: ①**`v0.1.0` の macOS は未署名・未公証**だったので、その Release (draft) は削除した (2026-09-13 ユーザー。
-  タグは残す — タグは履歴、Release は配布物)。**公開されている版は `v0.1.1` のみ**。
+  タグは残す — タグは履歴、Release は配布物)。**公開されている版は `v0.1.1` と `v0.1.2`** (2026-09-14 時点)。
   ②**macOS は aarch64 のみ** (`macos-latest` が arm ランナー。Intel Mac は対象外)。後から「なぜ動かない」と聞かれる種類なので、
   Release の説明に書いておくこと。③**`Upload artifacts` は置かない** — Release Assets が正 (Fuseforks と同じ。理由は `build.yml` のコメント)。
 - **`v0.1.1` (2026-09-13) = macOS の署名と公証が通った最初の版。** Release は draft、7 点。CI ログで
@@ -99,7 +102,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   **タグは `X.Y.Z` の形で打つ** — `v0.1.1-` (末尾ハイフン) は semver でなく、以前は cargo test を終えた後の build で 3 OS 一斉に落ちた。
   今は Extract の段で拒む (failures.md 2026-09-13)。
 - **Homebrew で入る (2026-09-13)**: `brew install --cask betyourluck/tap/apppromovideo` (完全修飾名は省略できない)。
-  cask は `D:/Github/homebrew-tap/Casks/apppromovideo.rb` (v0.1.1 から。v0.1.0 は未署名なので載せない)。
+  cask は `D:/Github/homebrew-tap/Casks/apppromovideo.rb` (v0.1.1 から。v0.1.0 は未署名なので載せない。**今は 0.1.2** — 2026-09-14)。
   tap の `verify-cask.yml` を実機 (macos-latest) で回し、**`spctl -a -vv` が `accepted / source=Notarized Developer ID`** —
   これだけが「Gatekeeper が実際に受け入れる」の証拠 (codesign と stapler は構造物の主張)。
   **新版を出したら cask の `version` と `sha256` (Release API の `digest`) を更新する** — Fuseforks / Lorekeel と同じ手順で、
