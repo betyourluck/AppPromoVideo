@@ -1349,3 +1349,13 @@ backend の Red を 1 回 `cd` 無しで走らせて root で 0 本選ばれ、�
 `plate.ts` に `plateSnapshotIndex` / `snapshotChipLabel` を置き、Rust と同じ 8 ケースをテストに写した。chip と `CaptionEditor` の `hasPlate` が同じ関数を通る。
 scenes.md の表も `i + 1` に (rev54 で入れた書き方を当日中に変えた)。TS と Rust の両方で Red → Green、ブラウザで 4 通りの chip を読んだ。
 ユーザーが Tauri の実画面で 2 回確認した — 1 回目は上書きの無い run (`product · snap 1` / `mood`)、2 回目は面を足した mood のある run (`mood · snap 1` / `mood · snap 3`)。
+
+## 2026-09-14 (続) — Qiita 記事の下書き / README の食い違いを直す
+
+ユーザーの依頼で Qiita 記事の下書きを `docs/qiita_apppromovideo.md` に書いた (ザリ・ロブステル名義、Fuseforks / Lorekeel の 2 記事を
+`https://qiita.com/<user>/items/<id>.md` で原文取得して構成と語り口を合わせた)。スクショはユーザーが撮るので `📸 TODO` の置き場所だけ置いた。
+中身は README ではなくコードと台帳から取った — README を読んだら台帳と食い違っていたため。書く前に根拠のない一文 (「MiniMax なら 16:9 がおすすめ」) を削った。
+続けてユーザーの指示で README 日英を直した: ①Veo / Sora を消す (rev3 でコピー先から外したのに README に残っていた。実物のコピー先 MiniMax / 汎用 t2v に置換)
+②画像生成プロバイダの表 — ComfyUI と OpenAI を「✅ 実機検証済み」としていたが、実機の通しは Gemini だけ (spec 01 Phase C)。接続先も実装 (`generateContent` / `images/generations`・`images/edits` / upload → `/prompt` → `/history` → `/view`) に合わせた
+③出力フォルダの構成例 — `images/ref_001.png` / `repobrief.txt` は実在しない。実物 (今日の run と契約 `ExportPackage.layout`) の `promo.json` / `scenes.md` / `scene_NN_ref_MM.png` / `base/` / `snapshots/` に
+④動作要件の LLM CLI に `agy` / カスタムを足し、`agy` の隔離の弱さを一言添えた。README は会話の外で作られた文書で、機能の追加に追従していなかった。

@@ -32,7 +32,7 @@
 
 ## 💡 Why AppPromoVideo?
 
-Trying to create an app promo video with video-generation AIs (Google Veo / OpenAI Sora / MiniMax / Runway / Luma, etc.) quickly hits two walls:
+Trying to create an app promo video with video-generation AIs (MiniMax / Runway / Luma, etc.) quickly hits two walls:
 
 1. **Prompt trial-and-error**: Scene breakdown, camera work, duration allocation, and English prompt assembly take enormous effort.
 2. **Drift from the real app**: Generic prompts produce UI, tone, and style that look nothing like the actual app.
@@ -42,7 +42,7 @@ Trying to create an app promo video with video-generation AIs (Google Veo / Open
 ### Three Core Values
 
 * 🎯 **Ready-to-Paste Output**  
-  Optimized English prompts for Veo / Sora / generic models. One-click copy to clipboard and paste straight into any video-generation UI.
+  English motion prompts for MiniMax image-to-video, plus full prompts for generic text-to-video. One-click copy to clipboard and paste straight into any video-generation UI.
 * 🎨 **Visually Faithful Reference Images**  
   Extracts a color palette and style anchors from UI snapshots. Generates reference images faithful to the real app by compositing AI-generated backdrops with actual screenshots (rounded corners, drop shadows, headline overlays).
 * 🛡️ **Secure Local CLI Execution (Secure & Sandboxed)**  
@@ -75,7 +75,7 @@ flowchart LR
     end
 
     subgraph Output ["📦 4. Output Package"]
-        Scene["🎬 Scene-by-Scene Prompts<br/>(Veo / Sora / Generic)"]
+        Scene["🎬 Scene-by-Scene Prompts<br/>(MiniMax i2v / Generic)"]
         RefImg["🖼️ Style Reference Images<br/>(backdrop + real UI composite)"]
         Pkg["📄 promo.json + Markdown"]
     end
@@ -94,7 +94,7 @@ flowchart LR
 ## ✨ Key Features
 
 * **Automatic scene-by-scene prompt generation**: Supports durations of 15s / 30s / 60s and aspect ratios of 16:9 / 9:16 / 1:1.
-* **One-click clipboard copy**: Copy in the exact format for Veo / Sora (pure prompts without ratio/duration) or generic models.
+* **One-click clipboard copy**: Copy only the motion prompt for MiniMax (image-to-video), or the full prompt with ratio/duration on separate lines for generic text-to-video.
 * **Multi-provider image generation**: ComfyUI (local, no API key required), Gemini, and OpenAI (`images/edits`) supported.
 * **Headline / caption overlay**: Layout catchphrases onto images with configurable font, position, and style.
 * **History (Runs)**: Past generations are safely isolated under `runs/<run_id>/` and recallable at any time.
@@ -109,7 +109,7 @@ flowchart LR
 * **OS**: Windows / macOS / Linux (cross-platform)
 * **Rust**: `2024` edition / rust-version `1.85` or later
 * **Node.js**: Stable (LTS recommended; for frontend build)
-* **Local LLM CLI**: Authenticated `claude` (Claude Code CLI) or Aider available on PATH
+* **Local LLM CLI**: An authenticated CLI on PATH — `claude` (Claude Code CLI, default), `agy`, `aider`, or a custom command. `agy` cannot disable write tools on its side, so the app can only detect and stop disallowed tools after the fact; use `claude` for repositories you don't trust
 
 ### Build & Launch (GUI)
 
@@ -154,7 +154,7 @@ cargo clippy
 |                       |                                 |                               |
 | - Repository selection| - App summary & differentiators | - Real-time progress logs     |
 | - UI snapshots        | - Scene list (Prompt & Image)   | - CLI subprocess tracing      |
-| - Duration / ratio /  | - Copy (Veo / Sora / All)       | - Errors & warnings           |
+| - Duration / ratio /  | - Copy (MiniMax / All)          | - Errors & warnings           |
 |   language            | - Reference image trigger       |                               |
 | [ ▶ Analyze → Build   | [ 💾 Export to folder ]         |                               |
 |     Scenes ]          |                                 |                               |
@@ -171,7 +171,7 @@ cargo clippy
    - The right pane (`LogPanel`) streams subprocess progress in real time.
 4. **Review & copy prompts (`ScenePanel`)**:
    - View the app summary, differentiators, and per-scene prompts.
-   - Copy individual scenes or all at once, formatted for the target AI (Veo / Sora / generic).
+   - Copy individual scenes or all at once, formatted for the copy target (MiniMax / generic).
 5. **Generate reference images**:
    - Optionally run **"Generate Reference Images"** to create visual reference images (OpenAI / Gemini / ComfyUI).
 6. **Export artifacts**:
@@ -210,17 +210,20 @@ cargo run -p pipeline --bin promo -- fonts
 Each run is fully isolated under a unique `runs/<run_id>/` directory.
 
 ```text
-promo_out/
-└── runs/
-    └── 20260913_001234_abc1/
-        ├── promo.json             # Complete JSON with scene structure, prompts, and metadata
-        ├── scenes.md              # Human-readable Markdown prompt collection
-        ├── repobrief.txt          # Compressed codebase context fed to the LLM
-        └── images/
-            ├── ref_001.png        # Style reference image harmonized with app UI
-            ├── scene_001_cut.png  # Composited cut (backdrop + real screenshot with headline)
-            └── ...
+<export_dir>/
+└── <AppName>_Promo_Package/
+    └── runs/
+        └── 20260914-071122/              # run_id = YYYYMMDD-HHMMSS (local time); -2, -3 … on collision
+            ├── promo.json                # Summary, scene plan, prompts, and your edits — the run can be restored from this alone
+            ├── scenes.md                 # Shot list and per-scene prompts (always rewritten together with promo.json)
+            ├── scene_01_ref_01.png       # Reference image with the headline burned in — pass this to MiniMax
+            ├── base/
+            │   └── scene_01_ref_01.png   # Source material: backdrop (product cut) / picture (mood cut); re-burning starts here, no API call
+            └── snapshots/
+                └── snapshot_01.png       # Copies of the input UI snapshots
 ```
+
+`scene_NN_ref_MM.png` and `base/` appear only after you generate reference images.
 
 ---
 
@@ -240,11 +243,11 @@ Built as a Rust workspace (4 crates) plus a Tauri 2 desktop application.
 
 ## 🎨 Image Generation Provider Support
 
-| Provider | Integration | API Key | Status & Notes |
+| Provider | Integration | API Key | Status |
 |---|---|:---:|---|
-| **ComfyUI** | Local HTTP polling (`/prompt` → `/history` → `/view`) | **Not required** | ✅ Verified on real hardware. Fully local, free, and fast. |
-| **Gemini** | Google GenAI REST API | Required | ✅ Verified on real hardware. High fidelity and strong instruction following. |
-| **OpenAI** | `images/edits` endpoint | Required | ⚠️ Verified on real hardware (stable operation confirmed with a single reference image). |
+| **Gemini** | `models/{model}:generateContent` | Required | ✅ Verified end-to-end on real hardware |
+| **OpenAI** | `images/generations` (no references) / `images/edits` (with references) | Required | ⚠️ Implemented; not yet verified end-to-end on real hardware |
+| **ComfyUI** | Local HTTP polling (upload → `/prompt` → `/history` → `/view`) | **Not required** | ⚠️ Implemented; not yet verified end-to-end on real hardware |
 
 ---
 
