@@ -191,11 +191,12 @@ fn auth_view_env() -> AuthView {
 
 /// run 開始時に進捗へ出す認証の行 (純粋、rev52)。
 ///
-/// agy には Anthropic の鍵を常に渡さない (`env_remove_for`) ので、agy では鍵の有無も OAuth も語らない —
-/// 「API キー あり」「OAuth 優先」と書くと、agy に鍵を渡しているように読める (ユーザー 2026-09-14)。
+/// Anthropic の鍵と OAuth を語るのは claude の時だけ。agy には鍵を常に渡さず (`env_remove_for`)、
+/// 「API キー あり」「OAuth 優先」と書くと agy に鍵を渡しているように読める (ユーザー 2026-09-14)。
+/// aider / custom も同様に語らない (rev53) — スイッチを持つのは claude だけ。
 fn auth_log_lines(kind: cli_runner::CliKind, oauth_only: bool, a: &AuthView) -> Vec<String> {
-    // agy では 1 行も出さない — 鍵は外しているうえ、agy なのに Anthropic の話を出すのは不自然 (ユーザー 2026-09-14)。
-    if kind == cli_runner::CliKind::Agy {
+    // claude 以外では 1 行も出さない — claude でない CLI に Anthropic の話を出すのは不自然 (ユーザー 2026-09-14、rev52〜53)。
+    if kind != cli_runner::CliKind::Claude {
         return vec![];
     }
     let mut lines = vec![format!(
@@ -1303,6 +1304,16 @@ mod auth_log_tests {
     fn agy_log_does_not_talk_about_anthropic_auth() {
         for oauth_only in [false, true] {
             assert!(auth_log_lines(CliKind::Agy, oauth_only, &view()).is_empty());
+        }
+    }
+
+    /// rev53 (ユーザー決定 2026-09-14): aider / custom でも Anthropic の話を出さない。鍵は引き継ぐが、スイッチを持つのは claude だけ。
+    #[test]
+    fn aider_and_custom_log_nothing_about_anthropic_auth() {
+        for k in [CliKind::Aider, CliKind::Custom] {
+            for oauth_only in [false, true] {
+                assert!(auth_log_lines(k, oauth_only, &view()).is_empty(), "{k:?}");
+            }
         }
     }
 

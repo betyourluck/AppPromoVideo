@@ -108,7 +108,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   (書いてあるのに入らない、を避ける)。次の版は `wingetcreate update Outcasts.AppPromoVideo --version <V> --urls <MSI URL>` →
   ローカル生成 → `InstallerLocale` が混ざっていたら消す → `wingetcreate submit --token "$(gh auth token)"`。提出前に
   `gh repo sync betyourluck/winget-pkgs --source microsoft/winget-pkgs --branch master`。
-- **spec 01 は Phase 0〜E 着地、rev52 まで反映済み (rev27〜29 は試行)。** crates 193 green / vitest 130 / backend 27 green・clippy clean。
+- **spec 01 は Phase 0〜E 着地、rev53 まで反映済み (rev27〜29 は試行)。** crates 194 green / vitest 131 / backend 28 green・clippy clean。
 - **agy でも通しが成功** (2026-09-12 21:13、ユーザー実機)。解析 → 構成 (1 回目で通過) → 参照画像 → 合成 → 見出しの焼き込み。
   費用の chip は出ない (agy は費用を返さないので描かない)。
 - コミットは Initial `a75c3bc` の上に積んでいる。**本数も push 済みの範囲もここに書かない** — 書くたび 1 手遅れて嘘になる (実際に 2026-09-12、`rev42 まで push 済み` と書いた行の中に 「ここに書くと 1 手遅れる」と併記する矛盾を作った)。数えるなら `git rev-list --count a75c3bc..HEAD` と `git log --oneline origin/main..HEAD`。**公開リポジトリ** (MIT、`LICENSE`)。
@@ -127,6 +127,8 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   既定は `claude` のまま。agy を選ぶと設定画面に警告が常時出る。
   **agy には Anthropic の鍵 (`ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`) を常に渡さない** (rev52、`env_remove_for`)。
   「OAuth ログインを使う」は agy の間は出さない — 以前は種類を問わずスイッチ次第で、切ると agy も鍵を引き継いでいた。
+  **スイッチと Anthropic の表示 (診断・進捗ログ) は claude だけ** (rev53)。aider / custom は表示を出さず、鍵は外さず引き継ぐ
+  (aider は `ANTHROPIC_API_KEY` を環境変数から読む)。スイッチの保存値は claude でしか効かない。
   **`--add-dir` は agy の読み取りを縛らない** (実測)。縛るのは探索ツールの探索範囲だけで、そこから外れると
   agy はシェルに逃げる → rev42 でスナップショットの置き場を `--add-dir` に足した (**逃げ道でなく逃げる理由を消す**)。
 - **費用は `Option`** (rev42)。agy は費用を返さないので 0 で埋めない。**片方の段でも不明なら合計は不明**。
@@ -227,7 +229,7 @@ rev14 のコミット `5929f93` に巻き込んだ。実害は無いが粒度が
 
 ## 再開の手順
 
-1. `cargo test --workspace` (193 green) と `cd app && npx vitest run && npm run build` (130 green) で足場を確認。**並べて走らせるなら絶対パス** (cwd が `app/src-tauri` に残る事故を 4 回踏んだ)。
+1. `cargo test --workspace` (194 green) と `cd app && npx vitest run && npm run build` (131 green) で足場を確認。**並べて走らせるなら絶対パス** (cwd が `app/src-tauri` に残る事故を 4 回踏んだ)。
    `cd /abs && …` は**そのコマンド**を守るだけで、ずれた cwd は次のコマンドへ残る — **並べる全部に `cd` を書く** (2026-09-14)。
 2. `git log --oneline -5` で直前の着地を見る。詳しい経緯は `history.md`。
 3. 上の「開いている判断」に答えが来ていないか確認してから着手する。

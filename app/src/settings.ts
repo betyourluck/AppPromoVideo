@@ -28,12 +28,12 @@ export interface CliSettings {
 export const DEFAULT_CLI_EXE: Record<CliKind, string> = { claude: "claude", aider: "aider", agy: "agy", custom: "" };
 
 /**
- * Anthropic の鍵と「OAuth ログインを使う」が意味を持つ種類か (rev52)。
- * agy には鍵を**常に**渡さない (backend の `env_remove_for`) ので、スイッチも Anthropic の診断も出さない —
- * 出すと「切れば agy に ANTHROPIC_API_KEY を渡す」と読める (ユーザー 2026-09-14)。
+ * Anthropic の鍵と「OAuth ログインを使う」を画面に出す種類か (rev52〜53)。**claude だけ**。
+ * agy には鍵を**常に**渡さない (backend の `env_remove_for`) ので、出すと「切れば agy に ANTHROPIC_API_KEY を渡す」と読める。
+ * aider / custom も出さない — 鍵は普通に引き継ぎ、スイッチの値は効かせない (見えない設定で挙動を変えない)。
  */
 export function usesAnthropicAuth(kind: CliKind): boolean {
-  return kind !== "agy";
+  return kind === "claude";
 }
 
 export function defaultCliSettings(): CliSettings {

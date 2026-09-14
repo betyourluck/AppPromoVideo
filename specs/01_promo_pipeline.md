@@ -1531,7 +1531,7 @@ ANTHROPIC_API_KEY を agy にも送ると誤認させそう」。
 **ユーザー決定** (選択肢 3 つから): agy ではスイッチを隠して**常に外す** / 関連の表示も一緒に直す。
 
 192. **agy には常に外す** — `pipeline::task::env_remove_for(kind, oauth_only)` (純粋): agy なら設定に関係なく
-     `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`、他の種類は従来どおりスイッチ次第。Tauri と `promo` CLI の両方がこれを通す
+     `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`、他の種類は従来どおりスイッチ次第 (**rev53 でスイッチは claude だけに**)。Tauri と `promo` CLI の両方がこれを通す
      (CLI にスイッチは無いので `oauth_only = false`)。理由は、agy に Anthropic の鍵を持たせる理由が無く、隔離が弱いこと (契約 `IsolationGuarantee.detect_only`)。
 193. **画面は agy の間スイッチを出さない** — 代わりの文言も置かない。初版は「agy には Anthropic の鍵 (…) を渡しません — …」
      (`settings.agyNoAnthropicKey`) を出したが、ユーザー判断 (同日)「わざわざ出す必要はない」で撤去 (キーも 3 言語から削除)。スイッチを残すと「切れば渡す」と読める。診断の `ANTHROPIC_*` 2 行と `claude auth status` も出さない
@@ -1549,6 +1549,28 @@ claude = スイッチあり・診断 5 行 (`ANTHROPIC_API_KEY` / `ANTHROPIC_AUT
 agy = スイッチなし・診断は 2 行 (子に渡さない変数 / 再検査)。初版の代わりの 1 行は撤去後に測り直し、設定の列のどこにも出ないことを確認。
 **罠をまた踏んだ**: 最初は診断を `innerText` で読んで両方とも空だった — ペインが hidden で描画されていない (rev34 / rev49 の同型)。`textContent` で読み直した。
 **接地の限界**: Tauri の実画面は未目視。agy の run で進捗ログの行が変わったこと (194) は live で見ていない (テストのみ)。
+
+## rev53 (2026-09-14、aider / custom も Anthropic の表示を出さない — 鍵は引き継ぐ)
+
+**ユーザー指示**「agy や claude 以外にも CLI を対応しているが、aider やカスタムでも同様にして欲しい」。
+
+**調べたこと**: 「同様」を agy と完全に同じ (鍵を常に外す) と読むと aider が壊れる。aider は `ANTHROPIC_API_KEY` を
+環境変数か `--anthropic-api-key` で受け取る (aider 公式文書 `docs/llms/anthropic`)。外した場合の回避は extra_args に鍵を書くことだが、
+それは起動の記録 (`.invocation.json`) に鍵を残す。custom は中身が分からない (claude のラッパーなら鍵が要る)。
+選択肢 3 つ (表示だけ隠して鍵は引き継ぐ / agy と完全に同じ / aider は引き継ぎ custom は外す) を出し、ユーザーは**表示だけ隠して鍵は引き継ぐ**を選んだ。
+
+195. **スイッチと Anthropic の表示は claude だけ** — `usesAnthropicAuth(kind)` を `kind === "claude"` に。aider / custom でも
+     スイッチ・診断の `ANTHROPIC_*` 2 行と `claude auth status` を出さない。進捗ログの認証の行も claude 以外は出さない (`auth_log_lines`)。
+196. **aider / custom は鍵を外さない — スイッチの保存値も効かせない** (`env_remove_for`: Claude = スイッチ / Agy = 常に外す / Aider・Custom = 常に外さない)。
+     画面に出さないスイッチの値で挙動が変わると、見えない設定で子の環境が変わる (rev36 の「無い記録を描かない」の裏返し — 見えない設定を効かせない)。
+     **挙動の変化**: rev52 までは aider / custom でスイッチ ON なら鍵を外していた。保存値が ON の環境では、この rev から aider / custom に鍵が渡る。
+
+**PoC**: 3 層とも新しい期待を先に書いて Red (`task::tests` = aider / custom + ON で鍵が外れる / `auth_log_tests` = aider / custom で認証の行が出る /
+`anthropicAuth.test.ts` = aider / custom で true)。claude と agy の本は Red の時点で通過。crates 193 → 194 / backend 27 → 28 / vitest 130 → 131、
+両ワークスペース clippy clean、build green。
+**実測** (ブラウザのペイン、自前の vite、変更の到達を `settings.ts` の中身で確認、ストアに診断のダミーを注入):
+claude = スイッチあり・診断 5 行 / agy・aider・custom = スイッチなし・診断 2 行 (子に渡さない変数 / 再検査)。
+**接地の限界**: aider は未導入のまま (実機で鍵が読まれることは公式文書だけが根拠)。Tauri の実画面は未目視。
 
 ## 公開とリリース (2026-09-13)
 
@@ -1770,6 +1792,7 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [x] rev50 (2026-09-14): 費用の chip に「LLM」の印 (191)。`LLM … USD` + 画像生成を含まない旨のホバー。vitest 128 / build green、ブラウザで実測。**Tauri 未目視**
 - [x] rev51 (2026-09-14): リポジトリ欄のプレースホルダーを具体的なパス (`D:\Github\my-app`) から案内文へ (ユーザー指示)。ja「ここにパスを入力して下さい」/ en「Enter the path here」/ zh-CN「请在此输入路径」。文言のみでテストは足していない (Red は観測していない)
 - [x] rev52 (2026-09-14): agy には Anthropic の鍵を常に渡さない (192〜194、契約 `CliInvocation.env_scrub.agy_keys`)。スイッチと Anthropic の診断・ログの語を agy で出さない。crates 193 / backend 27 / vitest 130 / clippy clean。**Tauri 未目視**
+- [x] rev53 (2026-09-14): aider / custom も Anthropic の表示を出さない・鍵は引き継ぐ (195〜196、契約 `CliInvocation.env_scrub.other_kinds`)。スイッチは claude だけ。crates 194 / backend 28 / vitest 131 / clippy clean。**Tauri 未目視**
 - [x] **agy で通しが成功** (2026-09-12 21:13、ユーザー実機): 解析 → 構成 (1 回目で通過) → 参照画像 3 枚 → 合成 → 見出しの焼き込み。
       166 は効いた (`run_command` への逃げは起きなかった)。168 も効いた (**費用の chip が出ていない**)。`runs/20260912-121310`
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度 / `RunStats` の live 記録 (frontal の費用)

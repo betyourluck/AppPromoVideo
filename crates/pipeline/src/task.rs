@@ -61,11 +61,18 @@ pub const OAUTH_ONLY_REMOVE: [&str; 2] = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_T
 
 /// 子に渡さない環境変数の追加分 (契約 `CliInvocation.env_scrub`、rev52、純粋)。
 ///
-/// - claude / aider / custom: 「OAuth ログインを使う」が ON の時だけ Anthropic の鍵 2 つを外す
+/// - claude: 「OAuth ログインを使う」が ON の時だけ Anthropic の鍵 2 つを外す (スイッチを持つのは claude だけ)
 /// - **agy: 設定に関係なく常に外す** (ユーザー決定 2026-09-14)。agy に Anthropic の鍵を持たせる理由が無く、
 ///   隔離が弱い (書き込み系ツールが通る。契約 `IsolationGuarantee`)。スイッチは画面にも出さない
+/// - **aider / custom: 設定に関係なく外さない** (rev53、同日ユーザー決定)。スイッチを画面に出さないので、
+///   保存された値を効かせない (見えない設定で挙動を変えない)。aider は ANTHROPIC_API_KEY を環境変数から読む (公式文書)
 pub fn env_remove_for(kind: CliKind, oauth_only: bool) -> Vec<String> {
-    if kind == CliKind::Agy || oauth_only { OAUTH_ONLY_REMOVE.iter().map(|s| s.to_string()).collect() } else { vec![] }
+    let remove = match kind {
+        CliKind::Claude => oauth_only,
+        CliKind::Agy => true,
+        CliKind::Aider | CliKind::Custom => false,
+    };
+    if remove { OAUTH_ONLY_REMOVE.iter().map(|s| s.to_string()).collect() } else { vec![] }
 }
 
 impl TaskRunner for CliTaskRunner {
@@ -109,10 +116,18 @@ mod tests {
     }
 
     #[test]
-    fn other_kinds_follow_the_oauth_switch() {
-        for k in [CliKind::Claude, CliKind::Aider, CliKind::Custom] {
+    fn only_claude_follows_the_oauth_switch() {
+        assert!(env_remove_for(CliKind::Claude, false).is_empty());
+        assert_eq!(env_remove_for(CliKind::Claude, true), KEYS);
+    }
+
+    /// rev53 (ユーザー決定 2026-09-14): aider / custom はスイッチを出さないので、保存された値を効かせない
+    /// (見えない設定で挙動を変えない)。鍵は外さず普通に引き継ぐ — aider は ANTHROPIC_API_KEY を環境変数から読む (公式文書)。
+    #[test]
+    fn aider_and_custom_inherit_keys_regardless_of_the_switch() {
+        for k in [CliKind::Aider, CliKind::Custom] {
             assert!(env_remove_for(k, false).is_empty(), "{k:?}");
-            assert_eq!(env_remove_for(k, true), KEYS, "{k:?}");
+            assert!(env_remove_for(k, true).is_empty(), "{k:?}");
         }
     }
 }

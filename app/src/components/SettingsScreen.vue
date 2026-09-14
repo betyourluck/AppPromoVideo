@@ -229,7 +229,7 @@ function close() {
           <span>{{ t('settings.extraArgs') }}</span>
           <input v-model="store.cli.extraArgs" class="mono" @change="store.persist()" />
         </label>
-        <!-- rev52: agy には Anthropic の鍵を常に渡さないので、スイッチを出さない (あると「切れば渡す」と読める)。 -->
+        <!-- rev52〜53: スイッチは claude だけ。agy には鍵を常に渡さず (あると「切れば渡す」と読める)、aider / custom は普通に引き継ぐ。 -->
         <label v-if="usesAnthropicAuth(store.cli.kind)" class="field row" style="gap: 8px">
           <Switch v-model="store.cli.oauthOnly" @change="store.persist()" />
           <span style="margin: 0">{{ t('settings.oauthOnly') }}</span>
@@ -238,7 +238,7 @@ function close() {
         <details v-if="store.cliCheck" class="help">
           <summary>{{ t('settings.authTitle') }}</summary>
           <div class="authbox mono">
-            <!-- Anthropic の鍵と claude auth status は agy では意味を持たない (rev52)。 -->
+            <!-- Anthropic の鍵と claude auth status は claude の時だけ出す (rev52〜53)。 -->
             <template v-if="usesAnthropicAuth(store.cli.kind)">
             <div>
               ANTHROPIC_API_KEY:
