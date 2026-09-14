@@ -74,7 +74,7 @@ cd app && npx vitest run && npm run build    # frontend の単体テストと型
 cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 ```
 
-## 現状 (2026-09-13 深夜)
+## 現状 (2026-09-14)
 
 - **`v0.1.2` (2026-09-14、ユーザーがタグ) = rev48〜53 が乗った版。** タグは `1535af0`。CI 3 OS green (run 34808086566)、
   ログで `Signing` → `Notarizing Finished with status Accepted` → `Stapling app...` を確認、Release は draft で 7 点。
@@ -88,6 +88,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   winget は PR #434054 (0.1.1) のマージ後に `wingetcreate update`。版番号 3 か所 + `Cargo.lock` は**タグの後に**上げた —
   配布物は CI の `Sync app version to tag` が `tauri.conf.json` をタグに揃えるので 0.1.2 で出ている。
   次のタグを打つ時の手順: 版番号 → タグ `vX.Y.Z` → CI (draft、3 OS) → 説明を確認 → publish → tap の `version` / `sha256` (Release API の `digest`) → `wingetcreate update` (マージ後)。
+- **rev54〜55 は main にあるが配布物には乗っていない** (v0.1.2 は rev53 まで)。次のタグで乗る。
 - **winget は PR #434054 (0.1.1) がマージ待ち。** マージされたら README 英日に winget を追記する (それまで書かない)。
 
 - **公開した (2026-09-13)。** MIT (`LICENSE`)、`origin` は public。`v0.1.0` のタグで CI が**初回から 3 OS とも green**、
@@ -235,7 +236,9 @@ backend 由来のログ・エラーの文言は日本語のまま。
 `history.md` の同日エントリ (特に「`画像: off` と `参照画像を生成` が別ペインに離れている」は見本が無くても直せる)。
 シーン編集ダイアログも同日に見た (rev23 / rev24 のユーザー目視。観察 2 点は `history.md`)。
 
-**次の候補**: プロンプトに「最初の文に戻す」を付けるか /
+**次の候補**: backend が実際の snapshot 番号を返す形 (Rust と TS で 2 つある式を 1 つに。promo の型が変わるので後回し — 2026-09-14 ユーザー判断) /
+aider の実機で `ANTHROPIC_API_KEY` が読まれるか (未導入。根拠は公式文書だけ) /
+プロンプトに「最初の文に戻す」を付けるか /
 傾きと可読性の境目 /
 mood カットのモチーフ一貫性 / `motion_prompt` の粒度 / ComfyUI と OpenAI の live /
 Unix の `tree_kill` / `--add-dir` 外 Read の拒否確認。
@@ -247,5 +250,7 @@ rev14 のコミット `5929f93` に巻き込んだ。実害は無いが粒度が
 
 1. `cargo test --workspace` (195 green) と `cd app && npx vitest run && npm run build` (135 green) で足場を確認。**並べて走らせるなら絶対パス** (cwd が `app/src-tauri` に残る事故を 4 回踏んだ)。
    `cd /abs && …` は**そのコマンド**を守るだけで、ずれた cwd は次のコマンドへ残る — **並べる全部に `cd` を書く** (2026-09-14)。
+   同日、この処方を書いた**後にも** `cd` の書き忘れで 3 回空振りした (vitest 2 回・backend の Red 1 回。どれも「0 本選ばれた / 何も出ない」で、落ちたようには見えない)。
+   **送る前に、並べた各コマンドの先頭が `cd /abs &&` かを見る。** 出力が空・0 本の時は、結果ではなく cwd を疑う。
 2. `git log --oneline -5` で直前の着地を見る。詳しい経緯は `history.md`。
 3. 上の「開いている判断」に答えが来ていないか確認してから着手する。

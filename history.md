@@ -1348,3 +1348,4 @@ backend の Red を 1 回 `cd` 無しで走らせて root で 0 本選ばれ、�
 直し方を 2 案出し、ユーザーは「画面側に同じ規則の関数 + 1 始まりに統一」を選んだ (backend が番号を返す案は promo の型が変わるので後続)。
 `plate.ts` に `plateSnapshotIndex` / `snapshotChipLabel` を置き、Rust と同じ 8 ケースをテストに写した。chip と `CaptionEditor` の `hasPlate` が同じ関数を通る。
 scenes.md の表も `i + 1` に (rev54 で入れた書き方を当日中に変えた)。TS と Rust の両方で Red → Green、ブラウザで 4 通りの chip を読んだ。
+ユーザーが Tauri の実画面で 2 回確認した — 1 回目は上書きの無い run (`product · snap 1` / `mood`)、2 回目は面を足した mood のある run (`mood · snap 1` / `mood · snap 3`)。

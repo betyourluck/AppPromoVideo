@@ -1626,7 +1626,8 @@ crates 195 (本数は変わらず、期待を書き換えた) / backend 30 / vit
 **実測** (ブラウザのペイン、自前の vite、変更の到達を `plate.ts` の中身で確認、ストアに 4 シーンを注入):
 `#1 product (plan 0, 上書き 2) = product · snap 3` / `#2 product (番号なし) = product · snap 1` / `#3 mood (上書き 1) = mood · snap 2` / `#4 mood = mood`。
 **接地の限界**: Tauri の実画面は未目視。配布物に乗るのは次のタグから
-(→ 2026-09-14 ユーザーが Tauri の実画面で確認 (スクリーンショット): `#1 mood` / `#2 product · snap 1`。はめ込みの上書きがあるシーンは画面に無く、選び直した番号の表示は Tauri では見ていない)。
+(→ 2026-09-14 ユーザーが Tauri の実画面で確認 (スクリーンショット): `#1 mood` / `#2 product · snap 1`。はめ込みの上書きがあるシーンは画面に無く、選び直した番号の表示は Tauri では見ていない)
+(→ 同日、続けて上書きのある run でも確認 (スクリーンショット): 面を足した mood が `#2 mood · snap 1` / `#3 mood · snap 3`)。
 
 ## 公開とリリース (2026-09-13)
 
@@ -1850,7 +1851,7 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [x] rev52 (2026-09-14): agy には Anthropic の鍵を常に渡さない (192〜194、契約 `CliInvocation.env_scrub.agy_keys`)。スイッチと Anthropic の診断・ログの語を agy で出さない。crates 193 / backend 27 / vitest 130 / clippy clean。**ユーザーが配布ビルドで目視確認 (2026-09-14)** — 設定画面と、実 run の進捗ログ
 - [x] rev53 (2026-09-14): aider / custom も Anthropic の表示を出さない・鍵は引き継ぐ (195〜196、契約 `CliInvocation.env_scrub.other_kinds`)。スイッチは claude だけ。crates 194 / backend 28 / vitest 131 / clippy clean。**ユーザーが配布ビルドで目視確認 (2026-09-14)** — 設定画面と、実 run の進捗ログ
 - [x] rev54 (2026-09-14): scenes.md をいつも promo.json と揃える / 表の snapshot 番号は実際に貼ったもの (197〜199、契約 `ExportPackage.layout`)。`write_run_files` / `plate_snapshot_index` を promo_core へ。crates 195 / backend 30 / clippy clean。GUI の変化は無い (scenes.md の中身だけ)
-- [x] rev55 (2026-09-14): 結果ペインの snap 表示を実際に貼った番号に / 人に見せる番号は 1 始まりに統一 (200〜202、契約 `ExportPackage.layout`)。`plateSnapshotIndex` を画面側にも置き、Rust と同じ 8 ケースで固定。crates 195 / backend 30 / vitest 135 / clippy clean、ブラウザで実測。**Tauri でユーザー目視 (2026-09-14)** — `product · snap 1` / `mood` (上書きのあるシーンは画面に無かった)
+- [x] rev55 (2026-09-14): 結果ペインの snap 表示を実際に貼った番号に / 人に見せる番号は 1 始まりに統一 (200〜202、契約 `ExportPackage.layout`)。`plateSnapshotIndex` を画面側にも置き、Rust と同じ 8 ケースで固定。crates 195 / backend 30 / vitest 135 / clippy clean、ブラウザで実測。**Tauri でユーザー目視 (2026-09-14)** — `product · snap 1` / `mood`、面を足した mood の `mood · snap 1` / `mood · snap 3`
 - [x] **agy で通しが成功** (2026-09-12 21:13、ユーザー実機): 解析 → 構成 (1 回目で通過) → 参照画像 3 枚 → 合成 → 見出しの焼き込み。
       166 は効いた (`run_command` への逃げは起きなかった)。168 も効いた (**費用の chip が出ていない**)。`runs/20260912-121310`
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度 / `RunStats` の live 記録 (frontal の費用)
