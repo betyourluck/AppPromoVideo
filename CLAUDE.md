@@ -118,9 +118,12 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   (書いてあるのに入らない、を避ける)。次の版は `wingetcreate update Outcasts.AppPromoVideo --version <V> --urls <MSI URL>` →
   ローカル生成 → `InstallerLocale` が混ざっていたら消す → `wingetcreate submit --token "$(gh auth token)"`。提出前に
   `gh repo sync betyourluck/winget-pkgs --source microsoft/winget-pkgs --branch master`。
-- **spec 01 は Phase 0〜E 着地、rev54 まで反映済み (rev27〜29 は試行)。** crates 195 green / vitest 131 / backend 30 green・clippy clean。
+- **spec 01 は Phase 0〜E 着地、rev55 まで反映済み (rev27〜29 は試行)。** crates 195 green / vitest 135 / backend 30 green・clippy clean。
 - **`scenes.md` はいつも `promo.json` と揃えて書く** (rev54、`pipeline::export::write_run_files`)。表の snapshot 番号は合成が実際に貼るもの
   (`promo_core::export::plate_snapshot_index`)。以前は焼き直しとスナップショット追加が promo.json だけを書き、表は plan の番号のままだった。
+  **結果ペインの chip も同じ規則** (rev55、`app/src/plate.ts` の `plateSnapshotIndex` — Rust と式が 2 つなので両方のテストに同じ 8 ケース)。
+  **人に見せる番号は 1 始まり** (chip の `snap N` / scenes.md の `snapshot N` / ダイアログの N 枚目 / ファイル名 `snapshot_0N`)。内部の `snapshot_index` は 0 始まりのまま。
+  backend が実際の番号を返す形 (式を 1 つにする) は promo の型が変わるので後続 (ユーザー判断 2026-09-14)。
 - **agy でも通しが成功** (2026-09-12 21:13、ユーザー実機)。解析 → 構成 (1 回目で通過) → 参照画像 → 合成 → 見出しの焼き込み。
   費用の chip は出ない (agy は費用を返さないので描かない)。
 - コミットは Initial `a75c3bc` の上に積んでいる。**本数も push 済みの範囲もここに書かない** — 書くたび 1 手遅れて嘘になる (実際に 2026-09-12、`rev42 まで push 済み` と書いた行の中に 「ここに書くと 1 手遅れる」と併記する矛盾を作った)。数えるなら `git rev-list --count a75c3bc..HEAD` と `git log --oneline origin/main..HEAD`。**公開リポジトリ** (MIT、`LICENSE`)。
@@ -242,7 +245,7 @@ rev14 のコミット `5929f93` に巻き込んだ。実害は無いが粒度が
 
 ## 再開の手順
 
-1. `cargo test --workspace` (195 green) と `cd app && npx vitest run && npm run build` (131 green) で足場を確認。**並べて走らせるなら絶対パス** (cwd が `app/src-tauri` に残る事故を 4 回踏んだ)。
+1. `cargo test --workspace` (195 green) と `cd app && npx vitest run && npm run build` (135 green) で足場を確認。**並べて走らせるなら絶対パス** (cwd が `app/src-tauri` に残る事故を 4 回踏んだ)。
    `cd /abs && …` は**そのコマンド**を守るだけで、ずれた cwd は次のコマンドへ残る — **並べる全部に `cd` を書く** (2026-09-14)。
 2. `git log --oneline -5` で直前の着地を見る。詳しい経緯は `history.md`。
 3. 上の「開いている判断」に答えが来ていないか確認してから着手する。

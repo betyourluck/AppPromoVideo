@@ -486,7 +486,7 @@ ImageGenerator:                     # trait (依存性逆転)。実装 = OpenAiI
 ExportPackage:                      # export_dir/<app_name>_Promo_Package/runs/<run_id>/ (rev7)
   layout:
     - "<pkg>/runs/<run_id>/promo.json          — { project: PromoProject(パスのみ), summary: AnalyzedSummary, plan: ScenePlan }"
-    - "<pkg>/runs/<run_id>/scenes.md           — シーン構成表 (Markdown 表 + 各シーンの video_prompt 全文)。kind 列の snapshot 番号は**合成が実際に貼るもの** (`promo_core::export::plate_snapshot_index` — PlateOverride の選び直しが plan に勝ち、mood に足した面も書く。rev54、以前は plan の番号)。promo.json を書く経路はすべて `pipeline::export::write_run_files` を通り、scenes.md と揃えて書く (rev54、以前は焼き直しとスナップショットの追加が promo.json だけを書いていた)"
+    - "<pkg>/runs/<run_id>/scenes.md           — シーン構成表 (Markdown 表 + 各シーンの video_prompt 全文)。kind 列の snapshot 番号は**合成が実際に貼るもの** (`promo_core::export::plate_snapshot_index` — PlateOverride の選び直しが plan に勝ち、mood に足した面も書く。rev54、以前は plan の番号)。**番号は 1 始まり** (rev55 — ファイル名 snapshots/snapshot_01 と画面の「1 枚目」に揃える)。結果ペインの chip (`product · snap N`) も同じ規則 (`app/src/plate.ts` の `plateSnapshotIndex`。Rust と TS に同じ式があるので両方のテストに同じ 8 ケースを置く)。promo.json を書く経路はすべて `pipeline::export::write_run_files` を通り、scenes.md と揃えて書く (rev54、以前は焼き直しとスナップショットの追加が promo.json だけを書いていた)"
     - "<pkg>/runs/<run_id>/scene_NN_ref_MM.png — 参照画像 (**見出しを焼いた完成品**。MiniMax へ渡すのはこれ)"
     - "<pkg>/runs/<run_id>/base/scene_NN_ref_MM.png — **素材** (rev10): product は背景だけ / mood は絵そのもの。どちらも canvas 同寸の PNG"
     - "<pkg>/runs/<run_id>/snapshots/          — 入力スナップショットの写し"

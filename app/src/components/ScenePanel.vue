@@ -8,6 +8,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../store";
 import { runHeaderStats } from "../runs";
 import { currentPhase, elapsedLabel, phaseSteps } from "../runPhase";
+import { snapshotChipLabel } from "../plate";
 import type { Scene, SceneOp } from "../types";
 import { t } from "../i18n";
 import Lightbox from "./Lightbox.vue";
@@ -280,7 +281,8 @@ function openRef(sceneId: number) {
         <div v-for="(s, i) in scenes" :key="s.scene_id" class="scene-card">
           <div class="scene-head">
             <span class="num">#{{ s.scene_id }}</span>
-            <span class="chip" :class="s.cut_kind === 'product' ? 'accent' : ''">{{ s.cut_kind === 'product' ? `product · snap ${s.snapshot_index ?? '?'}` : 'mood' }}</span>
+            <!-- rev55: 番号は合成と同じ規則 (選び直しが勝つ) で、1 始まり。以前は plan の番号を 0 始まりで出していた。 -->
+            <span class="chip" :class="s.cut_kind === 'product' ? 'accent' : ''">{{ snapshotChipLabel(s, promo.plate_overrides?.[s.scene_id]) }}</span>
             <span class="chip">{{ s.duration_seconds }}s</span>
             <span class="chip">{{ s.shot_type }}</span>
             <span class="copytext">{{ s.copy_text }}</span>

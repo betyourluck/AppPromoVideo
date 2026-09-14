@@ -1340,3 +1340,11 @@ plan の番号を書いていて、はめ込みで選び直した番号を見て
 promo.json を書く全経路を `write_run_files` (2 ファイルを揃えて書く) に寄せた。形だけ変える段を先に緑で通してから Red を取った。
 backend の Red を 1 回 `cd` 無しで走らせて root で 0 本選ばれ、何も観測できていなかった — 取り直して 2 本とも「scenes.md が書かれていない」を見た。
 結果ペインのシーンの chip も plan の番号を出していて同じずれがありうるが、今回は触っていない。
+
+## 2026-09-14 (続) — rev55: 結果ペインの snap 表示 / 番号は 1 始まり
+
+上の chip をユーザーの指示で調べた。同じずれ (plan の番号で上書きを見ない) に加え、**数え方が混ざっていた** — chip と scenes.md は 0 始まり、
+編集ダイアログとファイル名 `snapshot_01` は 1 始まり。実データの scene 3 は chip が `snap 0`、ダイアログは 3 枚目、実際に貼ったのも 3 枚目。
+直し方を 2 案出し、ユーザーは「画面側に同じ規則の関数 + 1 始まりに統一」を選んだ (backend が番号を返す案は promo の型が変わるので後続)。
+`plate.ts` に `plateSnapshotIndex` / `snapshotChipLabel` を置き、Rust と同じ 8 ケースをテストに写した。chip と `CaptionEditor` の `hasPlate` が同じ関数を通る。
+scenes.md の表も `i + 1` に (rev54 で入れた書き方を当日中に変えた)。TS と Rust の両方で Red → Green、ブラウザで 4 通りの chip を読んだ。

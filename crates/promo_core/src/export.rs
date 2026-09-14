@@ -284,13 +284,14 @@ pub fn scenes_markdown(promo: &PromoJson) -> String {
 
 /// 表の kind 列 (rev54)。番号は**合成が実際に貼るもの** (`plate_snapshot_index`) — 以前は plan の番号を書いていて、
 /// はめ込みで選び直すと表だけが古い番号のまま残り、mood に足した面も表に出なかった。
+/// 番号は **1 始まり** (rev55) — ファイル名 `snapshots/snapshot_01` と画面の「1 枚目」に揃える。
 fn kind_cell(promo: &PromoJson, sc: &crate::plan::Scene) -> String {
     let kind = match sc.cut_kind {
         crate::plan::CutKind::Product => "product",
         crate::plan::CutKind::Mood => "mood",
     };
     match plate_snapshot_index(sc, promo.plate_overrides.get(&sc.scene_id)) {
-        Some(i) => format!("{kind} (snapshot {i})"),
+        Some(i) => format!("{kind} (snapshot {})", i + 1),
         None => kind.to_string(),
     }
 }
@@ -452,7 +453,8 @@ mod tests {
         let mut promo = promo_with_overrides();
         (promo.summary, promo.plan) = (s, p);
         let md = scenes_markdown(&promo);
-        assert!(md.contains("| 1 | 5 | product (snapshot 0) | Close-up | a \\| b | scene_01_ref_01.png |"));
+        // rev55: 番号は 1 始まり (ファイル名 snapshots/snapshot_01 と画面の「1 枚目」に揃える)。
+        assert!(md.contains("| 1 | 5 | product (snapshot 1) | Close-up | a \\| b | scene_01_ref_01.png |"));
         assert!(md.contains("### Motion prompt (image-to-video)\n\n```\nSlow push-in.\n```"));
         assert!(md.contains("```\nCinematic desk shot.\n```"));
         assert!(md.contains("**Aspect**: 16:9"));
@@ -471,8 +473,9 @@ mod tests {
         promo.plate_overrides.insert(1, PlateOverride { snapshot_index: Some(3), ..Default::default() });
         promo.plate_overrides.insert(2, PlateOverride { snapshot_index: Some(2), ..Default::default() });
         let md = scenes_markdown(&promo);
-        assert!(md.contains("| 1 | 5 | product (snapshot 3) |"), "選び直した番号が plan の番号に勝つ:\n{md}");
-        assert!(md.contains("| 2 | 5 | mood (snapshot 2) |"), "mood に足した面も書く:\n{md}");
+        // 番号は 1 始まりで書く (rev55。index 3 = snapshot_04)。
+        assert!(md.contains("| 1 | 5 | product (snapshot 4) |"), "選び直した番号が plan の番号に勝つ:\n{md}");
+        assert!(md.contains("| 2 | 5 | mood (snapshot 3) |"), "mood に足した面も書く:\n{md}");
         assert!(md.contains("| 3 | 5 | mood |"), "面を足していない mood は mood のまま:\n{md}");
     }
 }

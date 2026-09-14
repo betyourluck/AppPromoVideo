@@ -1601,6 +1601,32 @@ backend のテストは scenes.md の中身が保存後の promo.json から作�
 `check_data_contract.py` OK。frontend は触っていない (vitest 131 のまま)。
 **取りこぼしを 1 つ**: backend の Red を最初に `cd` 無しで走らせ、root の workspace で 0 本が選ばれて何も観測できていなかった (同日 3 回目)。
 **未確認のまま**: 結果ペインのシーンの chip (`ScenePanel.vue` の `product · snap N`) も plan の番号を出していて、同じずれがありうる (今回は触っていない)。
+(→ rev55 で確認して直した: 同じずれに加え、番号が 0 始まりで編集ダイアログの「N 枚目」と 1 つずれていた)
+
+## rev55 (2026-09-14、結果ペインの snap 表示を実際に貼った番号に / 番号は 1 始まりに統一)
+
+**ユーザー指示**「結果ペインの snap 表示も調べて」→ 調べた結果に対し「画面側に `plate_snapshot_index` と同じ規則の小さな関数を置く案 + 数え方を 1 始まりに統一」。
+backend が実際の番号を返す案は promo の型が変わり scenes.md 以上に影響するので、**後続に回す** (ユーザー判断)。
+
+**観察**: `ScenePanel.vue` の chip は plan の番号 `s.snapshot_index` をそのまま出していて、`plate_overrides` を見ていなかった
+(rev54 の scenes.md と同じずれ)。一方の編集ダイアログは上書きを読み、番号を **1 始まり** (「3 枚目」) で出す。chip は **0 始まり** (`snap 0`) で、
+run の中のファイル名 `snapshots/snapshot_01` も 1 始まり。実データ: run `20260912-035429` の scene 3 は chip が `snap 0`、ダイアログは 3 枚目、実際に貼ったのも 3 枚目 (index 2)。
+番号の無い product は chip が `snap ?` だが合成は 0 を貼る。mood に面を足しても chip は `mood` のまま。
+
+200. **画面側に同じ規則の関数を置く** — `app/src/plate.ts` の `plateSnapshotIndex(scene, plate)` (0 始まり、`null` = 貼らない) と
+     chip の文字 `snapshotChipLabel` (1 始まり。面が無ければ種類だけ)。Rust の `plate_snapshot_index` と式が 2 つになるので、
+     **`plate.test.ts` に Rust (`crates/pipeline/src/reference.rs`) と同じ 8 ケースを写して**食い違いを見張る。
+201. **判定を部品ごとに書かない** — `ScenePanel.vue` の chip と `CaptionEditor.vue` の `hasPlate` が同じ `plateSnapshotIndex` を通す。
+202. **人に見せる番号は 1 始まりに統一** — chip (`snap N`)、scenes.md の表 (`snapshot N`、rev54 で入れた書き方を変えた)、編集ダイアログ (N 枚目)、
+     ファイル名 (`snapshot_0N`)。plan / promo.json / PlateOverride の `snapshot_index` は内部の値なので **0 始まりのまま** (契約 `ScenePlan.snapshot_index`)。
+
+**PoC**: TS は今の chip と同じ挙動 (上書きを見ない・0 始まり) の仮実装で Red (8 本中 4 本、例 `expected 'product · snap 0' to be 'product · snap 3'`) →
+実装して Green。promo_core は表のテスト 2 本を 1 始まりの期待に書き換えて Red (0 始まりのまま) → `i + 1` で Green。
+crates 195 (本数は変わらず、期待を書き換えた) / backend 30 / vitest 131 → 135、clippy clean、build green、`check_data_contract.py` OK。
+**実測** (ブラウザのペイン、自前の vite、変更の到達を `plate.ts` の中身で確認、ストアに 4 シーンを注入):
+`#1 product (plan 0, 上書き 2) = product · snap 3` / `#2 product (番号なし) = product · snap 1` / `#3 mood (上書き 1) = mood · snap 2` / `#4 mood = mood`。
+**接地の限界**: Tauri の実画面は未目視。配布物に乗るのは次のタグから
+(→ 2026-09-14 ユーザーが Tauri の実画面で確認 (スクリーンショット): `#1 mood` / `#2 product · snap 1`。はめ込みの上書きがあるシーンは画面に無く、選び直した番号の表示は Tauri では見ていない)。
 
 ## 公開とリリース (2026-09-13)
 
@@ -1824,6 +1850,7 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [x] rev52 (2026-09-14): agy には Anthropic の鍵を常に渡さない (192〜194、契約 `CliInvocation.env_scrub.agy_keys`)。スイッチと Anthropic の診断・ログの語を agy で出さない。crates 193 / backend 27 / vitest 130 / clippy clean。**ユーザーが配布ビルドで目視確認 (2026-09-14)** — 設定画面と、実 run の進捗ログ
 - [x] rev53 (2026-09-14): aider / custom も Anthropic の表示を出さない・鍵は引き継ぐ (195〜196、契約 `CliInvocation.env_scrub.other_kinds`)。スイッチは claude だけ。crates 194 / backend 28 / vitest 131 / clippy clean。**ユーザーが配布ビルドで目視確認 (2026-09-14)** — 設定画面と、実 run の進捗ログ
 - [x] rev54 (2026-09-14): scenes.md をいつも promo.json と揃える / 表の snapshot 番号は実際に貼ったもの (197〜199、契約 `ExportPackage.layout`)。`write_run_files` / `plate_snapshot_index` を promo_core へ。crates 195 / backend 30 / clippy clean。GUI の変化は無い (scenes.md の中身だけ)
+- [x] rev55 (2026-09-14): 結果ペインの snap 表示を実際に貼った番号に / 人に見せる番号は 1 始まりに統一 (200〜202、契約 `ExportPackage.layout`)。`plateSnapshotIndex` を画面側にも置き、Rust と同じ 8 ケースで固定。crates 195 / backend 30 / vitest 135 / clippy clean、ブラウザで実測。**Tauri でユーザー目視 (2026-09-14)** — `product · snap 1` / `mood` (上書きのあるシーンは画面に無かった)
 - [x] **agy で通しが成功** (2026-09-12 21:13、ユーザー実機): 解析 → 構成 (1 回目で通過) → 参照画像 3 枚 → 合成 → 見出しの焼き込み。
       166 は効いた (`run_command` への逃げは起きなかった)。168 も効いた (**費用の chip が出ていない**)。`runs/20260912-121310`
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度 / `RunStats` の live 記録 (frontal の費用)

@@ -10,6 +10,36 @@
  */
 
 import { t } from "./i18n";
+import type { PlateOverride, Scene } from "./types";
+
+/**
+ * このシーンで貼るスクリーンショットの番号 (**0 始まり**、rev55)。`null` = 貼らない。
+ *
+ * **backend の `promo_core::export::plate_snapshot_index` と同じ規則。** Rust と TS に同じ式が 2 つあるので、
+ * 両方のテストに同じケースを置いて食い違いを見張る (`plate.test.ts` / `crates/pipeline/src/reference.rs`)。
+ * backend が実際の番号を返す形にすれば 1 つで済むが、promo の型が変わるので後続に回した (ユーザー判断 2026-09-14)。
+ * - product: 人の選び直しが LLM の指定に勝ち、どちらも無ければ 0
+ * - mood: 人が足した時だけ貼る
+ */
+export function plateSnapshotIndex(
+  scene: Pick<Scene, "cut_kind" | "snapshot_index">,
+  plate: PlateOverride | null | undefined,
+): number | null {
+  const chosen = plate?.snapshot_index ?? null;
+  return scene.cut_kind === "product" ? (chosen ?? scene.snapshot_index ?? 0) : chosen;
+}
+
+/**
+ * 結果ペインの chip の文字 (rev55)。番号は**1 始まり** — ファイル名 `snapshots/snapshot_01` と
+ * 編集ダイアログの「1 枚目」に揃える。以前は plan の番号を 0 始まりで出していて、選び直しも見ていなかった。
+ */
+export function snapshotChipLabel(
+  scene: Pick<Scene, "cut_kind" | "snapshot_index">,
+  plate: PlateOverride | null | undefined,
+): string {
+  const i = plateSnapshotIndex(scene, plate);
+  return i === null ? scene.cut_kind : `${scene.cut_kind} · snap ${i + 1}`;
+}
 
 /** スライダーに置く値。未指定なら実効値 (LLM の傾き)。 */
 export function tiltValue(override: number | null, fallback: number): number {

@@ -1,5 +1,40 @@
 import { describe, expect, it } from "vitest";
-import { tiltLabel, tiltValue } from "./plate";
+import { plateSnapshotIndex, snapshotChipLabel, tiltLabel, tiltValue } from "./plate";
+
+const scene = (cut_kind: "product" | "mood", snapshot_index: number | null) => ({ cut_kind, snapshot_index });
+const plate = (snapshot_index: number | null) => ({ snapshot_index });
+
+describe("plateSnapshotIndex (rev55、backend の plate_snapshot_index と同じケース)", () => {
+  // crates/pipeline/src/reference.rs の a_mood_cut_takes_a_plate_only_when_a_person_adds_one と同じ 4 ケース。
+  it("mood は人が足した時だけ貼る", () => {
+    expect(plateSnapshotIndex(scene("mood", null), null)).toBe(null);
+    expect(plateSnapshotIndex(scene("mood", null), plate(2))).toBe(2);
+    expect(plateSnapshotIndex(scene("mood", null), plate(null))).toBe(null);
+    expect(plateSnapshotIndex(scene("mood", 1), null)).toBe(null);
+  });
+
+  // 同 a_product_cut_keeps_the_existing_precedence と同じ 4 ケース。
+  it("product は人の選び直しが LLM に勝ち、どちらも無ければ 0", () => {
+    expect(plateSnapshotIndex(scene("product", 1), null)).toBe(1);
+    expect(plateSnapshotIndex(scene("product", 1), plate(3))).toBe(3);
+    expect(plateSnapshotIndex(scene("product", null), null)).toBe(0);
+    expect(plateSnapshotIndex(scene("product", 2), { yaw_degrees: 10 })).toBe(2);
+  });
+});
+
+describe("snapshotChipLabel (rev55、結果ペインの chip)", () => {
+  // 2026-09-14 実データ: run 20260912-035429 の scene 3 は chip が「snap 0」、編集ダイアログは「3 枚目」、
+  // 実際に貼ったのも 3 枚目 (index 2)。
+  it("選び直した番号を 1 始まりで出す", () => {
+    expect(snapshotChipLabel(scene("product", 0), plate(2))).toBe("product · snap 3");
+    expect(snapshotChipLabel(scene("product", null), null)).toBe("product · snap 1");
+  });
+
+  it("mood は面を足した時だけ番号を出す", () => {
+    expect(snapshotChipLabel(scene("mood", null), plate(1))).toBe("mood · snap 2");
+    expect(snapshotChipLabel(scene("mood", null), null)).toBe("mood");
+  });
+});
 
 describe("傾きスライダーの基準 (rev21)", () => {
   it("触っていない時は LLM が書いた傾きを見せる — 0° ではない", () => {

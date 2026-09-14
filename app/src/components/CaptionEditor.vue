@@ -15,7 +15,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../store";
 import type { FontEntry } from "../types";
 import { baseName as fileName, snapshotChoices } from "../snapshots";
-import { tiltLabel, tiltValue } from "../plate";
+import { plateSnapshotIndex, tiltLabel, tiltValue } from "../plate";
 import { ask, isMessageBoxOpen } from "../dialog";
 import { t } from "../i18n";
 import Icon from "./Icon.vue";
@@ -66,7 +66,14 @@ const snapIndex = ref<number | null>(null);
  * `isProduct` (LLM が決めた種別) と分けているのは、種別を書き換えずに面だけ足せるようにするため —
  * 書き換えると `image_prompt` が背景の記述でなくなり、再生成したときに mood の絵を失う。
  */
-const hasPlate = computed(() => props.isProduct || snapIndex.value !== null);
+// rev55: 結果ペインの chip と同じ関数を通す (判定を部品ごとに書かない)。
+const hasPlate = computed(
+  () =>
+    plateSnapshotIndex(
+      { cut_kind: props.isProduct ? "product" : "mood", snapshot_index: props.llmSnapshot },
+      { snapshot_index: snapIndex.value },
+    ) !== null,
+);
 
 /**
  * 選べる一覧 (rev20) = run に写してあるもの + **入力ペインで後から足したもの**。
