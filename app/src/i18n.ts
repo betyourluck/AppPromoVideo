@@ -218,7 +218,8 @@ const ja = {
   "settings.timeout": "タイムアウト (秒、最小 30)",
   "settings.maxTurns": "最大ターン (走査の深掘り回数)",
   "settings.oauthOnly":
-    "OAuth ログインを使う — 環境変数の ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN を子 CLI に渡さない (端末の鍵が古い・無効なときの回避)",  "settings.extraArgs": "追加引数 (空白区切り。既定では付けない: --dangerously-skip-permissions 等)",
+    "OAuth ログインを使う — 環境変数の ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN を子 CLI に渡さない (端末の鍵が古い・無効なときの回避)",
+  "settings.extraArgs": "追加引数 (空白区切り。既定では付けない: --dangerously-skip-permissions 等)",
   "settings.authTitle": "子 CLI が使う認証 (このアプリのプロセス環境)",
   "settings.present": "あり",
   "settings.presentKey": "あり (len {len}, fp {fp})",
@@ -558,7 +559,8 @@ const en: Dict = {
   "settings.timeout": "Timeout (seconds, min 30)",
   "settings.maxTurns": "Max turns (how deep the repository scan goes)",
   "settings.oauthOnly":
-    "Use OAuth login — do not pass ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN from the environment to the child CLI (a workaround when the terminal's key is stale or invalid)",  "settings.extraArgs": "Extra arguments (space-separated; none by default, e.g. --dangerously-skip-permissions)",
+    "Use OAuth login — do not pass ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN from the environment to the child CLI (a workaround when the terminal's key is stale or invalid)",
+  "settings.extraArgs": "Extra arguments (space-separated; none by default, e.g. --dangerously-skip-permissions)",
   "settings.authTitle": "Authentication used by the child CLI (this app's process environment)",
   "settings.present": "present",
   "settings.presentKey": "present (len {len}, fp {fp})",
@@ -893,7 +895,8 @@ const zhCN: Dict = {
   "settings.timeout": "超时 (秒，最少 30)",
   "settings.maxTurns": "最大轮数 (扫描的深入次数)",
   "settings.oauthOnly":
-    "使用 OAuth 登录 — 不将环境变量 ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN 传给子 CLI (终端密钥过期或无效时的规避方法)",  "settings.extraArgs": "附加参数 (空格分隔；默认不添加，如 --dangerously-skip-permissions)",
+    "使用 OAuth 登录 — 不将环境变量 ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN 传给子 CLI (终端密钥过期或无效时的规避方法)",
+  "settings.extraArgs": "附加参数 (空格分隔；默认不添加，如 --dangerously-skip-permissions)",
   "settings.authTitle": "子 CLI 使用的认证 (本应用的进程环境)",
   "settings.present": "有",
   "settings.presentKey": "有 (len {len}, fp {fp})",
