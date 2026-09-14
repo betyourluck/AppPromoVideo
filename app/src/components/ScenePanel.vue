@@ -219,11 +219,7 @@ function openRef(sceneId: number) {
         </div>
         <div class="stats">
           <span class="chip">{{ promo.plan.total_seconds }}s · {{ promo.plan.aspect }}</span>
-          <span
-            v-if="header.costKnown"
-            class="chip"
-            :title="header.durationsKnown ? t('scene.durationsTitle', { analyze: store.result!.analyze.duration_ms, plan: store.result!.plan.duration_ms }) : ''"
-          >{{ header.cost }} USD</span>
+          <span v-if="header.costKnown" class="chip" :title="header.costTitle">{{ header.costLabel }}</span>
           <span v-if="header.attemptsKnown" class="chip" :class="header.attempts.retried ? 'accent' : ''" :title="header.attempts.title">
             {{ t('scene.attempts', { attempts: header.attempts.text }) }}
           </span>

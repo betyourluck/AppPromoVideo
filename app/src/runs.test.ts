@@ -36,6 +36,17 @@ describe("runHeaderStats (rev36、結果ペインの見出しの数値)", () => 
     expect(got.cost).toBe("1.670");
     expect(got.durationsKnown).toBe(true);
   });
+
+  // rev50: ユーザーの疑問 (2026-09-13)「画像を生成していないのに費用?」。chip が何の費用かを書いていなかった。
+  // 中身は解析 + 構成の LLM 費用で、参照画像の生成は含まない (data_contract の RunStats.cost_usd)。
+  it("費用の chip は LLM の費用だと名乗り、画像生成を含まないと説明する", () => {
+    const opened = runHeaderStats(stats, zero, zero);
+    expect(opened.costLabel).toBe("LLM 1.674 USD");
+    expect(opened.costTitle).toBe("解析と構成で LLM にかかった費用 (参照画像の生成は含まない)");
+    // 実行直後は経過時間も説明に添える (以前はこちらだけが title だった)。
+    const fresh = runHeaderStats(null, stage(1, 0.6, 12000), stage(2, 1.07, 30000));
+    expect(fresh.costTitle).toBe("解析と構成で LLM にかかった費用 (参照画像の生成は含まない)\n解析 12000 ms / 構成 30000 ms");
+  });
 });
 
 describe("pinCompared (rev32、比較中は比較対象を表の先頭に)", () => {

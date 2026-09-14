@@ -108,7 +108,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   (書いてあるのに入らない、を避ける)。次の版は `wingetcreate update Outcasts.AppPromoVideo --version <V> --urls <MSI URL>` →
   ローカル生成 → `InstallerLocale` が混ざっていたら消す → `wingetcreate submit --token "$(gh auth token)"`。提出前に
   `gh repo sync betyourluck/winget-pkgs --source microsoft/winget-pkgs --branch master`。
-- **spec 01 は Phase 0〜E 着地、rev49 まで反映済み (rev27〜29 は試行)。** crates 191 green / vitest 127 / backend 25 green・clippy clean。
+- **spec 01 は Phase 0〜E 着地、rev50 まで反映済み (rev27〜29 は試行)。** crates 191 green / vitest 128 / backend 25 green・clippy clean。
 - **agy でも通しが成功** (2026-09-12 21:13、ユーザー実機)。解析 → 構成 (1 回目で通過) → 参照画像 → 合成 → 見出しの焼き込み。
   費用の chip は出ない (agy は費用を返さないので描かない)。
 - コミットは Initial `a75c3bc` の上に積んでいる。**本数も push 済みの範囲もここに書かない** — 書くたび 1 手遅れて嘘になる (実際に 2026-09-12、`rev42 まで push 済み` と書いた行の中に 「ここに書くと 1 手遅れる」と併記する矛盾を作った)。数えるなら `git rev-list --count a75c3bc..HEAD` と `git log --oneline origin/main..HEAD`。**公開リポジトリ** (MIT、`LICENSE`)。
@@ -127,6 +127,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   **`--add-dir` は agy の読み取りを縛らない** (実測)。縛るのは探索ツールの探索範囲だけで、そこから外れると
   agy はシェルに逃げる → rev42 でスナップショットの置き場を `--add-dir` に足した (**逃げ道でなく逃げる理由を消す**)。
 - **費用は `Option`** (rev42)。agy は費用を返さないので 0 で埋めない。**片方の段でも不明なら合計は不明**。
+  中身は解析 + 構成の **LLM の費用だけ**で、画像生成は数えていない — chip は `LLM … USD` と名乗る (rev50。以前は「画像を作っていないのに費用?」と読まれた)。
 - **CLI が落ちたら生ログを読む** (rev38)。`<app の作業ディレクトリ>/cli-logs/<UTC>-<pid>.jsonl` に stdout の行がそのまま残り、
   兄弟の `.invocation.json` に**何を起動したか** (program / args / cwd) が残る。最新 20 本、成功した run も。エラーの文言と進捗ログにも出る。
   **2026-09-12 の障害 2 件の真因は同じ** — 起動していたのが `claude` ではなく **`agy`** だった (`.invocation.json` で確定)。
@@ -223,6 +224,7 @@ rev14 のコミット `5929f93` に巻き込んだ。実害は無いが粒度が
 
 ## 再開の手順
 
-1. `cargo test --workspace` (191 green) と `cd app && npx vitest run && npm run build` (127 green) で足場を確認。**並べて走らせるなら絶対パス** (cwd が `app/src-tauri` に残る事故を 3 回踏んだ)。
+1. `cargo test --workspace` (191 green) と `cd app && npx vitest run && npm run build` (128 green) で足場を確認。**並べて走らせるなら絶対パス** (cwd が `app/src-tauri` に残る事故を 4 回踏んだ)。
+   `cd /abs && …` は**そのコマンド**を守るだけで、ずれた cwd は次のコマンドへ残る — **並べる全部に `cd` を書く** (2026-09-14)。
 2. `git log --oneline -5` で直前の着地を見る。詳しい経緯は `history.md`。
 3. 上の「開いている判断」に答えが来ていないか確認してから着手する。

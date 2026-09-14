@@ -46,6 +46,10 @@ export interface RunHeaderStats {
   attemptsKnown: boolean;
   cost: string;
   costKnown: boolean;
+  /** chip の文字。**何の費用かを名乗る** (rev50) — 中身は解析 + 構成の LLM 費用で、参照画像の生成は含まない。 */
+  costLabel: string;
+  /** chip のホバー。何を含み何を含まないか + 実行直後なら段ごとの経過時間。 */
+  costTitle: string;
   durationsKnown: boolean;
 }
 
@@ -58,13 +62,17 @@ export interface RunHeaderStats {
  */
 export function runHeaderStats(stats: RunStats | null | undefined, analyze: StageInfo, plan: StageInfo): RunHeaderStats {
   const durationsKnown = analyze.duration_ms + plan.duration_ms > 0;
+  // ユーザーの疑問 (2026-09-13)「画像を生成していないのに費用?」— chip が何の費用かを書いていなかった (rev50)。
+  const costTitle = durationsKnown
+    ? `${t("scene.costTitle")}\n${t("scene.durationsTitle", { analyze: analyze.duration_ms, plan: plan.duration_ms })}`
+    : t("scene.costTitle");
+  const view = (cost: string, costKnown: boolean) => ({ cost, costKnown, costLabel: t("scene.costChip", { cost }), costTitle });
   if (stats) {
     return {
       attempts: describeAttempts(stats.plan_attempts, stats.violation_kinds),
       attemptsKnown: stats.plan_attempts > 0,
       // 正本にも記録が無いことがある (費用を返さない CLI。rev42)。
-      cost: stats.cost_usd == null ? "—" : stats.cost_usd.toFixed(3),
-      costKnown: stats.cost_usd != null,
+      ...view(stats.cost_usd == null ? "—" : stats.cost_usd.toFixed(3), stats.cost_usd != null),
       durationsKnown,
     };
   }
@@ -74,8 +82,7 @@ export function runHeaderStats(stats: RunStats | null | undefined, analyze: Stag
   return {
     attempts: describeAttempts(plan.attempts),
     attemptsKnown: plan.attempts > 0,
-    cost: ran && cost != null ? cost.toFixed(3) : "—",
-    costKnown: ran && cost != null,
+    ...view(ran && cost != null ? cost.toFixed(3) : "—", ran && cost != null),
     durationsKnown,
   };
 }
