@@ -84,7 +84,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   `brew audit` は runner の GitHub API レート制限 (未認証 60 回) で中断した — cask への指摘ではない (informational の step)。
   **rev43・45〜47・50〜53 はユーザーが配布ビルドの実画面で確認済み** (2026-09-14。rev47 の締めが効いたので配布ビルド)。
   確認の手順は 8 項目 (入力例 / 設定の認証 4 種 / 使い方を見る / ブランドの標 / 右クリック・F5・選択 / 費用の表示 / シーン編集 / 実 run の進捗ログ)。
-  rev44 (初回案内) は案内が始まることまで。rev36・37 (プロンプトの保存) は含まれていない。
+  rev44 (初回案内) も 4 歩とも確認済み — 窓の最大化・縮小で位置に問題なし、ライトテーマでも問題なし。rev37 (GUI からのプロンプト保存) も確認済み — promo.json と scenes.md が揃って書き直される。
   winget は PR #434054 (0.1.1) のマージ後に `wingetcreate update`。版番号 3 か所 + `Cargo.lock` は**タグの後に**上げた —
   配布物は CI の `Sync app version to tag` が `tauri.conf.json` をタグに揃えるので 0.1.2 で出ている。
   次のタグを打つ時の手順: 版番号 → タグ `vX.Y.Z` → CI (draft、3 OS) → 説明を確認 → publish → tap の `version` / `sha256` (Release API の `digest`) → `wingetcreate update` (マージ後)。
@@ -220,6 +220,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 backend 由来のログ・エラーの文言は日本語のまま。
 **試行の未決 (2026-09-11 rev30 時点)**: ①rev27〜35 の採否 — **2026-09-12 にユーザーが GUI を目視 OK** (設定の 1 画面は英語表示でも溢れない。スイッチの色はアクセントで確定)。
 **rev36・37 は Tauri の GUI で未目視** — 特に**プロンプトの保存を GUI から通していない** (backend のテストでは固定済み)
+(→ 2026-09-14 ユーザーが配布ビルドでプロンプトの保存を確認。run `20260914-071122` で promo.json と scenes.md が同じ秒に書き直され、5 シーンの motion_prompt / video_prompt がすべて scenes.md に載っていた)
 ②en / zh-CN の訳は私が書いた (未査読) ③`.muted` (47 か所) に巻き込まれた表の列・ラベルを戻すか ④ログの「medium」を太さと解釈した件
 ⑤タイトルバーの「実行中」chip の大きさ ⑥既存の文言の不具合 2 点を直すか (設定の説明が `**全シーンの既定**` のまま / 「既定は OFF」が実際の ON と違う)
 ⑦**閉じた (rev38)**: 未使用の i18n キー 13 個を 3 言語から撤去 (270 → 257)。すべて改名の取り残しで置き換え先が現役だった。`i18nUnusedKeys.test.ts` が網。
@@ -229,7 +230,7 @@ backend 由来のログ・エラーの文言は日本語のまま。
 `history.md` の同日エントリ (特に「`画像: off` と `参照画像を生成` が別ペインに離れている」は見本が無くても直せる)。
 シーン編集ダイアログも同日に見た (rev23 / rev24 のユーザー目視。観察 2 点は `history.md`)。
 
-**次の候補**: GUI からのプロンプト保存の確認 (promo.json と scenes.md が揃うか) / プロンプトに「最初の文に戻す」を付けるか /
+**次の候補**: プロンプトに「最初の文に戻す」を付けるか /
 傾きと可読性の境目 /
 mood カットのモチーフ一貫性 / `motion_prompt` の粒度 / ComfyUI と OpenAI の live /
 Unix の `tree_kill` / `--add-dir` 外 Read の拒否確認。
