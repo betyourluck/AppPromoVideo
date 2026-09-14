@@ -8,7 +8,7 @@ use std::pin::Pin;
 use std::time::Duration;
 
 use cli_runner::runner::{CliEvent, RunFailed, RunOk, RunOptions, run};
-use cli_runner::{CliSpec, TaskSpec, build_invocation};
+use cli_runner::{CliKind, CliSpec, TaskSpec, build_invocation};
 use serde_json::Value;
 use tokio::sync::watch;
 
@@ -59,6 +59,15 @@ pub fn snapshot_dirs(snapshots: &[PathBuf]) -> Vec<PathBuf> {
 /// OAuth ログインを使わせるために外す変数 (契約 CliSpec.oauth_only)。
 pub const OAUTH_ONLY_REMOVE: [&str; 2] = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"];
 
+/// 子に渡さない環境変数の追加分 (契約 `CliInvocation.env_scrub`、rev52、純粋)。
+///
+/// - claude / aider / custom: 「OAuth ログインを使う」が ON の時だけ Anthropic の鍵 2 つを外す
+/// - **agy: 設定に関係なく常に外す** (ユーザー決定 2026-09-14)。agy に Anthropic の鍵を持たせる理由が無く、
+///   隔離が弱い (書き込み系ツールが通る。契約 `IsolationGuarantee`)。スイッチは画面にも出さない
+pub fn env_remove_for(kind: CliKind, oauth_only: bool) -> Vec<String> {
+    if kind == CliKind::Agy || oauth_only { OAUTH_ONLY_REMOVE.iter().map(|s| s.to_string()).collect() } else { vec![] }
+}
+
 impl TaskRunner for CliTaskRunner {
     fn run_task<'a>(
         &'a self,
@@ -82,5 +91,28 @@ impl TaskRunner for CliTaskRunner {
             };
             run(&inv, opts, |e| (self.on_event)(e)).await
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const KEYS: [&str; 2] = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"];
+
+    /// rev52 (ユーザー決定 2026-09-14): agy には「OAuth ログインを使う」の設定に関係なく Anthropic の鍵を渡さない。
+    /// それまでは種類を問わずスイッチだけで決まり、切ると agy も鍵を環境変数として引き継いでいた。
+    #[test]
+    fn agy_never_receives_anthropic_keys() {
+        assert_eq!(env_remove_for(CliKind::Agy, false), KEYS);
+        assert_eq!(env_remove_for(CliKind::Agy, true), KEYS);
+    }
+
+    #[test]
+    fn other_kinds_follow_the_oauth_switch() {
+        for k in [CliKind::Claude, CliKind::Aider, CliKind::Custom] {
+            assert!(env_remove_for(k, false).is_empty(), "{k:?}");
+            assert_eq!(env_remove_for(k, true), KEYS, "{k:?}");
+        }
     }
 }

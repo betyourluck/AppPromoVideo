@@ -25,6 +25,7 @@ import {
   supportsNegative,
   toBackendCaption,
   toBackendConfig,
+  usesAnthropicAuth,
   workflowAcceptsRefs,
   type CliKind,
   type ImageProvider,
@@ -228,7 +229,8 @@ function close() {
           <span>{{ t('settings.extraArgs') }}</span>
           <input v-model="store.cli.extraArgs" class="mono" @change="store.persist()" />
         </label>
-        <label class="field row" style="gap: 8px">
+        <!-- rev52: agy には Anthropic の鍵を常に渡さないので、スイッチを出さない (あると「切れば渡す」と読める)。 -->
+        <label v-if="usesAnthropicAuth(store.cli.kind)" class="field row" style="gap: 8px">
           <Switch v-model="store.cli.oauthOnly" @change="store.persist()" />
           <span style="margin: 0">{{ t('settings.oauthOnly') }}</span>
         </label>
@@ -236,6 +238,8 @@ function close() {
         <details v-if="store.cliCheck" class="help">
           <summary>{{ t('settings.authTitle') }}</summary>
           <div class="authbox mono">
+            <!-- Anthropic の鍵と claude auth status は agy では意味を持たない (rev52)。 -->
+            <template v-if="usesAnthropicAuth(store.cli.kind)">
             <div>
               ANTHROPIC_API_KEY:
               <span :class="store.cliCheck.auth.api_key_present ? 'ok' : 'muted'">
@@ -249,6 +253,7 @@ function close() {
               <span v-if="store.cliCheck.auth.oauth_logged_in === null" class="muted">{{ t('settings.unknown') }}</span>
               <span v-else :class="store.cliCheck.auth.oauth_logged_in ? 'ok' : 'warn'">{{ store.cliCheck.auth.oauth_logged_in ? t('settings.loggedIn') : t('settings.notLoggedIn') }} ({{ store.cliCheck.auth.oauth_method || '-' }})</span>
             </div>
+            </template>
             <div class="muted">{{ t('settings.scrubbed', { vars: store.cliCheck.auth.scrubbed.length ? store.cliCheck.auth.scrubbed.join(', ') : t('settings.absent') }) }}</div>
             <button class="btn small" style="margin-top: 6px" @click="store.checkCli()">
               <Icon name="refresh" :size="13" />

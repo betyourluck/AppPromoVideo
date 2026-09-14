@@ -189,6 +189,28 @@ fn auth_view_env() -> AuthView {
     }
 }
 
+/// run 開始時に進捗へ出す認証の行 (純粋、rev52)。
+///
+/// agy には Anthropic の鍵を常に渡さない (`env_remove_for`) ので、agy では鍵の有無も OAuth も語らない —
+/// 「API キー あり」「OAuth 優先」と書くと、agy に鍵を渡しているように読める (ユーザー 2026-09-14)。
+fn auth_log_lines(kind: cli_runner::CliKind, oauth_only: bool, a: &AuthView) -> Vec<String> {
+    // agy では 1 行も出さない — 鍵は外しているうえ、agy なのに Anthropic の話を出すのは不自然 (ユーザー 2026-09-14)。
+    if kind == cli_runner::CliKind::Agy {
+        return vec![];
+    }
+    let mut lines = vec![format!(
+        "認証: API キー {} / ANTHROPIC_AUTH_TOKEN {} / base_url {} / 子に渡さない変数 {} 個",
+        if a.api_key_present { format!("あり (len {}, fp {})", a.api_key_len, a.api_key_fingerprint) } else { "なし (OAuth ログインを使用)".into() },
+        if a.auth_token_present { "あり" } else { "なし" },
+        if a.base_url.is_empty() { "既定".to_string() } else { a.base_url.clone() },
+        a.scrubbed.len()
+    )];
+    if oauth_only {
+        lines.push("OAuth 優先: ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN は子に渡しません".into());
+    }
+    lines
+}
+
 /// `--version` の 1 行目 (契約 `CliKindCheck`)。取れなければ None — **取れないことを食い違いの証拠にしない**。
 async fn cli_version(executable: &str) -> Option<String> {
     let fut = tokio::process::Command::new(executable).arg("--version").output();
@@ -345,18 +367,9 @@ async fn run_inner(app: &AppHandle, cancel: watch::Receiver<bool>, req: RunReque
     }
     let project = PathBuf::from(&req.project_path);
     let snaps: Vec<PathBuf> = req.snapshot_paths.iter().map(PathBuf::from).collect();
-    let a = auth_view_env();
-    emit(
-        app,
-        "cli",
-        format!(
-            "認証: API キー {} / ANTHROPIC_AUTH_TOKEN {} / base_url {} / 子に渡さない変数 {} 個",
-            if a.api_key_present { format!("あり (len {}, fp {})", a.api_key_len, a.api_key_fingerprint) } else { "なし (OAuth ログインを使用)".into() },
-            if a.auth_token_present { "あり" } else { "なし" },
-            if a.base_url.is_empty() { "既定".to_string() } else { a.base_url.clone() },
-            a.scrubbed.len()
-        ),
-    );
+    for line in auth_log_lines(req.cli.kind, req.cli.oauth_only, &auth_view_env()) {
+        emit(app, "cli", line);
+    }
     // 種類と実体の食い違いは**走らせる前に止める** (契約 `CliKindCheck`)。
     // rev40 は設定画面にだけ警告を出したが、実行はメイン画面からするので誰も見なかった
     // (同じ事故が 3 回続いた)。名乗りが取れない時は黙って進む — 取れないことは食い違いの証拠ではない。
@@ -399,11 +412,8 @@ async fn run_inner(app: &AppHandle, cancel: watch::Receiver<bool>, req: RunReque
             CliEvent::Progress { text } => emit(&h, "cli", text),
             CliEvent::Structured { .. } => emit(&h, "cli", "構造化出力を受信"),
         }),
-        env_remove: if req.cli.oauth_only { pipeline::task::OAUTH_ONLY_REMOVE.iter().map(|s| s.to_string()).collect() } else { vec![] },
+        env_remove: pipeline::task::env_remove_for(req.cli.kind, req.cli.oauth_only),
     };
-    if req.cli.oauth_only {
-        emit(app, "cli", "OAuth 優先: ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN は子に渡しません");
-    }
 
     emit(app, "analyze", "解析中 (タスク 1/2)…");
     let (summary, r1) = analyze(&runner, &brief_text, &req.concept, req.language).await.map_err(|e| e.to_string())?;
@@ -1266,6 +1276,42 @@ mod copy_name_tests {
         // rev6 以前のパッケージ (runs を挟まない) はそのままの名前。
         let legacy = Path::new("D:/out/Task_Flow_Promo_Package");
         assert_eq!(copy_target_name(legacy).as_deref(), Some("Task_Flow_Promo_Package"));
+    }
+}
+
+#[cfg(test)]
+mod auth_log_tests {
+    use super::{AuthView, auth_log_lines};
+    use cli_runner::CliKind;
+
+    fn view() -> AuthView {
+        AuthView {
+            api_key_present: true,
+            api_key_len: 108,
+            api_key_fingerprint: "0123456789ab".into(),
+            auth_token_present: false,
+            base_url: String::new(),
+            oauth_logged_in: None,
+            oauth_method: String::new(),
+            scrubbed: vec![],
+        }
+    }
+
+    /// rev52 (ユーザー 2026-09-14): agy では鍵を常に外すので、「API キー あり」「OAuth 優先」は嘘になる。
+    /// 「agy には … を渡しません」も出さない — agy なのに Anthropic の話を出すのは不自然 (同日ユーザー判断)。
+    #[test]
+    fn agy_log_does_not_talk_about_anthropic_auth() {
+        for oauth_only in [false, true] {
+            assert!(auth_log_lines(CliKind::Agy, oauth_only, &view()).is_empty());
+        }
+    }
+
+    #[test]
+    fn claude_log_keeps_key_and_oauth_lines() {
+        let lines = auth_log_lines(CliKind::Claude, true, &view());
+        assert!(lines[0].contains("API キー あり (len 108, fp 0123456789ab)"), "{lines:?}");
+        assert!(lines.iter().any(|l| l.contains("OAuth 優先")), "{lines:?}");
+        assert_eq!(auth_log_lines(CliKind::Claude, false, &view()).len(), 1);
     }
 }
 

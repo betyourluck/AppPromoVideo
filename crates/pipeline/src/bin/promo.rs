@@ -374,7 +374,8 @@ async fn run(a: &Args) -> Result<(), String> {
             CliEvent::Progress { text } => eprintln!("[cli~] {text}"),
             CliEvent::Structured { .. } => eprintln!("[cli] structured output received"),
         }),
-        env_remove: vec![],
+        // agy には Anthropic の鍵を渡さない (rev52)。CLI にスイッチは無いので他の種類は外さない。
+        env_remove: pipeline::task::env_remove_for(a.kind, false),
     };
     eprintln!("== brief: {} chars, tree {} lines ==", brief_text.chars().count(), brief.tree.lines().count());
     let (summary, r1) = analyze(&runner, &brief_text, &a.concept, a.lang).await.map_err(|e| e.to_string())?;

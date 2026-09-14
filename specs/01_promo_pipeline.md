@@ -1517,6 +1517,39 @@ LLM の解析は数分かかるので、その間ユーザーが見る場所 (�
 **触っていないもの**: 履歴の表の列見出し「費用」(`runs.colCost`) も中身は同じ LLM 費用だが、ユーザーの依頼は chip なので据え置き。
 **接地の限界**: Tauri の実画面は未目視。配布物に乗るのは次のタグから。
 
+## rev52 (2026-09-14、agy には Anthropic の鍵を渡さない — 「OAuth ログインを使う」を agy で出さない)
+
+**ユーザー指摘** (設定画面のスクリーンショット、agy 選択中)「OAuth ログインを使うのスイッチが agy のときも同じ文章で、
+ANTHROPIC_API_KEY を agy にも送ると誤認させそう」。
+
+**観察**: 誤認ではなく**挙動としても成り立っていた**。子 CLI は `ANTHROPIC_*` を含む環境を引き継ぐ (`env_scrub` はホスト結合の変数しか落とさない) うえ、
+鍵を外す `env_remove` は種類を問わずスイッチだけで決まっていた (`lib.rs`)。**スイッチを切ると agy も鍵を環境変数として受け取る。**
+設定画面の診断 (`ANTHROPIC_API_KEY: あり — あれば OAuth ログインより優先` / `claude auth status`) と、進捗ログの
+「API キー あり / なし (OAuth ログインを使用)」「OAuth 優先: …」も agy に対して同じ語で出ていた。
+起動の記録 (`.invocation.json`) は外した変数を残さないので、過去の agy の run が鍵を持っていたかは確かめられない。
+
+**ユーザー決定** (選択肢 3 つから): agy ではスイッチを隠して**常に外す** / 関連の表示も一緒に直す。
+
+192. **agy には常に外す** — `pipeline::task::env_remove_for(kind, oauth_only)` (純粋): agy なら設定に関係なく
+     `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`、他の種類は従来どおりスイッチ次第。Tauri と `promo` CLI の両方がこれを通す
+     (CLI にスイッチは無いので `oauth_only = false`)。理由は、agy に Anthropic の鍵を持たせる理由が無く、隔離が弱いこと (契約 `IsolationGuarantee.detect_only`)。
+193. **画面は agy の間スイッチを出さない** — 代わりの文言も置かない。初版は「agy には Anthropic の鍵 (…) を渡しません — …」
+     (`settings.agyNoAnthropicKey`) を出したが、ユーザー判断 (同日)「わざわざ出す必要はない」で撤去 (キーも 3 言語から削除)。スイッチを残すと「切れば渡す」と読める。診断の `ANTHROPIC_*` 2 行と `claude auth status` も出さない
+     (外すので無関係)。判定は `usesAnthropicAuth(kind)` (`settings.ts`)。保存されたスイッチの値は消さない — claude に戻せば効く。
+194. **進捗ログも agy の時は認証の行を出さない** — `auth_log_lines` (`lib.rs`、純粋) が agy では空を返す。初版は「認証: agy には ANTHROPIC_API_KEY /
+     ANTHROPIC_AUTH_TOKEN を渡しません / 子に渡さない変数 N 個」の 1 行を出したが、ユーザー判断 (同日)「agy なのにわざわざ Anthropic の話を出すのは不自然」で撤去。
+     テストを「agy では 0 行」に書き換えて Red (初版の 1 行が残る) → Green。
+
+**PoC**: 3 層とも今の挙動を写したスタブで Red を取ってから実装した — `task::tests` 2 本 (Red: agy + OFF で `left: []`) /
+backend `auth_log_tests` 2 本 (Red: agy の行に OAuth) / `anthropicAuth.test.ts` 2 本 (Red: `expected true to be false`)。
+いずれも agy 以外の本は Red の時点で通っていた (従来の挙動を保つ側の検証)。crates 191 → 193 / backend 25 → 27 / vitest 128 → 130、
+両ワークスペース clippy clean、build green、`check_data_contract.py` OK。
+**実測** (ブラウザのペイン、自前の vite — ユーザーの vite は止まっていた。変更の到達を `settings.ts` の中身で先に確認し、ストアに診断のダミーを注入):
+claude = スイッチあり・診断 5 行 (`ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN · base_url` / `claude auth status` / 子に渡さない変数 / 再検査)。
+agy = スイッチなし・診断は 2 行 (子に渡さない変数 / 再検査)。初版の代わりの 1 行は撤去後に測り直し、設定の列のどこにも出ないことを確認。
+**罠をまた踏んだ**: 最初は診断を `innerText` で読んで両方とも空だった — ペインが hidden で描画されていない (rev34 / rev49 の同型)。`textContent` で読み直した。
+**接地の限界**: Tauri の実画面は未目視。agy の run で進捗ログの行が変わったこと (194) は live で見ていない (テストのみ)。
+
 ## 公開とリリース (2026-09-13)
 
 **public にした。** MIT (`LICENSE`)。公開前の洗い出しで、**追跡ファイルに個人情報が入っていた**のを消した —
@@ -1735,6 +1768,8 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [x] rev48 (2026-09-13): agy のツール失敗を進捗に出す (184〜186、契約 `AgyStreamLine.tool_error` / `IsolationGuarantee.watchdog.escape_visible`)。crates 191 green
 - [x] rev49 (2026-09-13): 実行中を動かして見せる (187〜190)。矢印の回転 + 中央の実行中ブロック (段 / 経過時間 / 最新の進捗)。vitest 127 / build green、ブラウザで実測。**Tauri でユーザー目視 OK** (配布物に乗るのは次のタグから)
 - [x] rev50 (2026-09-14): 費用の chip に「LLM」の印 (191)。`LLM … USD` + 画像生成を含まない旨のホバー。vitest 128 / build green、ブラウザで実測。**Tauri 未目視**
+- [x] rev51 (2026-09-14): リポジトリ欄のプレースホルダーを具体的なパス (`D:\Github\my-app`) から案内文へ (ユーザー指示)。ja「ここにパスを入力して下さい」/ en「Enter the path here」/ zh-CN「请在此输入路径」。文言のみでテストは足していない (Red は観測していない)
+- [x] rev52 (2026-09-14): agy には Anthropic の鍵を常に渡さない (192〜194、契約 `CliInvocation.env_scrub.agy_keys`)。スイッチと Anthropic の診断・ログの語を agy で出さない。crates 193 / backend 27 / vitest 130 / clippy clean。**Tauri 未目視**
 - [x] **agy で通しが成功** (2026-09-12 21:13、ユーザー実機): 解析 → 構成 (1 回目で通過) → 参照画像 3 枚 → 合成 → 見出しの焼き込み。
       166 は効いた (`run_command` への逃げは起きなかった)。168 も効いた (**費用の chip が出ていない**)。`runs/20260912-121310`
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度 / `RunStats` の live 記録 (frontal の費用)
