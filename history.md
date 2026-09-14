@@ -1301,3 +1301,11 @@ Fuseforks / Lorekeel の台帳をそのまま継承 (MSI のみ・`InstallerLoca
 「表示だけ隠して鍵は引き継ぐ」を選んだ。スイッチは claude だけになり、aider / custom では保存値も効かせない (見えない設定で挙動を変えない)。
 3 層とも新しい期待を先に書いて Red → Green。ブラウザで 4 種類の設定画面を読んだ (claude だけスイッチと診断 5 行)。
 vitest を並べた検証で**また `cd` を書かず**に何も出力されず、取り直した (同日 2 回目)。処方を知っていても、並べる時に 1 本だけ書き落とす。
+
+## 2026-09-14 (続) — v0.1.2 のタグ
+
+ユーザーが `v0.1.2` を push (`1535af0` = rev53)。CI は 3 OS とも green、ログで署名 → 公証 Accepted → staple を確認、Release は draft で 7 点。
+リポジトリの版番号は 0.1.1 のままタグが打たれたが、`build.yml` の `Sync app version to tag` がビルド時に `tauri.conf.json` をタグへ揃えるので
+配布物は 0.1.2 の名前で出ている。main 側はユーザー指示で後から 3 か所 + `Cargo.lock` を 0.1.2 に揃えた (タグは動かさない)。
+Release の説明に「macOS 版は Apple Silicon (aarch64) のみ」を足した (ユーザー承認)。最初は `$TMPDIR` が空で notes ファイルを作れず、scratchpad の絶対パスで作り直した。
+v0.1.1 の説明も読んだ — aarch64 の注記は無く、テンプレートの作者向けメモ (Customization Notes / アレンジのポイント) と「(v0.1.0)」の表記が残っている。書き換えは未承認なので触っていない。

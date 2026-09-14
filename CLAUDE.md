@@ -76,8 +76,12 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 
 ## 現状 (2026-09-13 深夜)
 
-- **次の公開はかなり先** (2026-09-13 ユーザー)。rev48〜49 は main にあるが配布物には乗っていない。次のタグを打つ時の手順:
-  タグ `vX.Y.Z` → CI (draft、3 OS) → publish → tap の `version` / `sha256` (Release API の `digest`) → `wingetcreate update` (マージ後)。
+- **`v0.1.2` (2026-09-14、ユーザーがタグ) = rev48〜53 が乗った版。** タグは `1535af0`。CI 3 OS green (run 34808086566)、
+  ログで `Signing` → `Notarizing Finished with status Accepted` → `Stapling app...` を確認、Release は draft で 7 点。
+  説明に「macOS 版は Apple Silicon (aarch64) のみ」を足した。**publish 待ち** → tap の `version` / `sha256` (dmg の digest) →
+  winget は PR #434054 (0.1.1) のマージ後に `wingetcreate update`。版番号 3 か所 + `Cargo.lock` は**タグの後に**上げた —
+  配布物は CI の `Sync app version to tag` が `tauri.conf.json` をタグに揃えるので 0.1.2 で出ている。
+  次のタグを打つ時の手順: 版番号 → タグ `vX.Y.Z` → CI (draft、3 OS) → 説明を確認 → publish → tap の `version` / `sha256` (Release API の `digest`) → `wingetcreate update` (マージ後)。
 - **winget は PR #434054 (0.1.1) がマージ待ち。** マージされたら README 英日に winget を追記する (それまで書かない)。
 
 - **公開した (2026-09-13)。** MIT (`LICENSE`)、`origin` は public。`v0.1.0` のタグで CI が**初回から 3 OS とも green**、

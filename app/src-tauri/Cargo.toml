@@ -1,6 +1,6 @@
 [package]
 name = "apppromo-desktop"
-version = "0.1.1"
+version = "0.1.2"
 description = "AppPromoVideo — 既存アプリから動画生成用プロンプトと参照画像を出すデスクトップ殻"
 edition = "2024"
 rust-version = "1.85"
