@@ -1315,3 +1315,5 @@ publish 後に dmg の digest が draft の時と同じことと URL が 200 を
 結果 (run 34809584095): インストール → 署名 → staple → `spctl` が `accepted / source=Notarized Developer ID` まで success。入ったのは 0.1.2 の dmg (ログの URL で確認)。
 `brew audit` は「exception while auditing: GitHub API rate limit exceeded」で中断 — runner の未認証 API の上限で、cask の指摘は出ていない。
 step は continue-on-error なので job は success と出る。**success の表示と、検査が実際に走ったかは別** — informational の step は中身を読む。
+v0.1.1 の Release 説明を 3 か所直した (ユーザー承認): 英語冒頭の `(v0.1.0)` → `(v0.1.1)` / テンプレートの作者向けメモ「Customization Notes」「アレンジのポイント」を削除。
+日本語冒頭とメモ内の版番号はユーザーが先に直していた。置換は各 1 回だけ当たることを検めてから反映し、元の本文は手元に控えた。反映後に 3 語とも 0 件。
