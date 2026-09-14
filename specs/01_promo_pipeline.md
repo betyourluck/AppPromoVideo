@@ -335,7 +335,7 @@ GUI 実測を受けたユーザー要望。「数値入力では結果を見る�
     スライダーと同じ場所で完結する。
 50. **コピー文の書き換え** (`reburn_caption` の `new_copy`)。`scene.copy_text` を**その場で**書き換える —
     `scenes_markdown` もクリップボードも plan を読むので、それだけで全部揃う。書き換えたら
-    scenes.md も書き直す (パッケージの中で食い違わせない)。
+    scenes.md も書き直す (パッケージの中で食い違わせない)。(→ rev54 から、コピー文を変えない焼き直しでも**毎回**書き直す)
 51. **`PromoJson.original_copy`**: LLM が最初に書いた文を生成時に 1 度だけ控える。以後触らない。
     「最初の文に戻す」ができ、うっかり消しても LLM の出力を失わない。
 52. コピー文を空にすると見出しを焼かない (見出しを消す操作と同義)。
@@ -1573,6 +1573,35 @@ agy = スイッチなし・診断は 2 行 (子に渡さない変数 / 再検査
 claude = スイッチあり・診断 5 行 / agy・aider・custom = スイッチなし・診断 2 行 (子に渡さない変数 / 再検査)。
 **接地の限界**: aider は未導入のまま (実機で鍵が読まれることは公式文書だけが根拠)。Tauri の実画面は未目視 (→ 2026-09-14 ユーザーが配布ビルドで 4 種の設定画面と実 run の進捗ログを確認。aider の実機は未確認のまま)。
 
+## rev54 (2026-09-14、scenes.md をいつも promo.json と揃える / 表の番号は実際に貼ったもの)
+
+**ユーザー指示**「古い run で promo.json だけ更新される理由を調べて」→ 調べた結果に対して「両方とも直して」。
+
+**観察** (runs.json の 13 件の更新時刻と中身、2026-09-14): 9/12 と 9/9 の 2 件で promo.json だけが後から更新されていた。
+理由は設計どおりで、焼き直し (`reburn_caption`) は見出し・はめ込みの上書きを毎回 promo.json に書くが、scenes.md は
+**コピー文を変えた時だけ**書いていた (画面はコピー文を変えた時だけ `new_copy` を渡す)。スナップショットの追加 (`add_run_snapshot`) も promo.json だけ。
+2 件ともコピー文は最初の文のままで、プロンプト・コピー文・参照画像の名前は scenes.md と一致していた。
+**ただし表がずれていた**: kind 列の `product (snapshot N)` は plan の番号で、はめ込みで選び直した番号を見ていなかった
+(`20260912-035429` の scene 3 / 4 は表 0 に対し実際は 2 / 3、`20260909-051645` の scene 3 / 5 は表 2 / 3 に対し実際は 0 / 5)。
+`scenes_markdown` が上書きを受け取っていないので、書き直す回数を増やしても直らない — **書く時機ではなく関数の穴**。
+
+197. **表の番号は合成と同じ関数から取る** — `plate_snapshot_index` を `pipeline::reference` から `promo_core::export` へ移し
+     (`pipeline::reference` は re-export で既存の呼び出しを保つ)、`scenes_markdown(&PromoJson)` の kind 列を `kind_cell` が組む:
+     product は選び直しが勝つ番号、mood は面を足した時だけ `mood (snapshot N)`、足していなければ `mood`。
+     #17〜19 の「実効値は合成が使う関数から取る」と同じ処方。product で番号が無い時は `?` ではなく合成と同じ 0。
+198. **promo.json を書く経路はすべて `pipeline::export::write_run_files` を通す** — promo.json と scenes.md を揃えて書く 1 関数。
+     Tauri の 5 か所 (参照画像の生成 / プロンプト保存 / 焼き直し / スナップショット追加 / シーン編集)、`write_package`、`promo` CLI。
+     焼き直しの `if new_copy.is_some()` を外した。scenes.md は promo からの導出なので、条件を付けて追従させる理由が無い。
+199. **既存の run は書き直さない** — 古い run の scenes.md は、次にその run を焼き直すか編集した時に揃う。
+
+**PoC**: 形だけ変える Step 1 (関数の移動・引数の形・書き出し関数への寄せ) を先に入れ、crates 194 / backend 28 のまま緑を確認 →
+Red を取る: `promo_core` の表のテスト (Red: `product (snapshot 0)` のまま) / backend `run_files_tests` 2 本
+(Red: 焼き直しとスナップショット追加の両方で「scenes.md が書かれていない」、本物の PNG を `solid_backdrop` で作って実際のコマンドを呼ぶ) → 実装して Green。
+backend のテストは scenes.md の中身が保存後の promo.json から作ったものと一致することまで見る。crates 194 → 195 / backend 28 → 30、両ワークスペース clippy clean、
+`check_data_contract.py` OK。frontend は触っていない (vitest 131 のまま)。
+**取りこぼしを 1 つ**: backend の Red を最初に `cd` 無しで走らせ、root の workspace で 0 本が選ばれて何も観測できていなかった (同日 3 回目)。
+**未確認のまま**: 結果ペインのシーンの chip (`ScenePanel.vue` の `product · snap N`) も plan の番号を出していて、同じずれがありうる (今回は触っていない)。
+
 ## 公開とリリース (2026-09-13)
 
 **public にした。** MIT (`LICENSE`)。公開前の洗い出しで、**追跡ファイルに個人情報が入っていた**のを消した —
@@ -1794,6 +1823,7 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [x] rev51 (2026-09-14): リポジトリ欄のプレースホルダーを具体的なパス (`D:\Github\my-app`) から案内文へ (ユーザー指示)。ja「ここにパスを入力して下さい」/ en「Enter the path here」/ zh-CN「请在此输入路径」。文言のみでテストは足していない (Red は観測していない)。**ユーザーが配布ビルドで目視確認 (2026-09-14)**
 - [x] rev52 (2026-09-14): agy には Anthropic の鍵を常に渡さない (192〜194、契約 `CliInvocation.env_scrub.agy_keys`)。スイッチと Anthropic の診断・ログの語を agy で出さない。crates 193 / backend 27 / vitest 130 / clippy clean。**ユーザーが配布ビルドで目視確認 (2026-09-14)** — 設定画面と、実 run の進捗ログ
 - [x] rev53 (2026-09-14): aider / custom も Anthropic の表示を出さない・鍵は引き継ぐ (195〜196、契約 `CliInvocation.env_scrub.other_kinds`)。スイッチは claude だけ。crates 194 / backend 28 / vitest 131 / clippy clean。**ユーザーが配布ビルドで目視確認 (2026-09-14)** — 設定画面と、実 run の進捗ログ
+- [x] rev54 (2026-09-14): scenes.md をいつも promo.json と揃える / 表の snapshot 番号は実際に貼ったもの (197〜199、契約 `ExportPackage.layout`)。`write_run_files` / `plate_snapshot_index` を promo_core へ。crates 195 / backend 30 / clippy clean。GUI の変化は無い (scenes.md の中身だけ)
 - [x] **agy で通しが成功** (2026-09-12 21:13、ユーザー実機): 解析 → 構成 (1 回目で通過) → 参照画像 3 枚 → 合成 → 見出しの焼き込み。
       166 は効いた (`run_command` への逃げは起きなかった)。168 も効いた (**費用の chip が出ていない**)。`runs/20260912-121310`
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度 / `RunStats` の live 記録 (frontal の費用)

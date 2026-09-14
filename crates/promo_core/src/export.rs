@@ -225,8 +225,28 @@ pub fn reference_image_name(scene_id: u32, index: u32) -> String {
     format!("scene_{scene_id:02}_ref_{index:02}.png")
 }
 
+/// **このシーンで貼るスクリーンショットの番号** (rev24、rev54 で pipeline から移した)。`None` = 貼らない (素材をそのまま出す)。
+///
+/// **貼るかどうかを決めるのはここだけ。** 焼き直し (`reburn_caption`)・予定位置の枠 (`plate_preview`)・`scenes.md` の表が
+/// 同じ関数を通す (#19 の「同じ数式を 2 つ持たない」)。promo_core の型しか見ない純関数なので、`scenes_markdown` から呼べるここに置く。
+///
+/// - `product`: 人の選び直し (`PlateOverride`) が LLM の指定に勝つ (rev13)。どちらも無ければ 0 枚目。
+/// - `mood`: **人が足した時だけ**貼る。既定は素材の絵そのまま。
+///   `cut_kind` は書き換えない — 書き換えると `image_prompt` が背景の記述でなくなり
+///   (検査 `ProductBackdropDrawsScreen` と食い違う)、再生成したときに mood の絵を失う。
+///   LLM が mood に番号を書いていても無視する (契約では null であるべき値なので、
+///   それを根拠に貼ると「誰も足していないのに面が出る」)。
+pub fn plate_snapshot_index(scene: &crate::plan::Scene, plate: Option<&PlateOverride>) -> Option<usize> {
+    let chosen = plate.and_then(|p| p.snapshot_index);
+    match scene.cut_kind {
+        crate::plan::CutKind::Product => Some(chosen.or(scene.snapshot_index).unwrap_or(0) as usize),
+        crate::plan::CutKind::Mood => chosen.map(|i| i as usize),
+    }
+}
+
 /// `scenes.md`: 構成表 + 各シーンの全文 (Veo / Sora に貼る単位)。
-pub fn scenes_markdown(summary: &AnalyzedSummary, plan: &ScenePlan) -> String {
+pub fn scenes_markdown(promo: &PromoJson) -> String {
+    let (summary, plan) = (&promo.summary, &promo.plan);
     let mut s = String::new();
     s.push_str(&format!("# {} — promo shot list\n\n", summary.app_name));
     s.push_str(&format!("**Hook**: {}\n\n", summary.hook_copy));
@@ -238,10 +258,7 @@ pub fn scenes_markdown(summary: &AnalyzedSummary, plan: &ScenePlan) -> String {
             "| {} | {} | {} | {} | {} | {} |\n",
             sc.scene_id,
             sc.duration_seconds,
-            match sc.cut_kind {
-                crate::plan::CutKind::Product => format!("product (snapshot {})", sc.snapshot_index.map(|i| i.to_string()).unwrap_or("?".into())),
-                crate::plan::CutKind::Mood => "mood".into(),
-            },
+            kind_cell(promo, sc),
             cell(&sc.shot_type),
             cell(&sc.copy_text),
             sc.reference_image.as_deref().unwrap_or("-")
@@ -263,6 +280,19 @@ pub fn scenes_markdown(summary: &AnalyzedSummary, plan: &ScenePlan) -> String {
         s.push('\n');
     }
     s
+}
+
+/// 表の kind 列 (rev54)。番号は**合成が実際に貼るもの** (`plate_snapshot_index`) — 以前は plan の番号を書いていて、
+/// はめ込みで選び直すと表だけが古い番号のまま残り、mood に足した面も表に出なかった。
+fn kind_cell(promo: &PromoJson, sc: &crate::plan::Scene) -> String {
+    let kind = match sc.cut_kind {
+        crate::plan::CutKind::Product => "product",
+        crate::plan::CutKind::Mood => "mood",
+    };
+    match plate_snapshot_index(sc, promo.plate_overrides.get(&sc.scene_id)) {
+        Some(i) => format!("{kind} (snapshot {i})"),
+        None => kind.to_string(),
+    }
 }
 
 fn cell(s: &str) -> String {
@@ -419,12 +449,31 @@ mod tests {
     #[test]
     fn scenes_markdown_has_table_and_fenced_prompts() {
         let (s, p) = fixture();
-        let md = scenes_markdown(&s, &p);
+        let mut promo = promo_with_overrides();
+        (promo.summary, promo.plan) = (s, p);
+        let md = scenes_markdown(&promo);
         assert!(md.contains("| 1 | 5 | product (snapshot 0) | Close-up | a \\| b | scene_01_ref_01.png |"));
         assert!(md.contains("### Motion prompt (image-to-video)\n\n```\nSlow push-in.\n```"));
         assert!(md.contains("```\nCinematic desk shot.\n```"));
         assert!(md.contains("**Aspect**: 16:9"));
         assert!(!md.contains("--ar"));
+    }
+
+    /// rev54 (2026-09-14 実データ): 表の `product (snapshot N)` が plan の番号のままで、はめ込みで選び直した番号を
+    /// 書いていなかった (run 20260909-051645 の scene 5 は表が 3、実際に貼ったのは 5)。番号は合成と同じ関数から取る。
+    #[test]
+    fn scenes_markdown_table_shows_the_snapshot_actually_plated() {
+        let (s, p) = fixture();
+        let mut promo = promo_with_overrides();
+        (promo.summary, promo.plan) = (s, p);
+        promo.plan.scenes.push(scene_for_test(2));
+        promo.plan.scenes.push(scene_for_test(3));
+        promo.plate_overrides.insert(1, PlateOverride { snapshot_index: Some(3), ..Default::default() });
+        promo.plate_overrides.insert(2, PlateOverride { snapshot_index: Some(2), ..Default::default() });
+        let md = scenes_markdown(&promo);
+        assert!(md.contains("| 1 | 5 | product (snapshot 3) |"), "選び直した番号が plan の番号に勝つ:\n{md}");
+        assert!(md.contains("| 2 | 5 | mood (snapshot 2) |"), "mood に足した面も書く:\n{md}");
+        assert!(md.contains("| 3 | 5 | mood |"), "面を足していない mood は mood のまま:\n{md}");
     }
 }
 

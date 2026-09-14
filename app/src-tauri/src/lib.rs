@@ -14,12 +14,12 @@ use cli_runner::runner::CliEvent;
 use cli_runner::{CliKind, CliSpec};
 use image_gen::{HttpImageGenerator, ImageGenConfig, Provider};
 use pipeline::collect::{collect_brief, snapshot_meta};
-use pipeline::export::{existing_run_ids, write_atomic, write_package};
+use pipeline::export::{existing_run_ids, write_package, write_run_files};
 use pipeline::reference::{CaptionSpec, RefJob, generate_references, load_refs};
 use pipeline::task::CliTaskRunner;
 use pipeline::{analyze, plan_scenes};
 use promo_core::brief::{SnapshotMeta, compress};
-use promo_core::export::{PromoJson, scenes_markdown};
+use promo_core::export::PromoJson;
 use promo_core::plan::{Aspect, PlateMode};
 use promo_core::prompts::Language;
 use promo_core::style::{apply_palette, style_anchor};
@@ -603,9 +603,7 @@ async fn generate_images(app: AppHandle, req: ImagesRequest) -> Result<ImagesRes
     let results = generate_references(&HttpImageGenerator, &job, &mut promo.plan, &refs, &mut progress).await;
     let truncated = results.first().and_then(|r| r.truncated.as_ref()).map(|t| format!("{} 枚のうち先頭 {} 枚 ({})", t.total, t.sent, t.limit_by));
     // plan に reference_image が入ったので書き直す。
-    let json = serde_json::to_string_pretty(&promo).map_err(|e| e.to_string())?;
-    write_atomic(&pkg_dir.join("promo.json"), json.as_bytes())?;
-    write_atomic(&pkg_dir.join("scenes.md"), scenes_markdown(&promo.summary, &promo.plan).as_bytes())?;
+    write_run_files(&pkg_dir, &promo)?;
     let results: Vec<SceneImageInfo> = results
         .into_iter()
         .map(|r| match r.result {
@@ -708,9 +706,7 @@ fn update_scene_prompts(run_dir: String, scene_id: u32, motion_prompt: String, v
         promo_core::plan::PromptEditError::EmptyMotion => "motion prompt が空です".to_string(),
         promo_core::plan::PromptEditError::EmptyVideo => "video prompt が空です".to_string(),
     })?;
-    let json = serde_json::to_string_pretty(&promo).map_err(|e| e.to_string())?;
-    write_atomic(&dir.join("promo.json"), json.as_bytes())?;
-    write_atomic(&dir.join("scenes.md"), scenes_markdown(&promo.summary, &promo.plan).as_bytes())?;
+    write_run_files(&dir, &promo)?;
     Ok(promo)
 }
 
@@ -847,12 +843,9 @@ fn reburn_caption(
             );
         }
     }
-    let json = serde_json::to_string_pretty(&promo).map_err(|e| e.to_string())?;
-    write_atomic(&dir.join("promo.json"), json.as_bytes())?;
-    // コピー文を書き換えたら scenes.md も揃える (パッケージの中で食い違わせない)。
-    if new_copy.is_some() {
-        write_atomic(&dir.join("scenes.md"), scenes_markdown(&promo.summary, &promo.plan).as_bytes())?;
-    }
+    // rev54: scenes.md も**毎回**揃える。以前はコピー文を変えた時だけで、見出し・はめ込みだけ触った run では
+    // scenes.md が作った時のまま残っていた (はめ込みで選び直した番号は表にも出る)。
+    write_run_files(&dir, &promo)?;
     Ok(Reburned { url: image_gen::provider::data_url("image/png", &out), promo })
 }
 
@@ -1009,8 +1002,8 @@ fn add_run_snapshot(run_dir: String, path: String) -> Result<AddedSnapshot, Stri
     // 一覧に足すのは**元のパス**。run の中の写しが正本で、これは由来の記録
     // (元が動いても run は壊れない — rev10 で read_run_snapshot が写しを読むようにしてある)。
     promo.snapshot_paths.push(path);
-    let json = serde_json::to_string_pretty(&promo).map_err(|e| e.to_string())?;
-    write_atomic(&dir.join("promo.json"), json.as_bytes())?;
+    // rev54: scenes.md も揃える (以前は promo.json だけを書いていた)。
+    write_run_files(&dir, &promo)?;
     Ok(AddedSnapshot { index, snapshot_paths: promo.snapshot_paths })
 }
 
@@ -1344,6 +1337,87 @@ mod wire_tests {
 }
 
 #[cfg(test)]
+mod run_files_tests {
+    use super::{PromoJson, add_run_snapshot, reburn_caption};
+    use promo_core::export::scenes_markdown;
+    use promo_core::plan::{AnalyzedSummary, Aspect, CutKind, Scene, ScenePlan, VisualIdentity};
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    /// mood 1 シーンの run。素材 (base/) だけ本物の PNG を置き、scenes.md はまだ無い。
+    fn run_dir() -> PathBuf {
+        let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let d = std::env::temp_dir().join(format!("apppromo_run_files_{}_{}", std::process::id(), n));
+        fs::create_dir_all(d.join("base")).unwrap();
+        let promo = PromoJson {
+            project_path: "D:/proj".into(),
+            snapshot_paths: vec![],
+            video_concept: "calm".into(),
+            caption_overrides: Default::default(),
+            plate_overrides: Default::default(),
+            original_copy: Default::default(),
+            plate_mode: Default::default(),
+            run_stats: None,
+            summary: AnalyzedSummary {
+                app_name: "Task Flow".into(),
+                one_liner: "o".into(),
+                core_value: "c".into(),
+                target_audience: "t".into(),
+                differentiators: vec![],
+                hook_copy: "h".into(),
+                visual_identity: VisualIdentity { palette: vec![], mood: String::new(), ui_traits: vec![] },
+            },
+            plan: ScenePlan {
+                total_seconds: 5,
+                aspect: Aspect::Landscape,
+                scenes: vec![Scene {
+                    scene_id: 1,
+                    cut_kind: CutKind::Mood,
+                    snapshot_index: None,
+                    plate_tilt: None,
+                    motion_prompt: "m".into(),
+                    duration_seconds: 5,
+                    shot_type: "Wide".into(),
+                    video_prompt: "v".into(),
+                    copy_text: "コピー".into(),
+                    image_prompt: "i".into(),
+                    reference_image: Some("scene_01_ref_01.png".into()),
+                }],
+            },
+        };
+        fs::write(d.join("promo.json"), serde_json::to_string_pretty(&promo).unwrap()).unwrap();
+        fs::write(d.join("base").join("scene_01_ref_01.png"), image_gen::solid_backdrop(8, 8, [10, 20, 30])).unwrap();
+        d
+    }
+
+    /// scenes.md が書かれていて、保存された promo.json から作ったものと一致する。
+    fn assert_scenes_md_matches(dir: &Path) {
+        let saved: PromoJson = serde_json::from_str(&fs::read_to_string(dir.join("promo.json")).unwrap()).unwrap();
+        let md = fs::read_to_string(dir.join("scenes.md")).expect("scenes.md が書かれていない");
+        assert_eq!(md, scenes_markdown(&saved));
+    }
+
+    /// rev54 (2026-09-14 実データ): 焼き直しはコピー文を変えた時しか scenes.md を書かず、
+    /// 見出し・はめ込みだけ触った run では scenes.md が作った時のまま残っていた。
+    #[test]
+    fn reburn_without_copy_change_still_writes_scenes_md() {
+        let dir = run_dir();
+        reburn_caption(dir.to_string_lossy().to_string(), 1, None, None, None).unwrap();
+        assert_scenes_md_matches(&dir);
+    }
+
+    /// rev54: スナップショットの追加も promo.json だけを書いていた。
+    #[test]
+    fn add_run_snapshot_writes_scenes_md() {
+        let dir = run_dir();
+        let shot = dir.join("shot.png");
+        fs::write(&shot, image_gen::solid_backdrop(8, 8, [1, 2, 3])).unwrap();
+        add_run_snapshot(dir.to_string_lossy().to_string(), shot.to_string_lossy().to_string()).unwrap();
+        assert_scenes_md_matches(&dir);
+    }
+}
+
+#[cfg(test)]
 mod prompt_edit_tests {
     use super::{update_scene_prompts, PromoJson};
     use promo_core::plan::{AnalyzedSummary, Aspect, CutKind, Scene, ScenePlan, VisualIdentity};
@@ -1573,9 +1647,7 @@ fn edit_scenes(run_dir: String, op: String, scene_id: u32) -> Result<PromoJson, 
         }
     }
 
-    let json = serde_json::to_string_pretty(&promo).map_err(|e| e.to_string())?;
-    write_atomic(&dir.join("promo.json"), json.as_bytes())?;
-    write_atomic(&dir.join("scenes.md"), scenes_markdown(&promo.summary, &promo.plan).as_bytes())?;
+    write_run_files(&dir, &promo)?;
     Ok(promo)
 }
 

@@ -91,6 +91,9 @@ fn default_size_ratio() -> f32 {
     0.055
 }
 use promo_core::export::{CaptionOverride, PlateOverride, reference_image_name};
+/// rev54: `scenes.md` の表も同じ番号を書くため promo_core に移した。既存の呼び出し
+/// (`pipeline::reference::plate_snapshot_index`) はこの re-export でそのまま通る。
+pub use promo_core::export::plate_snapshot_index;
 use promo_core::plan::{CutKind, PlateMode, ScenePlan};
 use promo_core::style::extract_hex;
 
@@ -180,25 +183,6 @@ pub fn tilt_of(mode: PlateMode, scene: &promo_core::plan::Scene) -> Option<Tilt>
     match (mode, scene.plate_tilt) {
         (PlateMode::Perspective, Some(t)) => Some(Tilt { yaw_degrees: t.yaw_degrees, pitch_degrees: t.pitch_degrees }),
         _ => None,
-    }
-}
-
-/// **このシーンで貼るスクリーンショットの番号** (rev24)。`None` = 貼らない (素材をそのまま出す)。
-///
-/// **貼るかどうかを決めるのはここだけ。** 焼き直し (`reburn_caption`) と予定位置の枠 (`plate_preview`) が
-/// 別々に同じ式を持っていたので 1 箇所に寄せた (#19 の「同じ数式を 2 つ持たない」)。
-///
-/// - `product`: 人の選び直し (`PlateOverride`) が LLM の指定に勝つ (rev13)。どちらも無ければ 0 枚目。
-/// - `mood`: **人が足した時だけ**貼る。既定は素材の絵そのまま。
-///   `cut_kind` は書き換えない — 書き換えると `image_prompt` が背景の記述でなくなり
-///   (検査 `ProductBackdropDrawsScreen` と食い違う)、再生成したときに mood の絵を失う。
-///   LLM が mood に番号を書いていても無視する (契約では null であるべき値なので、
-///   それを根拠に貼ると「誰も足していないのに面が出る」)。
-pub fn plate_snapshot_index(scene: &promo_core::plan::Scene, plate: Option<&PlateOverride>) -> Option<usize> {
-    let chosen = plate.and_then(|p| p.snapshot_index);
-    match scene.cut_kind {
-        promo_core::plan::CutKind::Product => Some(chosen.or(scene.snapshot_index).unwrap_or(0) as usize),
-        promo_core::plan::CutKind::Mood => chosen.map(|i| i as usize),
     }
 }
 

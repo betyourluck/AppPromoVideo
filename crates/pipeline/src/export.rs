@@ -29,9 +29,7 @@ pub fn existing_run_ids(export_dir: &Path, app_name: &str) -> Vec<String> {
 pub fn write_package(export_dir: &Path, promo: &PromoJson, run_id: &str) -> Result<PathBuf, String> {
     let dir = run_dir_of(export_dir, &promo.summary.app_name, run_id);
     fs::create_dir_all(dir.join("snapshots")).map_err(|e| format!("export フォルダを作れません {}: {e}", dir.display()))?;
-    let json = serde_json::to_string_pretty(promo).map_err(|e| e.to_string())?;
-    write_atomic(&dir.join("promo.json"), json.as_bytes())?;
-    write_atomic(&dir.join("scenes.md"), scenes_markdown(&promo.summary, &promo.plan).as_bytes())?;
+    write_run_files(&dir, promo)?;
     for (i, s) in promo.snapshot_paths.iter().enumerate() {
         let src = Path::new(s);
         let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("png").to_ascii_lowercase();
@@ -39,6 +37,14 @@ pub fn write_package(export_dir: &Path, promo: &PromoJson, run_id: &str) -> Resu
         fs::copy(src, &dst).map_err(|e| format!("スナップショットを写せません {}: {e}", src.display()))?;
     }
     Ok(dir)
+}
+
+/// **promo.json と scenes.md を揃えて書く** (rev54)。run の中身を書き換える経路はここを通す。
+/// `scenes.md` は promo からの導出なので、書き換えのたびに作り直す (写しを追従させるのではない)。
+pub fn write_run_files(dir: &Path, promo: &PromoJson) -> Result<(), String> {
+    let json = serde_json::to_string_pretty(promo).map_err(|e| e.to_string())?;
+    write_atomic(&dir.join("promo.json"), json.as_bytes())?;
+    write_atomic(&dir.join("scenes.md"), scenes_markdown(promo).as_bytes())
 }
 
 /// tmp → rename の原子的置換 (Kataribe settings_store と同じ流儀)。

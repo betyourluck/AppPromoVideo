@@ -17,12 +17,12 @@ use cli_runner::runner::CliEvent;
 use cli_runner::{CliKind, CliSpec};
 use image_gen::{Detail, HttpImageGenerator, ImageGenConfig, Provider, Shape};
 use pipeline::collect::collect_brief;
-use pipeline::export::{existing_run_ids, write_atomic, write_package};
+use pipeline::export::{existing_run_ids, write_package, write_run_files};
 use pipeline::reference::{CaptionSpec, RefJob, generate_references, load_refs};
 use pipeline::task::CliTaskRunner;
 use pipeline::{analyze, plan_scenes};
 use promo_core::brief::compress;
-use promo_core::export::{PromoJson, scenes_markdown};
+use promo_core::export::PromoJson;
 use promo_core::plan::{Aspect, PlateMode};
 use promo_core::prompts::Language;
 use promo_core::style::{apply_palette, style_anchor};
@@ -275,9 +275,7 @@ async fn make_images(a: &Args, provider: Provider, promo: &mut PromoJson, pkg_di
     let ok = results.iter().filter(|r| r.result.is_ok()).count();
     eprintln!("== images: {ok}/{} ok ==", results.len());
     // plan に reference_image が入ったので書き直す。
-    let json = serde_json::to_string_pretty(promo).map_err(|e| e.to_string())?;
-    write_atomic(&pkg_dir.join("promo.json"), json.as_bytes())?;
-    write_atomic(&pkg_dir.join("scenes.md"), scenes_markdown(&promo.summary, &promo.plan).as_bytes())?;
+    write_run_files(pkg_dir, promo)?;
     if ok < results.len() {
         return Err(format!("{} シーンの参照画像が失敗しました (詳細は上のログ)", results.len() - ok));
     }

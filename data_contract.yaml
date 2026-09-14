@@ -471,7 +471,8 @@ CaptionLayout:                      # rev18。見出しの版組み。**焼き�
 
 # PromoJson.original_copy (rev12): scene_id → LLM が最初に書いたコピー文。生成時に 1 度だけ入れて以後触らない。
 # コピー文の書き換えは `scene.copy_text` を**その場で**書き換える — scenes.md もクリップボードも plan を
-# 読むので自動で揃う。書き換えたら reburn が scenes.md も書き直す (パッケージの中で食い違わせない)。
+# 読むので自動で揃う。reburn は**毎回** scenes.md も書き直す (rev54。以前はコピー文を変えた時だけで、
+# 見出し・はめ込みだけ触った run では scenes.md が作った時のまま残っていた)。
 
 ImageGenError:                      # (Kataribe) Unauthorized / RateLimited{detail} / Blocked{reason} / Timeout{provider} / ComfyNodeError / Api / Network / Shape / Config
 
@@ -485,7 +486,7 @@ ImageGenerator:                     # trait (依存性逆転)。実装 = OpenAiI
 ExportPackage:                      # export_dir/<app_name>_Promo_Package/runs/<run_id>/ (rev7)
   layout:
     - "<pkg>/runs/<run_id>/promo.json          — { project: PromoProject(パスのみ), summary: AnalyzedSummary, plan: ScenePlan }"
-    - "<pkg>/runs/<run_id>/scenes.md           — シーン構成表 (Markdown 表 + 各シーンの video_prompt 全文)"
+    - "<pkg>/runs/<run_id>/scenes.md           — シーン構成表 (Markdown 表 + 各シーンの video_prompt 全文)。kind 列の snapshot 番号は**合成が実際に貼るもの** (`promo_core::export::plate_snapshot_index` — PlateOverride の選び直しが plan に勝ち、mood に足した面も書く。rev54、以前は plan の番号)。promo.json を書く経路はすべて `pipeline::export::write_run_files` を通り、scenes.md と揃えて書く (rev54、以前は焼き直しとスナップショットの追加が promo.json だけを書いていた)"
     - "<pkg>/runs/<run_id>/scene_NN_ref_MM.png — 参照画像 (**見出しを焼いた完成品**。MiniMax へ渡すのはこれ)"
     - "<pkg>/runs/<run_id>/base/scene_NN_ref_MM.png — **素材** (rev10): product は背景だけ / mood は絵そのもの。どちらも canvas 同寸の PNG"
     - "<pkg>/runs/<run_id>/snapshots/          — 入力スナップショットの写し"
