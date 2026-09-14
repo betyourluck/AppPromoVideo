@@ -1629,6 +1629,25 @@ crates 195 (本数は変わらず、期待を書き換えた) / backend 30 / vit
 (→ 2026-09-14 ユーザーが Tauri の実画面で確認 (スクリーンショット): `#1 mood` / `#2 product · snap 1`。はめ込みの上書きがあるシーンは画面に無く、選び直した番号の表示は Tauri では見ていない)
 (→ 同日、続けて上書きのある run でも確認 (スクリーンショット): 面を足した mood が `#2 mood · snap 1` / `#3 mood · snap 3`)。
 
+## rev56 (2026-09-14、配布ビルドで子プロセスのコンソールの窓を出さない)
+
+**ユーザー報告** (v0.1.2 の exe、Windows、スクリーンショット)「release で exe を実行するとコンソールのウィンドウが出てしまう。そういうものか」。
+窓のタイトルは「claude」で中身は空。**そういうものではない** — 直すべき不具合 (failures.md 2026-09-14 rev56)。
+
+**観察**: `main.rs` の `windows_subsystem = "windows"` は配布ビルドにだけ効き、コンソールを持たない GUI から起動したコンソール用プログラムには
+Windows が新しい窓を作る。dev ではアプリがコンソールを持つので出ない。起動箇所 (CLI 本体 / `--version` ×2 / `auth status` / `git ls-files` /
+フォルダを開く) のどれにも `CREATE_NO_WINDOW` が無かった。Job Object (`tree_kill`) は起動フラグを使わないので、足しても上書きし合わない。
+
+203. **子プロセスの起動を 1 つの口に集める** — `cli_runner::no_window::{std_command, tokio_command}`。Windows では `CREATE_NO_WINDOW` (`0x0800_0000`)。
+     Fuseforks の MCP 起動と同じ書き方。子は見えないコンソールを持つので stdout / stderr の読み取りと孫 (`rg` 等) は変わらない。
+204. **付け忘れの網** — `no_direct_command_new`: 5 つの src ルートを走査し、`Command::new(` を直に書いた行を数える (除外は no_window.rs 自身と、
+     cargo test のコンソールから起動される `fake_cli`)。検出器の陽性・陰性と、走査ファイル数の下限 (30) も試す — 空振りを違反なしと読まない。
+205. **効き目は次の配布物で見る** (ユーザー判断)。起動フラグは `Command` から読み戻せず dev では症状が出ないので、テストが固定するのは「口を通る」まで。
+
+**PoC**: 網のテストで Red (10 か所: `runner.rs:127` / `collect.rs:134・298・311` / `lib.rs:217・245・258・1176・1178・1180`、検出器のテストは通過) →
+10 か所を口に通して Green。crates 195 → 197 / backend 30、両ワークスペース clippy clean。
+**接地の限界**: **窓が出ないことは未観測** (次の配布物でユーザーが確認する)。macOS / Linux は起動フラグを付けないので挙動は変わらない。
+
 ## 公開とリリース (2026-09-13)
 
 **public にした。** MIT (`LICENSE`)。公開前の洗い出しで、**追跡ファイルに個人情報が入っていた**のを消した —
@@ -1852,6 +1871,7 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [x] rev53 (2026-09-14): aider / custom も Anthropic の表示を出さない・鍵は引き継ぐ (195〜196、契約 `CliInvocation.env_scrub.other_kinds`)。スイッチは claude だけ。crates 194 / backend 28 / vitest 131 / clippy clean。**ユーザーが配布ビルドで目視確認 (2026-09-14)** — 設定画面と、実 run の進捗ログ
 - [x] rev54 (2026-09-14): scenes.md をいつも promo.json と揃える / 表の snapshot 番号は実際に貼ったもの (197〜199、契約 `ExportPackage.layout`)。`write_run_files` / `plate_snapshot_index` を promo_core へ。crates 195 / backend 30 / clippy clean。GUI の変化は無い (scenes.md の中身だけ)
 - [x] rev55 (2026-09-14): 結果ペインの snap 表示を実際に貼った番号に / 人に見せる番号は 1 始まりに統一 (200〜202、契約 `ExportPackage.layout`)。`plateSnapshotIndex` を画面側にも置き、Rust と同じ 8 ケースで固定。crates 195 / backend 30 / vitest 135 / clippy clean、ブラウザで実測。**Tauri でユーザー目視 (2026-09-14)** — `product · snap 1` / `mood`、面を足した mood の `mood · snap 1` / `mood · snap 3`
+- [x] rev56 (2026-09-14): 配布ビルドで子プロセスのコンソールの窓を出さない (203〜205、契約 `CliInvocation.spawn`)。起動を `cli_runner::no_window` に一本化 + 付け忘れの網。crates 197 / backend 30 / clippy clean。**窓が出ないことは次の配布物で確認**
 - [x] **agy で通しが成功** (2026-09-12 21:13、ユーザー実機): 解析 → 構成 (1 回目で通過) → 参照画像 3 枚 → 合成 → 見出しの焼き込み。
       166 は効いた (`run_command` への逃げは起きなかった)。168 も効いた (**費用の chip が出ていない**)。`runs/20260912-121310`
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度 / `RunStats` の live 記録 (frontal の費用)

@@ -8,6 +8,7 @@ pub mod agy;
 pub mod env_scrub;
 pub mod error;
 pub mod invocation;
+pub mod no_window;
 pub mod raw_log;
 pub mod runner;
 pub mod stream;

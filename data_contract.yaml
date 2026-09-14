@@ -52,6 +52,7 @@ CliInvocation:                      # build_invocation の戻り。純粋 (プ�
     other_kinds: "rev53 (ユーザー決定 2026-09-14)。aider / custom も画面のスイッチ・ANTHROPIC_* / claude auth status の診断・進捗ログの認証の行を出さない (claude だけが持つ)。ただし鍵は**外さず普通に引き継ぐ** — aider は ANTHROPIC_API_KEY を環境変数から読む (aider 公式文書 docs/llms/anthropic)。常に外すと aider で Claude 系を使うには extra_args に --anthropic-api-key を書くしかなく、鍵が CliRawLog の .invocation.json に残る。スイッチを出さない種類では保存値を効かせない (見えない設定で挙動を変えない)"
     diagnostics: "check_cli が AuthView {api_key_present, api_key_len, api_key_fingerprint (FNV 12 桁、値は出さない), auth_token_present, base_url, oauth_logged_in, oauth_method, scrubbed[]} を返し、設定 → LLM タブに表示。run 開始時にも同じ 1 行を進捗ログへ"
     poc: "tests/runner.rs host_coupling_env_is_scrubbed_but_user_config_passes (fake_cli env モード: CLAUDE_CODE_MESSAGING_SOCKET / CLAUDECODE が absent、ANTHROPIC_* 相当が present、env_remove 指定で absent)"
+  spawn: "**子プロセスの起動は必ず `cli_runner::no_window` の `std_command` / `tokio_command` を通す** (rev56)。Windows で `CREATE_NO_WINDOW` を付け、配布ビルド (windows_subsystem = windows、コンソールを持たない) からコンソール用プログラムを起動しても窓を出さない。対象は CLI 本体・`--version`・`auth status`・`git ls-files`・フォルダを開く処理のすべて。付け忘れは `no_window::tests::no_direct_command_new` が落とす (除外は no_window.rs 自身と fake_cli)。窓が出ないこと自体は配布ビルドでしか観測できない"
   invariants:                       # 純関数のテストで固定 (rev2 査読 3)
     - "allowedTools に Read が入る時は必ず --add-dir <project_path> が付く (claude のみ。agy に --allowedTools は存在しない)"
     - "cwd != project_path (全 kind)"

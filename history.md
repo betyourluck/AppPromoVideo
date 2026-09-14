@@ -1359,3 +1359,11 @@ scenes.md の表も `i + 1` に (rev54 で入れた書き方を当日中に変�
 ②画像生成プロバイダの表 — ComfyUI と OpenAI を「✅ 実機検証済み」としていたが、実機の通しは Gemini だけ (spec 01 Phase C)。接続先も実装 (`generateContent` / `images/generations`・`images/edits` / upload → `/prompt` → `/history` → `/view`) に合わせた
 ③出力フォルダの構成例 — `images/ref_001.png` / `repobrief.txt` は実在しない。実物 (今日の run と契約 `ExportPackage.layout`) の `promo.json` / `scenes.md` / `scene_NN_ref_MM.png` / `base/` / `snapshots/` に
 ④動作要件の LLM CLI に `agy` / カスタムを足し、`agy` の隔離の弱さを一言添えた。README は会話の外で作られた文書で、機能の追加に追従していなかった。
+
+## 2026-09-14 (続) — rev56: 配布ビルドのコンソールの窓
+
+ユーザー (v0.1.2 の exe、スクリーンショット)「release で exe を実行するとコンソールのウィンドウが出る。そういうものか」。窓のタイトルは「claude」で空。
+真因は `windows_subsystem = "windows"` が配布ビルドにだけ効くことと、子プロセスの起動に `CREATE_NO_WINDOW` が無かったこと — dev ではアプリが
+コンソールを持つので出ず、配布物でしか現れない不具合を dev だけで検証していた。Fuseforks の MCP 起動に同じ処方があり、それに揃えた。
+起動を `cli_runner::no_window` に一本化し、`Command::new(` を直に書いた行を数える網で Red (10 か所) → Green。起動フラグは読み戻せないので、
+窓が出ないことは次の配布物でユーザーが確かめる (ユーザー判断)。

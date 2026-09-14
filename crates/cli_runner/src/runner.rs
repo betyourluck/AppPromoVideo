@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::{Child, Command};
+use tokio::process::Child;
 use tokio::sync::watch;
 
 use crate::error::CliError;
@@ -124,7 +124,8 @@ pub async fn run(
     };
 
     // --- spawn ---
-    let mut cmd = Command::new(&inv.program);
+    // rev56: 配布ビルドの Windows でコンソールの窓を出さない (起動は必ず no_window を通す)。
+    let mut cmd = crate::no_window::tokio_command(&inv.program);
     // ホストと結びつく環境変数を子に渡さない (env_scrub)。GUI 実測: デスクトップの端末から起動した
     // アプリの子 claude が居ないホストに認証更新を頼み 401 を繰り返した。
     for name in crate::env_scrub::names_to_scrub().into_iter().chain(opts.env_remove.iter().cloned()) {

@@ -214,7 +214,7 @@ fn auth_log_lines(kind: cli_runner::CliKind, oauth_only: bool, a: &AuthView) -> 
 
 /// `--version` の 1 行目 (契約 `CliKindCheck`)。取れなければ None — **取れないことを食い違いの証拠にしない**。
 async fn cli_version(executable: &str) -> Option<String> {
-    let fut = tokio::process::Command::new(executable).arg("--version").output();
+    let fut = cli_runner::no_window::tokio_command(executable).arg("--version").output();
     match tokio::time::timeout(std::time::Duration::from_secs(20), fut).await {
         Ok(Ok(out)) => {
             let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
@@ -242,7 +242,8 @@ fn kind_mismatch_message(kind: cli_runner::CliKind, executable: &str, version: &
 #[tauri::command]
 async fn check_cli(executable: String, kind: Option<cli_runner::CliKind>) -> CliCheck {
     let mut auth = auth_view_env();
-    let fut = tokio::process::Command::new(&executable).arg("--version").output();
+    // rev56: 配布ビルドの Windows でコンソールの窓を出さない (起動は必ず cli_runner::no_window を通す)。
+    let fut = cli_runner::no_window::tokio_command(&executable).arg("--version").output();
     let mut check = match tokio::time::timeout(std::time::Duration::from_secs(20), fut).await {
         Ok(Ok(out)) => {
             let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
@@ -255,7 +256,7 @@ async fn check_cli(executable: String, kind: Option<cli_runner::CliKind>) -> Cli
         Err(_) => CliCheck { found: true, error: "--version が 20 秒で返りませんでした".into(), ..Default::default() },
     };
     if check.found && check.version.to_lowercase().contains("claude") {
-        let mut cmd = tokio::process::Command::new(&executable);
+        let mut cmd = cli_runner::no_window::tokio_command(&executable);
         for n in cli_runner::env_scrub::names_to_scrub() {
             cmd.env_remove(n);
         }
@@ -1173,11 +1174,11 @@ fn open_folder(path: String) -> Result<(), String> {
         return Err(format!("フォルダではありません: {path}"));
     }
     #[cfg(target_os = "windows")]
-    let r = std::process::Command::new("explorer").arg(p).spawn();
+    let r = cli_runner::no_window::std_command("explorer").arg(p).spawn();
     #[cfg(target_os = "macos")]
-    let r = std::process::Command::new("open").arg(p).spawn();
+    let r = cli_runner::no_window::std_command("open").arg(p).spawn();
     #[cfg(all(unix, not(target_os = "macos")))]
-    let r = std::process::Command::new("xdg-open").arg(p).spawn();
+    let r = cli_runner::no_window::std_command("xdg-open").arg(p).spawn();
     r.map(|_| ()).map_err(|e| e.to_string())
 }
 

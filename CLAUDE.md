@@ -17,6 +17,7 @@
 - **`crates/cli_runner`** (tokio::process): argv 組み立てと stream-json 解析は純粋関数で PoC。
   spawn / 本文の運搬 (stdin か一時ファイル。**argv には載せない**) / 行ストリーム / timeout /
   cancel (**子孫ごと kill**: Windows Job Object・Unix pgid)。**LLM の HTTP は禁止。**
+  **子プロセスの起動は必ず `cli_runner::no_window` を通す** (Windows で `CREATE_NO_WINDOW`。配布ビルドでだけ窓が出る — rev56)。
   許可ツールは Read / Glob / Grep のみで `--add-dir <repo>` とセット (**claude のみ。agy にこのフラグは無い** —
   契約 `IsolationGuarantee`)。**cwd は app の作業ディレクトリ**であって
   対象リポジトリではない (`-p` は cwd の hook / MCP を無確認で実行する)。
@@ -89,7 +90,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   winget は PR #434054 (0.1.1) のマージ後に `wingetcreate update`。版番号 3 か所 + `Cargo.lock` は**タグの後に**上げた —
   配布物は CI の `Sync app version to tag` が `tauri.conf.json` をタグに揃えるので 0.1.2 で出ている。
   次のタグを打つ時の手順: 版番号 → タグ `vX.Y.Z` → CI (draft、3 OS) → 説明を確認 → publish → tap の `version` / `sha256` (Release API の `digest`) → `wingetcreate update` (マージ後)。
-- **rev54〜55 は main にあるが配布物には乗っていない** (v0.1.2 は rev53 まで)。次のタグで乗る。
+- **rev54〜56 は main にあるが配布物には乗っていない** (v0.1.2 は rev53 まで)。次のタグで乗る — rev56 (コンソールの窓) はその配布物で確かめる。
 - **winget は PR #434054 (0.1.1) がマージ待ち。** マージされたら README 英日に winget を追記する (それまで書かない)。
 
 - **公開した (2026-09-13)。** MIT (`LICENSE`)、`origin` は public。`v0.1.0` のタグで CI が**初回から 3 OS とも green**、
@@ -120,7 +121,9 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   (書いてあるのに入らない、を避ける)。次の版は `wingetcreate update Outcasts.AppPromoVideo --version <V> --urls <MSI URL>` →
   ローカル生成 → `InstallerLocale` が混ざっていたら消す → `wingetcreate submit --token "$(gh auth token)"`。提出前に
   `gh repo sync betyourluck/winget-pkgs --source microsoft/winget-pkgs --branch master`。
-- **spec 01 は Phase 0〜E 着地、rev55 まで反映済み (rev27〜29 は試行)。** crates 195 green / vitest 135 / backend 30 green・clippy clean。
+- **spec 01 は Phase 0〜E 着地、rev56 まで反映済み (rev27〜29 は試行)。** crates 197 green / vitest 135 / backend 30 green・clippy clean。
+- **配布ビルドの Windows で子プロセスのコンソールの窓を出さない** (rev56、ユーザー報告: v0.1.2 の exe で「claude」の空の窓)。
+  起動を `cli_runner::no_window` に一本化し、付け忘れはテストが落とす。**窓が出ないことは次の配布物でユーザーが確認する** (dev では症状が出ない)。
 - **`scenes.md` はいつも `promo.json` と揃えて書く** (rev54、`pipeline::export::write_run_files`)。表の snapshot 番号は合成が実際に貼るもの
   (`promo_core::export::plate_snapshot_index`)。以前は焼き直しとスナップショット追加が promo.json だけを書き、表は plan の番号のままだった。
   **結果ペインの chip も同じ規則** (rev55、`app/src/plate.ts` の `plateSnapshotIndex` — Rust と式が 2 つなので両方のテストに同じ 8 ケース)。
@@ -249,7 +252,7 @@ rev14 のコミット `5929f93` に巻き込んだ。実害は無いが粒度が
 
 ## 再開の手順
 
-1. `cargo test --workspace` (195 green) と `cd app && npx vitest run && npm run build` (135 green) で足場を確認。**並べて走らせるなら絶対パス** (cwd が `app/src-tauri` に残る事故を 4 回踏んだ)。
+1. `cargo test --workspace` (197 green) と `cd app && npx vitest run && npm run build` (135 green) で足場を確認。**並べて走らせるなら絶対パス** (cwd が `app/src-tauri` に残る事故を 4 回踏んだ)。
    `cd /abs && …` は**そのコマンド**を守るだけで、ずれた cwd は次のコマンドへ残る — **並べる全部に `cd` を書く** (2026-09-14)。
    同日、この処方を書いた**後にも** `cd` の書き忘れで 3 回空振りした (vitest 2 回・backend の Red 1 回。どれも「0 本選ばれた / 何も出ない」で、落ちたようには見えない)。
    **送る前に、並べた各コマンドの先頭が `cd /abs &&` かを見る。** 出力が空・0 本の時は、結果ではなく cwd を疑う。
