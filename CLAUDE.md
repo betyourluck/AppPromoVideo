@@ -82,6 +82,9 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   tap の cask を 0.1.2 に (tap `3de4ddd`。sha256 = Release API の dmg の digest、URL が 200 を返すことを確認)。
   verify-cask (run 34809584095、macos-latest) で 0.1.2 の dmg が入り、**`spctl` = `accepted` / `source=Notarized Developer ID`**。
   `brew audit` は runner の GitHub API レート制限 (未認証 60 回) で中断した — cask への指摘ではない (informational の step)。
+  **rev43・45〜47・50〜53 はユーザーが配布ビルドの実画面で確認済み** (2026-09-14。rev47 の締めが効いたので配布ビルド)。
+  確認の手順は 8 項目 (入力例 / 設定の認証 4 種 / 使い方を見る / ブランドの標 / 右クリック・F5・選択 / 費用の表示 / シーン編集 / 実 run の進捗ログ)。
+  rev44 (初回案内) は案内が始まることまで。rev36・37 (プロンプトの保存) は含まれていない。
   winget は PR #434054 (0.1.1) のマージ後に `wingetcreate update`。版番号 3 か所 + `Cargo.lock` は**タグの後に**上げた —
   配布物は CI の `Sync app version to tag` が `tauri.conf.json` をタグに揃えるので 0.1.2 で出ている。
   次のタグを打つ時の手順: 版番号 → タグ `vX.Y.Z` → CI (draft、3 OS) → 説明を確認 → publish → tap の `version` / `sha256` (Release API の `digest`) → `wingetcreate update` (マージ後)。
