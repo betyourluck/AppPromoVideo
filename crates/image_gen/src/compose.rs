@@ -38,6 +38,10 @@ pub struct Layout {
     pub x_offset_ratio: f32,
     /// 面の傾き (rev5)。`None` / ゼロなら従来どおり正対で貼る (画素等価)。
     pub tilt: Option<Tilt>,
+    /// 等倍を越えて引き伸ばしてよいか (rev57、契約 `compose.layout.allow_upscale`)。
+    /// 既定 `false` = 等倍で頭打ち (rev6: スクショの画素は等比の縮小以外いじらない)。
+    /// 立つのは人が大きさのつまみを動かした時だけ (`PlateOverride.allow_upscale`)。
+    pub allow_upscale: bool,
 }
 
 impl Layout {
@@ -51,6 +55,7 @@ impl Layout {
             y_offset_ratio: 0.0,
             x_offset_ratio: 0.0,
             tilt: None,
+            allow_upscale: false,
         }
     }
 
@@ -144,6 +149,17 @@ pub fn plate_scale(canvas: (u32, u32), shot: (u32, u32), screen_ratio: f32) -> f
     let max_w = canvas.0 as f32 * screen_ratio;
     let max_h = canvas.1 as f32 * screen_ratio;
     (max_w / shot.0 as f32).min(max_h / shot.1 as f32).min(1.0)
+}
+
+/// スクショが**等倍になる** `screen_ratio` (純粋、rev57)。これより大きい枠は、拡大を許さない限り効かない。
+/// つまみの「等倍」の目盛りはここから出す (合成の縮尺 `min(枠/スクショ, 1.0)` が 1 に達する点)。
+pub fn native_screen_ratio(canvas: (u32, u32), shot: (u32, u32)) -> f32 {
+    (shot.0 as f32 / canvas.0 as f32).max(shot.1 as f32 / canvas.1 as f32)
+}
+
+/// 縮尺の上限 (rev57)。既定は等倍、人が大きさを決めた時だけ外す。
+fn scale_cap(layout: &Layout) -> f32 {
+    if layout.allow_upscale { f32::INFINITY } else { 1.0 }
 }
 
 /// 生成画像を canvas の寸法・PNG に揃える (契約 `compose.fit_to_canvas`、rev6)。
@@ -360,11 +376,12 @@ fn plate_size(layout: &Layout, shot: (u32, u32)) -> (f32, f32) {
     let (sw, sh) = (shot.0 as f32, shot.1 as f32);
     let max_w = layout.width as f32 * layout.screen_ratio;
     let max_h = layout.height as f32 * layout.screen_ratio;
-    let scale = (max_w / sw).min(max_h / sh).min(1.0);
+    let scale = (max_w / sw).min(max_h / sh).min(scale_cap(layout));
     (((sw * scale) as u32).max(1) as f32, ((sh * scale) as u32).max(1) as f32)
 }
 
-/// 背景 + 実スクショ → 製品カット (PNG)。スクショの画素は等比縮小以外いじらない。
+/// 背景 + 実スクショ → 製品カット (PNG)。スクショの画素は等比縮小以外いじらない
+/// (rev57: 人が等倍より大きくした時だけ引き伸ばす — `Layout::allow_upscale`)。
 pub fn composite_product_cut(
     background: &[u8],
     screenshot: &[u8],
@@ -379,7 +396,7 @@ pub fn composite_product_cut(
     let max_h = (layout.height as f32 * layout.screen_ratio) as u32;
     let scale = (max_w as f32 / sw as f32)
         .min(max_h as f32 / sh as f32)
-        .min(1.0);
+        .min(scale_cap(layout));
     let tw = ((sw as f32 * scale) as u32).max(1);
     let th = ((sh as f32 * scale) as u32).max(1);
     let mut shot = shot.resize_exact(tw, th, FilterType::Lanczos3).to_rgba8();
@@ -527,7 +544,7 @@ mod tests {
     fn plate_quad_matches_where_the_plate_actually_lands() {
         let bg = png(400, 300, [40, 40, 40]);
         let shot = png(800, 600, [255, 0, 200]);
-        let l = Layout { width: 1000, height: 1000, screen_ratio: 0.5, corner_radius: 0, shadow: false, y_offset_ratio: 0.1, x_offset_ratio: -0.2, tilt: None };
+        let l = Layout { width: 1000, height: 1000, screen_ratio: 0.5, corner_radius: 0, shadow: false, y_offset_ratio: 0.1, x_offset_ratio: -0.2, tilt: None, allow_upscale: false };
         let q = plate_quad(&l, (800, 600));
         let out = decode(&composite_product_cut(&bg, &shot, &l).unwrap());
 
@@ -565,7 +582,7 @@ mod tests {
     fn the_plate_can_be_moved_horizontally_and_vertically() {
         let bg = png(400, 300, [40, 40, 40]);
         let shot = png(800, 600, [255, 0, 200]);
-        let center = Layout { width: 1000, height: 1000, screen_ratio: 0.5, corner_radius: 0, shadow: false, y_offset_ratio: 0.0, x_offset_ratio: 0.0, tilt: None };
+        let center = Layout { width: 1000, height: 1000, screen_ratio: 0.5, corner_radius: 0, shadow: false, y_offset_ratio: 0.0, x_offset_ratio: 0.0, tilt: None, allow_upscale: false };
         let right = Layout { x_offset_ratio: 0.2, ..center };
 
         let cols = |l: &Layout| {
@@ -672,6 +689,7 @@ mod tests {
             y_offset_ratio: 0.0,
             x_offset_ratio: 0.0,
             tilt: None,
+            allow_upscale: false,
         };
         let out = decode(&composite_product_cut(&bg, &shot, &layout).unwrap());
         // 高さ 480 に収まる → 幅 240。左上角 (角丸の外) は背景色。
@@ -700,11 +718,64 @@ mod tests {
             y_offset_ratio: 0.0,
             x_offset_ratio: 0.0,
             tilt: None,
+            allow_upscale: false,
         };
         let out = decode(&composite_product_cut(&bg, &shot, &layout).unwrap());
         // 等倍のまま中央 (400..600, 200..300)。
         assert_eq!(out.get_pixel(500, 250)[0], 255);
         assert_eq!(out.get_pixel(390, 250)[0], 0);
+    }
+
+    /// rev57: 等倍の目盛り。実データ (run 20261002-133028) は canvas 2824x1614 / スクショ 1920x1032 で、
+    /// つまみを 0.68 より上げても面が大きくならなかった (ユーザー報告「0.70 以上拡大できない」)。
+    #[test]
+    fn native_screen_ratio_is_where_the_plate_stops_growing() {
+        let (canvas, shot) = ((2824, 1614), (1920, 1032));
+        let n = native_screen_ratio(canvas, shot);
+        assert!((n - 1920.0 / 2824.0).abs() < 1e-4, "横で決まる: {n}");
+        // 縦長は縦で決まる。
+        assert!((native_screen_ratio((1000, 1000), (300, 600)) - 0.6).abs() < 1e-6);
+        // 目盛りの意味: そこで等倍に達し、拡大を許さない限りそれより上は効かない。
+        assert!((plate_scale(canvas, shot, n) - 1.0).abs() < 1e-3);
+        let w = |r: f32| {
+            let l = Layout { screen_ratio: r, ..Layout::for_canvas(canvas.0, canvas.1) };
+            let q = plate_quad(&l, shot);
+            q[1].0 - q[0].0
+        };
+        assert_eq!(w(n + 0.01), w(0.95), "頭打ちの上は同じ大きさ");
+        assert!(w(n - 0.05) < w(n), "下は縮む");
+    }
+
+    /// rev57: 人が等倍より大きくした時だけ引き伸ばす。枠 (予定位置) も同じ大きさを指す。
+    #[test]
+    fn upscale_fills_the_box_only_when_allowed() {
+        let bg = png(100, 100, [0, 0, 0]);
+        let shot = png(200, 100, [255, 255, 255]);
+        let capped = Layout {
+            width: 1000,
+            height: 500,
+            screen_ratio: 0.9,
+            corner_radius: 0,
+            shadow: false,
+            y_offset_ratio: 0.0,
+            x_offset_ratio: 0.0,
+            tilt: None,
+            allow_upscale: false,
+        };
+        let grown = Layout { allow_upscale: true, ..capped };
+        let out = decode(&composite_product_cut(&bg, &shot, &grown).unwrap());
+        // 枠 900x450 に等比で収める → 横で決まり 900x450、中央 (50..950, 25..475)。
+        assert_eq!(out.get_pixel(60, 250)[0], 255, "引き伸ばして枠いっぱい");
+        assert_eq!(out.get_pixel(40, 250)[0], 0, "枠の外は背景");
+        let qw = |l: &Layout| {
+            let q = plate_quad(l, (200, 100));
+            q[1].0 - q[0].0
+        };
+        assert!((qw(&grown) - 900.0).abs() <= 1.0, "枠も同じ大きさ: {}", qw(&grown));
+        assert!((qw(&capped) - 200.0).abs() <= 1.0, "許さなければ等倍: {}", qw(&capped));
+        // 傾けた経路でも大きくなる。
+        let tilt = Some(Tilt { yaw_degrees: 15.0, pitch_degrees: 0.0 });
+        assert!(qw(&Layout { tilt, ..grown }) > 2.0 * qw(&Layout { tilt, ..capped }));
     }
 
     /// 見出しの帯: 下に帯なら中心より上に寄り、下端 12% は背景のまま (文字の置き場)。

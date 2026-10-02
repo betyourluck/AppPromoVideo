@@ -5,7 +5,7 @@
 import { defineStore } from "pinia";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { BriefPreview, CliCheck, FontEntry, ImagesResult, OpenedRun, Progress, PromoJson, RunListItem, RunResult, SceneOp, SnapshotMeta } from "./types";
+import type { BriefPreview, CliCheck, FontEntry, ImagesResult, OpenedRun, PlateOverride, Progress, PromoJson, RunListItem, RunResult, SceneOp, SnapshotMeta } from "./types";
 import { mergePaths } from "./snapshots";
 import { t } from "./i18n";
 import {
@@ -383,7 +383,7 @@ export const useStore = defineStore("main", {
     async reburnCaption(
       sceneId: number,
       spec: ReturnType<typeof toBackendCaption>,
-      plate: Record<string, number> | null = null,
+      plate: PlateOverride | null = null,
       newCopy: string | null = null,
     ) {
       const runDir = this.result?.package_dir;

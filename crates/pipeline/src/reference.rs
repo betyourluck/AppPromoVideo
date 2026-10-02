@@ -226,6 +226,8 @@ pub fn layout_for(
         l.x_offset_ratio = o.x_offset_ratio.unwrap_or(l.x_offset_ratio);
         // 縦のずらしを指定したら**帯のずらしを置き換える** (人が決めた位置を優先する)。
         l.y_offset_ratio = o.y_offset_ratio.unwrap_or(l.y_offset_ratio);
+        // rev57: 拡大は人が大きさを決めた時だけ。フラグ単独 (大きさ無し) では既定の枠を引き伸ばさない。
+        l.allow_upscale = o.allow_upscale == Some(true) && o.screen_ratio.is_some();
     }
     l.with_tilt(Tilt { yaw_degrees: yaw, pitch_degrees: pitch })
 }
@@ -657,6 +659,19 @@ mod tests {
         assert_eq!(wild.tilt.unwrap().yaw_degrees, 35.0);
         assert_eq!(wild.screen_ratio, 0.95);
         assert_eq!(wild.x_offset_ratio, -0.4);
+    }
+
+    /// rev57: 拡大は**人が大きさを決めた時だけ**。フラグ単独・大きさ単独では等倍で頭打ちのまま
+    /// (rev56 以前の promo.json は `screen_ratio` だけを持つので、焼き直しても絵が変わらない)。
+    #[test]
+    fn upscale_is_allowed_only_with_a_size_the_user_chose() {
+        let canvas = (1000, 1000);
+        let lay = |o: PlateOverride| layout_for(canvas, None, None, Some(&o));
+        assert!(lay(PlateOverride { screen_ratio: Some(0.9), allow_upscale: Some(true), ..Default::default() }).allow_upscale);
+        assert!(!lay(PlateOverride { screen_ratio: Some(0.9), ..Default::default() }).allow_upscale, "以前の run は頭打ちのまま");
+        assert!(!lay(PlateOverride { allow_upscale: Some(true), ..Default::default() }).allow_upscale, "大きさ無しのフラグは無視");
+        assert!(!lay(PlateOverride { screen_ratio: Some(0.9), allow_upscale: Some(false), ..Default::default() }).allow_upscale);
+        assert!(!layout_for(canvas, None, None, None).allow_upscale, "上書き無し = LLM の既定");
     }
 
     /// rev9: 見出しを焼く**前**を base/ に残す。あとから位置や色を変えるのに背景を作り直さないため。

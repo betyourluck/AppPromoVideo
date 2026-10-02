@@ -871,6 +871,12 @@ struct PlatePreview {
     /// `PlateMode::Frontal` や `plate_tilt` 無しでは `[0, 0]` = 本当に正面。
     /// スライダーの基準はここ — 0 に置くと、絵が傾いているのにつまみが 0° を指す嘘になる。
     tilt: [f32; 2],
+    /// **いま効いている枠** (rev57)。上書きが無ければ帯の有無で決まる既定 (0.78 / 0.68)。
+    /// つまみの既定位置はここ — 以前は TS 側で 0.78 と決め打ちしており、帯ありの run では嘘だった。
+    screen_ratio: f32,
+    /// スクショが**等倍になる**枠 (rev57、`compose::native_screen_ratio`)。面が無いシーンでは `None`。
+    /// これより上は、人が大きさを決めた時だけ引き伸ばす (`PlateOverride.allow_upscale`)。
+    native_ratio: Option<f32>,
 }
 
 /// フォントは 1 ファイルが数 MB〜数十 MB ある。プレビューは打鍵・スライダーのたびに走るので、
@@ -924,13 +930,16 @@ async fn plate_preview(
     // 面があるかは `plate_snapshot_index` が決める — 焼き込みと同じ関数を通す (rev24)。
     // 枠が合成と違う式を持つと枠が嘘をつく (#17 / rev18 と同じ作法)。
     let tilt = pipeline::reference::tilt_of(promo.plate_mode, scene);
-    let quad = match pipeline::reference::plate_snapshot_index(scene, plate.as_ref()) {
-        None => None,
+    let l = pipeline::reference::layout_for(canvas, spec.as_ref().map(|s| s.effective_position()), tilt, plate.as_ref());
+    let (quad, native_ratio) = match pipeline::reference::plate_snapshot_index(scene, plate.as_ref()) {
+        None => (None, None),
         Some(idx) => {
             let shot_dims = pipeline::reference::image_dims(&read_run_snapshot(&dir, idx)?)?;
-            let l = pipeline::reference::layout_for(canvas, spec.as_ref().map(|s| s.effective_position()), tilt, plate.as_ref());
             let q = image_gen::compose::plate_quad(&l, shot_dims);
-            Some([[q[0].0, q[0].1], [q[1].0, q[1].1], [q[2].0, q[2].1], [q[3].0, q[3].1]])
+            (
+                Some([[q[0].0, q[0].1], [q[1].0, q[1].1], [q[2].0, q[2].1], [q[3].0, q[3].1]]),
+                Some(image_gen::compose::native_screen_ratio(canvas, shot_dims)),
+            )
         }
     };
 
@@ -953,6 +962,8 @@ async fn plate_preview(
         quad,
         caption_lines,
         tilt: tilt.map(|t| [t.yaw_degrees, t.pitch_degrees]).unwrap_or([0.0, 0.0]),
+        screen_ratio: l.screen_ratio,
+        native_ratio,
     })
 }
 
@@ -1491,6 +1502,86 @@ mod prompt_edit_tests {
         assert!(err.contains("motion"), "{err}");
         assert_eq!(fs::read_to_string(dir.join("promo.json")).unwrap(), before);
         assert!(!dir.join("scenes.md").exists(), "拒んだのに scenes.md を書いている");
+    }
+}
+
+#[cfg(test)]
+mod plate_preview_tests {
+    use super::{plate_preview, PromoJson};
+    use promo_core::export::PlateOverride;
+    use promo_core::plan::{AnalyzedSummary, Aspect, CutKind, Scene, ScenePlan, VisualIdentity};
+    use std::fs;
+    use std::path::PathBuf;
+
+    /// canvas 1000x500 の素材と 200x100 のスクショを置いた product 1 シーンの run。
+    fn run_dir() -> PathBuf {
+        let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let d = std::env::temp_dir().join(format!("apppromo_plate_{}_{}", std::process::id(), n));
+        fs::create_dir_all(d.join("base")).unwrap();
+        fs::create_dir_all(d.join("snapshots")).unwrap();
+        let png = |w, h| image_gen::compose::solid_backdrop(w, h, [10, 10, 10]);
+        fs::write(d.join("base").join(promo_core::export::reference_image_name(1, 1)), png(1000, 500)).unwrap();
+        fs::write(d.join("snapshots").join(promo_core::export::snapshot_file_name(0, "png")), png(200, 100)).unwrap();
+        let scene = Scene {
+            scene_id: 1,
+            cut_kind: CutKind::Product,
+            snapshot_index: Some(0),
+            plate_tilt: None,
+            motion_prompt: "m".into(),
+            duration_seconds: 5,
+            shot_type: "Wide".into(),
+            video_prompt: "v".into(),
+            copy_text: String::new(),
+            image_prompt: "i".into(),
+            reference_image: None,
+        };
+        let promo = PromoJson {
+            project_path: "D:/proj".into(),
+            snapshot_paths: vec![],
+            video_concept: "calm".into(),
+            caption_overrides: Default::default(),
+            plate_overrides: Default::default(),
+            original_copy: Default::default(),
+            plate_mode: Default::default(),
+            run_stats: None,
+            summary: AnalyzedSummary {
+                app_name: "Task Flow".into(),
+                one_liner: "o".into(),
+                core_value: "c".into(),
+                target_audience: "t".into(),
+                differentiators: vec![],
+                hook_copy: "h".into(),
+                visual_identity: VisualIdentity { palette: vec![], mood: String::new(), ui_traits: vec![] },
+            },
+            plan: ScenePlan { total_seconds: 5, aspect: Aspect::Landscape, scenes: vec![scene] },
+        };
+        fs::write(d.join("promo.json"), serde_json::to_string_pretty(&promo).unwrap()).unwrap();
+        d
+    }
+
+    fn width(p: &super::PlatePreview) -> f32 {
+        let q = p.quad.expect("product には面がある");
+        q[1][0] - q[0][0]
+    }
+
+    /// rev57: つまみの基準は**実効の枠**と**等倍の位置**。枠の幅も合成と同じく、許した時だけ等倍を越える。
+    #[test]
+    fn preview_reports_the_effective_box_and_where_the_shot_reaches_native_size() {
+        let dir = run_dir().to_string_lossy().to_string();
+        let run = |plate: Option<PlateOverride>| {
+            tauri::async_runtime::block_on(plate_preview(dir.clone(), 1, None, plate, None)).unwrap()
+        };
+        let plain = run(None);
+        assert_eq!(plain.screen_ratio, 0.78, "見出し無しの既定");
+        assert!((plain.native_ratio.unwrap() - 0.2).abs() < 1e-6, "200/1000 = 100/500 = 0.2");
+        assert!((width(&plain) - 200.0).abs() <= 1.0, "既定は等倍で頭打ち");
+
+        let capped = run(Some(PlateOverride { screen_ratio: Some(0.5), ..Default::default() }));
+        assert_eq!(capped.screen_ratio, 0.5);
+        assert!((width(&capped) - 200.0).abs() <= 1.0, "以前の run (フラグ無し) は等倍のまま");
+
+        let grown = run(Some(PlateOverride { screen_ratio: Some(0.5), allow_upscale: Some(true), ..Default::default() }));
+        assert!((width(&grown) - 500.0).abs() <= 1.0, "許すと枠いっぱい: {}", width(&grown));
     }
 }
 

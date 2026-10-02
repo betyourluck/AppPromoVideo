@@ -13,9 +13,9 @@
 import { computed, onUnmounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../store";
-import type { FontEntry } from "../types";
+import type { FontEntry, PlateOverride } from "../types";
 import { baseName as fileName, snapshotChoices } from "../snapshots";
-import { plateSnapshotIndex, tiltLabel, tiltValue } from "../plate";
+import { plateSnapshotIndex, sizeLabel, sizeValue, tiltLabel, tiltValue } from "../plate";
 import { ask, isMessageBoxOpen } from "../dialog";
 import { t } from "../i18n";
 import Icon from "./Icon.vue";
@@ -142,6 +142,11 @@ function touch() {
 const yaw = ref<number | null>(null);
 const pitch = ref<number | null>(null);
 const ratio = ref<number | null>(null);
+/**
+ * 等倍を越えて引き伸ばしてよいか (rev57)。**大きさのつまみを動かした時だけ立つ** —
+ * 以前の run (`screen_ratio` だけを持つ) は、焼き直しても等倍で頭打ちのまま。
+ */
+const upscale = ref(false);
 const dx = ref<number | null>(null);
 const dy = ref<number | null>(null);
 
@@ -163,6 +168,9 @@ interface Preview {
   caption_lines: [number, number, number, number][];
   /** いま効いている傾き [yaw, pitch]。合成が使う `tilt_of` の値。 */
   tilt: [number, number];
+  /** rev57: いま効いている枠と、スクショが等倍になる枠 (面が無ければ null)。大きさのつまみの基準。 */
+  screen_ratio: number;
+  native_ratio: number | null;
 }
 const previewBoxes = ref<Preview | null>(null);
 let pending = 0;
@@ -189,6 +197,12 @@ async function refreshQuad() {
  * ここを 0 にすると、絵が傾いているのにつまみが 0° を指す嘘になる (ユーザー指摘 2026-09-09)。
  */
 const baseTilt = computed<[number, number]>(() => previewBoxes.value?.tilt ?? [0, 0]);
+
+/** 大きさのつまみの「等倍」の目盛り (rev57)。スライダーの範囲内にある時だけ出す。 */
+const nativeTick = computed(() => {
+  const n = previewBoxes.value?.native_ratio ?? null;
+  return n !== null && n >= 0.2 && n <= 0.95 ? Number(n.toFixed(3)) : null;
+});
 
 /** 表示サイズに合わせた SVG のポリゴン点列 (面)。 */
 const quadPoints = computed(() => {
@@ -243,11 +257,14 @@ function num(e: Event): number {
 }
 
 /** 触ったフィールドだけ送る。null は「既定のまま」。 */
-function currentPlate() {
-  const p: Record<string, number> = {};
+function currentPlate(): PlateOverride | null {
+  const p: PlateOverride = {};
   if (yaw.value !== null) p.yaw_degrees = yaw.value;
   if (pitch.value !== null) p.pitch_degrees = pitch.value;
-  if (ratio.value !== null) p.screen_ratio = ratio.value;
+  if (ratio.value !== null) {
+    p.screen_ratio = ratio.value;
+    if (upscale.value) p.allow_upscale = true;
+  }
   if (dx.value !== null) p.x_offset_ratio = dx.value;
   if (dy.value !== null) p.y_offset_ratio = dy.value;
   if (snapIndex.value !== null) p.snapshot_index = snapIndex.value;
@@ -302,6 +319,7 @@ function loadSaved() {
   yaw.value = p?.yaw_degrees ?? null;
   pitch.value = p?.pitch_degrees ?? null;
   ratio.value = p?.screen_ratio ?? null;
+  upscale.value = p?.allow_upscale ?? false;
   dx.value = p?.x_offset_ratio ?? null;
   dy.value = p?.y_offset_ratio ?? null;
   snapIndex.value = p?.snapshot_index ?? null;
@@ -367,6 +385,7 @@ function reset() {
   yaw.value = null;
   pitch.value = null;
   ratio.value = null;
+  upscale.value = false;
   dx.value = null;
   dy.value = null;
   snapIndex.value = null;
@@ -504,9 +523,16 @@ function restoreCopy() {
                        @input="pitch = num($event); touch()" />
               </label>
               <label class="field">
-                <span>{{ t('caption.size') }} <b class="mono">{{ show(ratio) }}</b></span>
-                <input :value="ratio ?? 0.78" type="range" min="0.2" max="0.95" step="0.01" @input="ratio = num($event); touch()" />
+                <!-- rev57: つまみは実効の大きさを指し、等倍に目盛り。越えた分は「拡大 (ぼやける)」と出す。 -->
+                <span>{{ t('caption.size') }} <b class="mono">{{ sizeLabel(ratio, upscale, previewBoxes) }}</b></span>
+                <input :value="sizeValue(ratio, upscale, previewBoxes)" type="range" min="0.2" max="0.95" step="0.01"
+                       :list="nativeTick !== null ? `plate-native-${sceneId}` : undefined"
+                       @input="ratio = num($event); upscale = true; touch()" />
+                <datalist v-if="nativeTick !== null" :id="`plate-native-${sceneId}`">
+                  <option :value="nativeTick" />
+                </datalist>
               </label>
+              <p v-if="nativeTick !== null" class="muted note"><Rich :text="t('caption.sizeNote')" /></p>
               <label class="field">
                 <span>{{ t('caption.x') }} <b class="mono">{{ show(dx) }}</b></span>
                 <input :value="dx ?? 0" type="range" min="-0.4" max="0.4" step="0.01" @input="dx = num($event); touch()" />

@@ -142,6 +142,11 @@ pub struct PlateOverride {
     pub x_offset_ratio: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub y_offset_ratio: Option<f32>,
+    /// `screen_ratio` が等倍を越えたら引き伸ばす (rev57)。**人が大きさのつまみを動かした時だけ立つ。**
+    /// 省略 (rev56 以前の run と LLM の既定) は等倍で頭打ち — 焼き直しても絵は変わらない。
+    /// `screen_ratio` と組の時だけ効く (単独では無視、`layout_for`)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allow_upscale: Option<bool>,
 }
 
 impl PlateOverride {
@@ -155,6 +160,7 @@ impl PlateOverride {
             screen_ratio: c(self.screen_ratio, 0.2, 0.95),
             x_offset_ratio: c(self.x_offset_ratio, -0.4, 0.4),
             y_offset_ratio: c(self.y_offset_ratio, -0.4, 0.4),
+            allow_upscale: self.allow_upscale,
         }
     }
 }
@@ -433,6 +439,16 @@ mod tests {
         let back: PromoJson = serde_json::from_str(&json).unwrap();
         assert_eq!(back.caption_overrides[&2].position.as_deref(), Some("top"));
         assert_eq!(back.caption_overrides[&2].size_ratio, None);
+    }
+
+    /// rev57: 拡大のフラグは足しても以前の promo.json を変えない (読めて、書き戻しても現れない)。
+    #[test]
+    fn allow_upscale_is_absent_in_old_runs_and_survives_clamp() {
+        let old: PlateOverride = serde_json::from_str(r#"{"screen_ratio":0.9}"#).unwrap();
+        assert_eq!(old.allow_upscale, None);
+        assert_eq!(serde_json::to_string(&old).unwrap(), r#"{"screen_ratio":0.9}"#, "書き戻しても増えない");
+        let set = PlateOverride { screen_ratio: Some(0.9), allow_upscale: Some(true), ..Default::default() };
+        assert_eq!(set.clamped().allow_upscale, Some(true), "丸めで落とさない");
     }
 
     #[test]

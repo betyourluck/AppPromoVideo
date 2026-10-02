@@ -92,7 +92,10 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   winget は PR #434054 (0.1.1) のマージ後に `wingetcreate update`。版番号 3 か所 + `Cargo.lock` は**タグの後に**上げた —
   配布物は CI の `Sync app version to tag` が `tauri.conf.json` をタグに揃えるので 0.1.2 で出ている。
   次のタグを打つ時の手順: 版番号 → タグ `vX.Y.Z` → CI (draft、3 OS) → 説明を確認 → publish → tap の `version` / `sha256` (Release API の `digest`) → `wingetcreate update` (マージ後)。
-- **rev54〜56 は main にあるが配布物には乗っていない** (v0.1.2 は rev53 まで)。次のタグで乗る — rev56 (コンソールの窓) はその配布物で確かめる。
+- **rev54〜57 は main にあるが配布物には乗っていない** (v0.1.2 は rev53 まで)。次のタグで乗る — rev56 (コンソールの窓) はその配布物で確かめる。
+- **はめ込みの大きさは等倍で頭打ち、越えるのは人がつまみを動かした時だけ** (rev57、2026-10-03 ユーザー報告「0.70 以上拡大できない」)。
+  つまみは実効の大きさを指し、等倍に目盛り、越えた分は「拡大 (ぼやける)」(`PlateOverride.allow_upscale`、等倍は `compose::native_screen_ratio`)。
+  フラグの無い以前の run は焼き直しても変わらない。**Tauri の実画面でユーザーが確認済み (2026-10-03)。**
 - **winget は PR #434054 (0.1.1) がマージ待ち。** マージされたら README 英日に winget を追記する (それまで書かない)。
 
 - **公開した (2026-09-13)。** MIT (`LICENSE`)、`origin` は public。`v0.1.0` のタグで CI が**初回から 3 OS とも green**、
@@ -123,7 +126,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   (書いてあるのに入らない、を避ける)。次の版は `wingetcreate update Outcasts.AppPromoVideo --version <V> --urls <MSI URL>` →
   ローカル生成 → `InstallerLocale` が混ざっていたら消す → `wingetcreate submit --token "$(gh auth token)"`。提出前に
   `gh repo sync betyourluck/winget-pkgs --source microsoft/winget-pkgs --branch master`。
-- **spec 01 は Phase 0〜E 着地、rev56 まで反映済み (rev27〜29 は試行)。** crates 197 green / vitest 135 / backend 30 green・clippy clean。
+- **spec 01 は Phase 0〜E 着地、rev57 まで反映済み (rev27〜29 は試行)。** crates 201 green / vitest 139 / backend 31 green・clippy clean。
 - **配布ビルドの Windows で子プロセスのコンソールの窓を出さない** (rev56、ユーザー報告: v0.1.2 の exe で「claude」の空の窓)。
   起動を `cli_runner::no_window` に一本化し、付け忘れはテストが落とす。**窓が出ないことは次の配布物でユーザーが確認する** (dev では症状が出ない)。
 - **`scenes.md` はいつも `promo.json` と揃えて書く** (rev54、`pipeline::export::write_run_files`)。表の snapshot 番号は合成が実際に貼るもの
@@ -170,7 +173,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 | 見出し | フォント / 大きさ / 色 / **縦位置を数値で** (`y_ratio`)。上下の選択は rev18 で撤去 (縦位置が上位互換。面が避ける側は `effective_position` が `y_ratio` から導く) |
 | プロンプト | **鉛筆で編集モードに入ってから** `motion_prompt` / `video_prompt` を書き換える (rev37)。保存すると backend が `promo.json` と `scenes.md` を書き直し、書き換え後の promo を返す。**空は拒む** (検査と食い違わせない)。破棄は入る前の値に戻す |
 | シーンの構成 | **並び替え / 複製 / 削除** (rev43)。`scene_id` は必ず位置 + 1 に振り直され、**手編集 (見出し・はめ込み・最初の文) と参照画像が一緒に動く** — 付け替えは `SceneRemap` 1 つが決める。追加は**複製** (検査が空欄を弾くので白紙は作れない)。3〜8 シーン、唯一の product カットは消せない。**尺は直さない** — 合計のずれを出すだけ |
-| はめ込み | **傾き (yaw・pitch) — つまみは実効値を指す** (`0° (正面)` / `18° (LLM)` / `18°`。rev21) / 大きさ / 横位置 / 縦位置 / **使うスナップショットの選び直し** — 一覧には左の入力ペインに**後から足した画像も出る** (選ぶとその run に写す、rev20)。取り込み口は入力ペイン 1 つ。**同じパスで撮り直したものも出る** — 同じ名前が 2 行並び、下が今のファイル (rev23)。**mood にも足せる** — 既定は「はめ込みなし (絵のまま)」で、選ぶと面が乗る。`cut_kind` は書き換えない (rev24) |
+| はめ込み | **傾き (yaw・pitch) — つまみは実効値を指す** (`0° (正面)` / `18° (LLM)` / `18°`。rev21) / **大きさ — 等倍で頭打ち、越えると「拡大 (ぼやける)」と出して引き伸ばす** (目盛りが等倍。rev57) / 横位置 / 縦位置 / **使うスナップショットの選び直し** — 一覧には左の入力ペインに**後から足した画像も出る** (選ぶとその run に写す、rev20)。取り込み口は入力ペイン 1 つ。**同じパスで撮り直したものも出る** — 同じ名前が 2 行並び、下が今のファイル (rev23)。**mood にも足せる** — 既定は「はめ込みなし (絵のまま)」で、選ぶと面が乗る。`cut_kind` は書き換えない (rev24) |
 
 やり直しは `<run>/base/` の**素材**(product は背景 / mood は絵) から**合成ごと**行う。
 **生成 API は呼ばない** = 無料・無劣化。焼き直しは「適用」を押した時だけ (実測 debug 0.64 s / release 0.25 s)。
@@ -255,7 +258,7 @@ rev14 のコミット `5929f93` に巻き込んだ。実害は無いが粒度が
 
 ## 再開の手順
 
-1. `cargo test --workspace` (197 green) と `cd app && npx vitest run && npm run build` (135 green) で足場を確認。**並べて走らせるなら絶対パス** (cwd が `app/src-tauri` に残る事故を 4 回踏んだ)。
+1. `cargo test --workspace` (201 green) と `cd app && npx vitest run && npm run build` (139 green) で足場を確認。**並べて走らせるなら絶対パス** (cwd が `app/src-tauri` に残る事故を 4 回踏んだ)。
    `cd /abs && …` は**そのコマンド**を守るだけで、ずれた cwd は次のコマンドへ残る — **並べる全部に `cd` を書く** (2026-09-14)。
    同日、この処方を書いた**後にも** `cd` の書き忘れで 3 回空振りした (vitest 2 回・backend の Red 1 回。どれも「0 本選ばれた / 何も出ない」で、落ちたようには見えない)。
    **送る前に、並べた各コマンドの先頭が `cd /abs &&` かを見る。** 出力が空・0 本の時は、結果ではなく cwd を疑う。

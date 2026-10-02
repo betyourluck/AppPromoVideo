@@ -91,6 +91,8 @@ export interface PlateOverride {
   x_offset_ratio?: number | null;
   y_offset_ratio?: number | null;
   snapshot_index?: number | null;
+  /** rev57: `screen_ratio` が等倍を越えたら引き伸ばす。人が大きさのつまみを動かした時だけ立つ。 */
+  allow_upscale?: boolean | null;
 }
 
 export interface StageInfo {

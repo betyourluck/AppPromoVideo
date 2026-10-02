@@ -56,3 +56,43 @@ export function tiltLabel(override: number | null, fallback: number): string {
   if (v === 0) return t("plate.frontal");
   return override === null ? `${v}° (LLM)` : `${v}°`;
 }
+
+/**
+ * 大きさのつまみの基準 (rev57)。`plate_preview` が返す**実効の枠**と**等倍の位置**。
+ * どちらも合成と同じ関数 (`layout_for` / `compose::native_screen_ratio`) から来る。
+ */
+export interface PlateBox {
+  screen_ratio: number;
+  /** スクショが等倍になる枠。面が無いシーンでは null。 */
+  native_ratio: number | null;
+}
+
+/** 比の比較のゆとり。0.68 と 0.680 を別物と読まない。 */
+const EPS = 0.005;
+
+/**
+ * スライダーに置く値 (rev57) = **いま効いている大きさ**。合成の縮尺は `min(枠 / スクショ, 1)` なので、
+ * 拡大を許していない限り等倍 (`native_ratio`) より上には行かない。以前は既定を 0.78 と決め打ちし、
+ * 帯ありの run (既定 0.68) でも、等倍で止まっている時も、効いていない値を指していた (#19 と同じ型)。
+ */
+export function sizeValue(ratio: number | null, upscale: boolean, box: PlateBox | null): number {
+  if (!box) return ratio ?? 0.78;
+  const r = ratio ?? box.screen_ratio;
+  const n = box.native_ratio;
+  if (n === null || (ratio !== null && upscale)) return r;
+  return Math.min(r, n);
+}
+
+/**
+ * つまみの横の文字 (rev57)。等倍で止まっているなら「等倍」、等倍を越えて引き伸ばしているなら
+ * 「拡大 (ぼやける)」と出す — 数字だけでは、効いているのか・画素を引き伸ばしているのかが分からない。
+ */
+export function sizeLabel(ratio: number | null, upscale: boolean, box: PlateBox | null): string {
+  const v = sizeValue(ratio, upscale, box);
+  const head = ratio === null ? t("caption.default") : v.toFixed(2);
+  const n = box?.native_ratio ?? null;
+  if (n === null) return head;
+  if (ratio !== null && upscale && ratio > n + EPS) return `${head} · ${t("caption.sizeUpscaled")}`;
+  if (v >= n - EPS) return `${head} · ${t("caption.sizeNative")}`;
+  return head;
+}

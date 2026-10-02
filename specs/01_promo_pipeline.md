@@ -1653,6 +1653,35 @@ Windows が新しい窓を作る。dev ではアプリがコンソールを持�
 10 か所を口に通して Green。crates 195 → 197 / backend 30、両ワークスペース clippy clean。
 **接地の限界**: **窓が出ないことは未観測** (次の配布物でユーザーが確認する)。macOS / Linux は起動フラグを付けないので挙動は変わらない。
 
+## rev57 (2026-10-03、はめ込みの大きさ — 等倍に目盛り / 越えた分は拡大と明示して引き伸ばす)
+
+**ユーザー報告**「はめ込み画像は一定以上は大きくできないように思われる。0.70 以上拡大できない理由を」。
+**観察**: 合成の縮尺は `min(枠 / スクショ, 1.0)` で、**等倍 (1.0) で頭打ち** — rev6「スクショの画素は等比の縮小以外いじらない」。
+canvas は生成時に既定の枠 (帯あり 0.68 / 無し 0.78) でスクショが等倍になる大きさまで拡げてあるので、その値で止まる。
+実データ run `20261002-133028`: canvas 2824×1614 / スクショ 1920×1032 → 1920 / 2824 = **0.680** から上は 0.95 まで何も変わらない
+(同 run の 4 枚目 963×320 は 0.341 で止まり、既定にも届かない)。一方スライダーは 0.95 まで動き、既定位置は **0.78 の決め打ち** (帯ありの run では 0.68 が実効)。
+**つまみが効いていない値を指していた** — failures #19 と同じ型。ユーザーの選択「等倍までは今のまま + 越えた分は拡大と明示して引き伸ばす」。
+
+206. **等倍の位置を合成と同じ式から出す** — `image_gen::compose::native_screen_ratio(canvas, shot) = max(sw / cw, sh / ch)`。
+     縮尺 `min(r·cw / sw, r·ch / sh)` が 1 に達する点。`plate_preview` が `native_ratio` (面が無ければ null) と
+     実効の枠 `screen_ratio` (`layout_for` の値) を返す。TS に式を写さない (rev14 の作法)。
+207. **拡大は人が大きさを決めた時だけ** — `PlateOverride.allow_upscale: Option<bool>` (契約)。大きさのつまみを動かすと立つ。
+     `layout_for` は `allow_upscale == Some(true) && screen_ratio.is_some()` の時だけ `Layout.allow_upscale` を立て、合成と枠 (`plate_size` /
+     `composite_product_cut`) が縮尺の上限 1.0 を外す。**フラグの無い promo.json (rev56 以前) と LLM の既定は頭打ちのまま** — 焼き直しても絵が変わらない。
+     `project_corners` の `min(1.0)` は外接矩形を枠に収めるためのもので拡大の可否とは別なので触らない。
+208. **つまみは実効の大きさを指す** — `plate.ts::sizeValue` (触っていない時は `min(実効の枠, 等倍)`、フラグ無しで等倍を越えた値も等倍を指す) と
+     `sizeLabel` (`既定 · 等倍` / `0.68 · 等倍` / `0.85 · 拡大 (ぼやける)`)。等倍に目盛り (`<datalist>`) と説明 1 行。0.78 の決め打ちは撤去。
+209. **やらないこと**: canvas を小さくして相対的に大きく見せる案 — 全シーンの寸法を揃える前提 (`fit_to_canvas`) と衝突する。
+
+**PoC**: 形だけ変える段 (フィールド追加・関数の仮実装) を緑で通してから Red を取った。compose 2 本 (等倍の位置 / 許した時だけ枠いっぱい、傾けた経路も) と
+pipeline 1 本 (フラグは大きさと組の時だけ) が Red → Green。promo_core の 1 本 (古い JSON に現れない・丸めで落ちない) は**形の段で `clamped` の受け渡しまで書いたので Red を観測していない**。
+backend 1 本 (`plate_preview` が実効の枠と等倍を返し、枠の幅も許した時だけ広がる) は配線の後に書いたので、配線を壊して (`native_ratio` を 1.0 に) Red を確かめてから戻した。
+TS 4 本は今の画面と同じ挙動の仮実装で Red → Green。crates 197 → 201 / backend 30 → 31 / vitest 135 → 139、両ワークスペース clippy clean、build green。
+**実測** (ブラウザのペイン、ユーザーの vite、変更の到達を `plate.ts` の中身で確認、`invoke` を差し替えて実データの寸法 0.68 を返させた):
+開いた直後 `既定 · 等倍` / 値 0.68 / 目盛り 0.68。0.85 → `0.85 · 拡大 (ぼやける)` で `{screen_ratio: 0.85, allow_upscale: true}` を送る。0.5 → `0.50`。0.68 → `0.68 · 等倍`。
+**接地の限界**: 引き伸ばした文字を i2v がどう扱うかは測っていない。
+(→ 2026-10-03 ユーザーが Tauri の実画面で確認)
+
 ## 公開とリリース (2026-09-13)
 
 **public にした。** MIT (`LICENSE`)。公開前の洗い出しで、**追跡ファイルに個人情報が入っていた**のを消した —
@@ -1877,6 +1906,7 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [x] rev54 (2026-09-14): scenes.md をいつも promo.json と揃える / 表の snapshot 番号は実際に貼ったもの (197〜199、契約 `ExportPackage.layout`)。`write_run_files` / `plate_snapshot_index` を promo_core へ。crates 195 / backend 30 / clippy clean。GUI の変化は無い (scenes.md の中身だけ)
 - [x] rev55 (2026-09-14): 結果ペインの snap 表示を実際に貼った番号に / 人に見せる番号は 1 始まりに統一 (200〜202、契約 `ExportPackage.layout`)。`plateSnapshotIndex` を画面側にも置き、Rust と同じ 8 ケースで固定。crates 195 / backend 30 / vitest 135 / clippy clean、ブラウザで実測。**Tauri でユーザー目視 (2026-09-14)** — `product · snap 1` / `mood`、面を足した mood の `mood · snap 1` / `mood · snap 3`
 - [x] rev56 (2026-09-14): 配布ビルドで子プロセスのコンソールの窓を出さない (203〜205、契約 `CliInvocation.spawn`)。起動を `cli_runner::no_window` に一本化 + 付け忘れの網。crates 197 / backend 30 / clippy clean。**窓が出ないことは次の配布物で確認**
+- [x] rev57 (2026-10-03): はめ込みの大きさ — 等倍に目盛り / 越えた分は拡大と明示して引き伸ばす (206〜209、契約 `PlateOverride.allow_upscale` / `compose.layout`)。crates 201 / backend 31 / vitest 139 / clippy clean、ブラウザで実測。**Tauri でユーザー確認 (2026-10-03)**
 - [x] **agy で通しが成功** (2026-09-12 21:13、ユーザー実機): 解析 → 構成 (1 回目で通過) → 参照画像 3 枚 → 合成 → 見出しの焼き込み。
       166 は効いた (`run_command` への逃げは起きなかった)。168 も効いた (**費用の chip が出ていない**)。`runs/20260912-121310`
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度

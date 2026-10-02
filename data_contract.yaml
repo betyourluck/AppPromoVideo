@@ -328,7 +328,7 @@ ImageGenConfig:                     # (Kataribe) provider / base_url / model / s
     palette: "dominant_colors(pixels, n): 4 bit/ch 量子化 → ヒストグラム → 頻度順に RGB 距離 60 未満を統合 → hex。palette_from_file は Nearest で 96px に縮小 (thumbnail の triangle 補間は 2 色画像から第 3 の混色を生んだ — PoC で判明)"
     style_anchor: "promo_core::style::style_anchor(VisualIdentity) = 『Color palette: #…, #…. Mood: …. UI style: …; …』。palette は extract_hex で #RRGGBB だけ拾う (LLM が説明を混ぜる実例あり)。apply_palette は測った色が空でなければ LLM の値を置き換える"
     reference: "pipeline::reference::generate_references(generator, RefJob{cfg, api_key, out_dir, palette, ...}, plan, refs, progress) → Vec<SceneImage>。シーン単位で失敗を返し他を続ける。保存名 scene_NN_ref_01.png、plan.scenes[i].reference_image を埋める。**product** = 参照を送らず背景だけ生成 (プロンプト末尾に BACKDROP_CLAUSE『no devices, no screens…』) → composite_product_cut で実スクショ (snapshot_index) を合成。背景生成が失敗したら palette 先頭色の単色背景で合成 (製品カットは provider の都合で落ちない)。**mood** = 従来どおり参照を送って生成"
-    compose: "image_gen::compose::composite_product_cut(background, screenshot, Layout{width, height, screen_ratio 0.78, corner_radius, shadow, tilt}) → PNG。背景は cover、スクショは等比縮小 (拡大しない)・角丸・落ち影 (blur 10)・中央。**tilt が非ゼロなら射影変換で傾けてから貼る** (rev5): 面を 3D で yaw/pitch 回転 → ピンホール投影 → 4 点から homography を解いて逆写像 + バイリニア。tilt = 0 は従来の overlay 経路をそのまま通る (画素等価を PoC で固定)。canvas は **スクショを縮小せずに置ける大きさ** (rev6): canvas_for_snapshot(SizeMap::comfy_dims(shape), 最大のスクショ, screen_ratio, CANVAS_MAX_LONG_EDGE=3840) — 比率を保ったまま拡げ、長辺 3840px で頭打ち。実測 1282×842 の窓 → 1344×768 から 1890×1080 へ。上限に当たって縮小が残る時は進捗に警告 (黙って劣化させない)。fit_to_canvas で mood カットも同寸・PNG に揃える (プロバイダ出力は Gemini が JPEG 1376×768 で、product と食い違っていた)。PoC 10 本 (中央画素がスクショと一致 / 角丸 / 等倍維持 / 壊れ入力は Err / 傾き 0 は従来経路と画素等価 / yaw 正で右辺が縮む / pitch 負で上辺が縮む / 傾けても影が残る / canvas が窓に合わせて拡がる / fit_to_canvas が寸法と形式を揃える)。日本語見出しの焼き込みは v1 外 (フォント同梱が要る)。目視 1 枚: Gemini 背景 + Kataribe UI (failures #8)"
+    compose: "image_gen::compose::composite_product_cut(background, screenshot, Layout{width, height, screen_ratio 0.78, corner_radius, shadow, tilt}) → PNG。背景は cover、スクショは等比縮小 (拡大しない。rev57: `Layout.allow_upscale` が立つ時だけ引き伸ばす — PlateOverride.allow_upscale)・角丸・落ち影 (blur 10)・中央。**tilt が非ゼロなら射影変換で傾けてから貼る** (rev5): 面を 3D で yaw/pitch 回転 → ピンホール投影 → 4 点から homography を解いて逆写像 + バイリニア。tilt = 0 は従来の overlay 経路をそのまま通る (画素等価を PoC で固定)。canvas は **スクショを縮小せずに置ける大きさ** (rev6): canvas_for_snapshot(SizeMap::comfy_dims(shape), 最大のスクショ, screen_ratio, CANVAS_MAX_LONG_EDGE=3840) — 比率を保ったまま拡げ、長辺 3840px で頭打ち。実測 1282×842 の窓 → 1344×768 から 1890×1080 へ。上限に当たって縮小が残る時は進捗に警告 (黙って劣化させない)。fit_to_canvas で mood カットも同寸・PNG に揃える (プロバイダ出力は Gemini が JPEG 1376×768 で、product と食い違っていた)。PoC 10 本 (中央画素がスクショと一致 / 角丸 / 等倍維持 / 壊れ入力は Err / 傾き 0 は従来経路と画素等価 / yaw 正で右辺が縮む / pitch 負で上辺が縮む / 傾けても影が残る / canvas が窓に合わせて拡がる / fit_to_canvas が寸法と形式を揃える)。日本語見出しの焼き込みは v1 外 (フォント同梱が要る)。目視 1 枚: Gemini 背景 + Kataribe UI (failures #8)"
   differences_from_kataribe:
     - "参照画像 = UI スナップショット。送信順はユーザーの並び順"
     - "user_prefix の既定 = VisualIdentity から合成したスタイルアンカー (ユーザー編集可)"
@@ -396,9 +396,14 @@ PlateOverride:                      # rev11 (2026-09-09 ユーザー要望「傾
   where: "PromoJson.plate_overrides: Map<scene_id, PlateOverride>。caption_overrides と同じく**LLM の schema には足さない**"
   yaw_degrees: Option<f32>          # ±35。省略で scene.plate_tilt (LLM が書いた値)
   pitch_degrees: Option<f32>        # ±35。同上
-  screen_ratio: Option<f32>         # 0.2〜0.95。プレートが canvas に占める最大比。省略で 0.78 (見出しありは 0.68)
+  screen_ratio: Option<f32>         # 0.2〜0.95。プレートが canvas に占める最大比。省略で 0.78 (見出しありは 0.68)。**等倍で頭打ち** (allow_upscale が無い限り)
   x_offset_ratio: Option<f32>       # ±0.4。中央からの横ずらし (canvas 幅比、正 = 右)
   y_offset_ratio: Option<f32>       # ±0.4。縦ずらし (正 = 下)。**指定すると見出しの帯のずらしを置き換える**
+  allow_upscale:                    # rev57 (2026-10-03、ユーザー報告「0.70 以上拡大できない」)
+    type: "Option<bool>。省略 = 等倍で頭打ち (rev56 以前の run と LLM の既定。焼き直しても絵が変わらない)"
+    when: "**人が大きさのつまみを動かした時だけ** UI が立てる。`screen_ratio` と組の時だけ効く (単独では無視 — `layout_for`)"
+    effect: "合成の縮尺 `min(枠 / スクショ, 1.0)` の上限 1.0 を外し、等倍を越えた枠では**スクショを引き伸ばす** (文字の輪郭がぼやける)"
+    native: "等倍になる枠 = `compose::native_screen_ratio(canvas, shot) = max(sw / cw, sh / ch)`。`plate_preview` が `native_ratio` として返す"
   resolution: "上書き → 無ければ帯と scene.plate_tilt から決まる既定。フィールド単位で落ちる"
   clamp: "範囲外は Rust 側で丸める (UI の入力を信用しない)"
   whether:                          # rev24 (2026-09-11、mood にも面を足せるように)
@@ -424,6 +429,8 @@ PlateOverride:                      # rev11 (2026-09-09 ユーザー要望「傾
     rev18: 枠に**見出しも含む** — `plate_preview` は `caption_lines: Vec<[x,y,w,h]>` (1 行 1 枠、canvas 座標) も返す。
     出所は `image_gen::caption_layout` で、**焼き込み (`burn_caption`) がそのまま描くのと同じ結果**。
     `quad` は Option (面が無いシーンでは None — 判定は `plate_snapshot_index`、rev24)。編集中のコピー文は引数 `copy` で渡す (promo.json はまだ古い)。
+    rev57: `plate_preview` は**実効の枠** `screen_ratio` と**等倍の枠** `native_ratio` も返す。大きさのつまみはそこを基準に実効の大きさを指し
+    (`plate.ts::sizeValue` / `sizeLabel`)、等倍に目盛りを置き、越えた分は「拡大 (ぼやける)」と出す。0.78 の決め打ちは撤去。
     rev24: はめ込みの節は**どのシーンにも出す**。mood の既定は「はめ込みなし (絵のまま)」で、選ぶと面が乗る。
     つまみ (傾き / 大きさ / 位置) は**面がある時だけ**出す。編集ボタンはどのシーンでも押せる
     (以前は文も面も無いと押せず、mood に面を足す経路が塞がっていた)。

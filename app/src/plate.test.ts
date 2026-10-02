@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { plateSnapshotIndex, snapshotChipLabel, tiltLabel, tiltValue } from "./plate";
+import { plateSnapshotIndex, sizeLabel, sizeValue, snapshotChipLabel, tiltLabel, tiltValue } from "./plate";
 
 const scene = (cut_kind: "product" | "mood", snapshot_index: number | null) => ({ cut_kind, snapshot_index });
 const plate = (snapshot_index: number | null) => ({ snapshot_index });
@@ -58,5 +58,37 @@ describe("傾きスライダーの基準 (rev21)", () => {
 
   it("LLM の値と同じ数値を自分で選んでも、表示は自分の値として出る", () => {
     expect(tiltLabel(18, 18)).toBe("18°");
+  });
+});
+
+describe("大きさのつまみ (rev57、等倍の目盛りと拡大)", () => {
+  // 実データ run 20261002-133028: canvas 2824x1614 / スクショ 1920x1032 → 等倍は 0.68。
+  // 見出しの帯ありで既定の枠も 0.68。ユーザー報告「0.70 以上拡大できない」。
+  const band = { screen_ratio: 0.68, native_ratio: 0.68 };
+  const small = { screen_ratio: 0.68, native_ratio: 0.341 }; // 同じ run の 4 枚目 (963x320)
+
+  it("触っていない時は実効の大きさを指す — 0.78 の決め打ちではない", () => {
+    expect(sizeValue(null, false, band)).toBe(0.68);
+    expect(sizeLabel(null, false, band)).toBe("既定 · 等倍");
+    // 小さいスクショは既定の枠に届かず等倍で止まっている。
+    expect(sizeValue(null, false, small)).toBe(0.341);
+    expect(sizeLabel(null, false, small)).toBe("既定 · 等倍");
+  });
+
+  it("等倍より上は、動かした時だけ拡大と明示する", () => {
+    expect(sizeValue(0.8, true, band)).toBe(0.8);
+    expect(sizeLabel(0.8, true, band)).toBe("0.80 · 拡大 (ぼやける)");
+    expect(sizeLabel(0.5, true, band)).toBe("0.50");
+    expect(sizeLabel(0.68, true, band)).toBe("0.68 · 等倍");
+  });
+
+  it("以前の run (フラグ無しで 0.9) は等倍で止まっていることを見せる", () => {
+    expect(sizeValue(0.9, false, band)).toBe(0.68);
+    expect(sizeLabel(0.9, false, band)).toBe("0.68 · 等倍");
+  });
+
+  it("枠がまだ来ていない・面が無い時は値だけ", () => {
+    expect(sizeValue(null, false, null)).toBe(0.78);
+    expect(sizeLabel(0.6, true, { screen_ratio: 0.78, native_ratio: null })).toBe("0.60");
   });
 });
