@@ -553,6 +553,7 @@ RunStats:                           # rev15。生成時の再生成ループの�
     違反種別も永続化していなかったため「ProductBackdropAngled で再生成が発火した」という推測を確認できなかった。
     索引 (app_data/runs.json) はキャッシュで消えうるうえ、CLI (`promo run`) には索引が無いので、
     正本である promo.json 自身に持たせる (plate_mode が rev10 で同じ判断をしている)。
+    2026-10-02: 溜まった記録 (13 本) で 1.5 倍は再現せず、frontal の費用の問いは閉じた。記録は再生成の原因を数えるために残す。
   plan_attempts: usize              # シーン構成が検査を通るまでの回数。1 = 一発。**analyze は常に 1 なので持たない**
   violation_kinds: "Vec<String>。promo_core::violation_kind の値を重複なく整列。**この文字列は契約**"
   cost_usd: f64                     # analyze + plan の合計。再生成が費用に効いたかを promo.json だけで見るため

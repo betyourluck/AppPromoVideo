@@ -17,7 +17,8 @@ import type { PlateOverride, Scene } from "./types";
  *
  * **backend の `promo_core::export::plate_snapshot_index` と同じ規則。** Rust と TS に同じ式が 2 つあるので、
  * 両方のテストに同じケースを置いて食い違いを見張る (`plate.test.ts` / `crates/pipeline/src/reference.rs`)。
- * backend が実際の番号を返す形にすれば 1 つで済むが、promo の型が変わるので後続に回した (ユーザー判断 2026-09-14)。
+ * backend が番号を返しても、編集ダイアログの `hasPlate` は適用前の選び直しをその場で判定するのでこの式は残る —
+ * 2 つのまま対のテストで見張る形で閉じた (ユーザー判断 2026-10-02)。
  * - product: 人の選び直しが LLM の指定に勝ち、どちらも無ければ 0
  * - mood: 人が足した時だけ貼る
  */

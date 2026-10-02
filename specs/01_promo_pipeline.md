@@ -407,6 +407,9 @@ frontal の 1.5 倍を attempts だけで説明できる保証は無く、rev15 
 スナップショットで perspective / frontal を各数本走らせる必要があり、それは LLM 費用のかかる作業。
 rev14 以前の 3 行 (frontal 1 / perspective 2) は遡って埋められない — 索引にも promo.json にも
 attempts が無いため。**過去は数えられない、これから数える。**
+(→ 2026-10-02 閉じた (ユーザー判断): 記録が溜まっていた — frontal 8 本 平均 1.283 USD / perspective 5 本 平均 1.394 USD。
+1 回で通った run どうしでも 0.911〜1.316 とばらつき、1.5 倍は再現しない。frontal の再生成の主因は mode に依らない `ProductBackdropDrawsScreen` (4 本)、
+`ProductBackdropAngled` は 2 本 (単独は 1 本)。リポジトリとモデルが mode と重なっており対照実験ではない。数字の出所は CLAUDE.md「閉じた」と history.md 2026-10-02)
 
 ## rev16 (2026-09-09、編集はダイアログで)
 
@@ -1607,6 +1610,8 @@ backend のテストは scenes.md の中身が保存後の promo.json から作�
 
 **ユーザー指示**「結果ペインの snap 表示も調べて」→ 調べた結果に対し「画面側に `plate_snapshot_index` と同じ規則の小さな関数を置く案 + 数え方を 1 始まりに統一」。
 backend が実際の番号を返す案は promo の型が変わり scenes.md 以上に影響するので、**後続に回す** (ユーザー判断)。
+(→ 2026-10-02 閉じた (ユーザー判断): 返しても `CaptionEditor` の `hasPlate` は適用前の選び直しをその場で判定するので TS の式は残り、
+減るのは chip の 1 か所だけ。式は 2 つのまま 200 の対のテストで見張る)
 
 **観察**: `ScenePanel.vue` の chip は plan の番号 `s.snapshot_index` をそのまま出していて、`plate_overrides` を見ていなかった
 (rev54 の scenes.md と同じずれ)。一方の編集ダイアログは上書きを読み、番号を **1 始まり** (「3 枚目」) で出す。chip は **0 始まり** (`snap 0`) で、
@@ -1874,7 +1879,8 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [x] rev56 (2026-09-14): 配布ビルドで子プロセスのコンソールの窓を出さない (203〜205、契約 `CliInvocation.spawn`)。起動を `cli_runner::no_window` に一本化 + 付け忘れの網。crates 197 / backend 30 / clippy clean。**窓が出ないことは次の配布物で確認**
 - [x] **agy で通しが成功** (2026-09-12 21:13、ユーザー実機): 解析 → 構成 (1 回目で通過) → 参照画像 3 枚 → 合成 → 見出しの焼き込み。
       166 は効いた (`run_command` への逃げは起きなかった)。168 も効いた (**費用の chip が出ていない**)。`runs/20260912-121310`
-- [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度 / `RunStats` の live 記録 (frontal の費用)
+- [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度
+- [x] `RunStats` の live 記録 (frontal の費用) — 2026-10-02 閉じた。13 本の記録で 1.5 倍は再現せず (rev15 節の末尾)
 - [ ] Phase E
 
 ## Notes

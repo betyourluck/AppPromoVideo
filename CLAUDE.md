@@ -76,8 +76,10 @@ cd app && npx vitest run && npm run build    # frontend の単体テストと型
 cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 ```
 
-## 現状 (2026-09-14)
+## 現状 (2026-10-02)
 
+- **2026-10-02、後回しの 2 件を閉じた (ユーザー判断、コードは注釈のみ)**: ①snapshot 番号の式は Rust と TS の 2 つのまま (下の rev55 の行)
+  ②開いていた判断 1 (frontal の費用) は前提が観測で支持されず (下の「閉じた」)。winget PR #434054 はまだ OPEN (検証は通過済み)。
 - **`v0.1.2` (2026-09-14、ユーザーがタグ) = rev48〜53 が乗った版。** タグは `1535af0`。CI 3 OS green (run 34808086566)、
   ログで `Signing` → `Notarizing Finished with status Accepted` → `Stapling app...` を確認、Release は draft で 7 点。
   説明に「macOS 版は Apple Silicon (aarch64) のみ」を足し、リリースノート (英日、rev48〜53) を書いた。**ユーザーが publish (05:24 UTC)** →
@@ -128,7 +130,8 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   (`promo_core::export::plate_snapshot_index`)。以前は焼き直しとスナップショット追加が promo.json だけを書き、表は plan の番号のままだった。
   **結果ペインの chip も同じ規則** (rev55、`app/src/plate.ts` の `plateSnapshotIndex` — Rust と式が 2 つなので両方のテストに同じ 8 ケース)。
   **人に見せる番号は 1 始まり** (chip の `snap N` / scenes.md の `snapshot N` / ダイアログの N 枚目 / ファイル名 `snapshot_0N`)。内部の `snapshot_index` は 0 始まりのまま。
-  backend が実際の番号を返す形 (式を 1 つにする) は promo の型が変わるので後続 (ユーザー判断 2026-09-14)。
+  **式は Rust と TS の 2 つのままで閉じた** (2026-10-02 ユーザー判断)。backend に寄せても編集ダイアログの `hasPlate` は
+  **適用前の選び直し**をその場で判定するので TS の式は残り、減るのは使う場所 1 つ (chip) だけ。8 ケースの対で見張る形を正とする。
 - **agy でも通しが成功** (2026-09-12 21:13、ユーザー実機)。解析 → 構成 (1 回目で通過) → 参照画像 → 合成 → 見出しの焼き込み。
   費用の chip は出ない (agy は費用を返さないので描かない)。
 - コミットは Initial `a75c3bc` の上に積んでいる。**本数も push 済みの範囲もここに書かない** — 書くたび 1 手遅れて嘘になる (実際に 2026-09-12、`rev42 まで push 済み` と書いた行の中に 「ここに書くと 1 手遅れる」と併記する矛盾を作った)。数えるなら `git rev-list --count a75c3bc..HEAD` と `git log --oneline origin/main..HEAD`。**公開リポジトリ** (MIT、`LICENSE`)。
@@ -197,15 +200,14 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 **結果ペインの見出しの数値は正本 (`promo.json` の `run_stats`) から** — 記録が無ければ 0 ではなく chip ごと出さない (rev36)。
 **タイトルバーの履歴 / 設定はトグル** — 開いている画面のアイコンをもう一度押すと戻る。開いている間はアクセント色 (rev36)。
 
-**開いている判断**
+**開いている判断**: なし (2026-10-02 時点)。
 
-1. **frontal が高い理由** — rev15 で再生成の回数と種別を残すようにした (`RunStats`、正本は
-   `<run>/promo.json`。索引と GUI の「再生成」列はその写し)。**live の記録はまだ 0 件**なので、
-   1.5 倍の説明は依然として推測。数えるには同一リポジトリ・同一スナップショットで
-   perspective / frontal を各数本走らせる必要がある (LLM 費用がかかる)。
-   過去の 3 行は遡って埋められない — 当時どこにも残していないため。
-   **rev25 から `RunStats.models` に実際のモデル名 (解決後) も残る**ので、比べる run が同じモデルかを
-   promo.json で確かめられる。モデル欄は再現性のため正式名 (`claude-sonnet-5` 等) を勧める。
+**閉じた (2026-10-02、ユーザー判断) — 開いていた判断 1「frontal はなぜ高いか」**: **前提が観測で支持されなかった。**
+`RunStats` の記録 (`runs.json` 15 本、費用あり 13 本) で frontal 8 本 = 平均 1.283 USD (0.911〜1.674、構成の試行 平均 2.0)、
+perspective 5 本 = 平均 1.394 USD (1.007〜1.838)。1 回で通った run どうしでも 0.911〜1.316 とばらつき、2026-09-08 の「約 1.5 倍」(3 本) はこの幅と区別できない。
+frontal の再生成の主因は mode に依らない `product_backdrop_draws_screen` (4 本)。frontal 固有の `product_backdrop_angled` は 2 本で、単独で再生成させたのは 1 本。
+**限界**: 対照実験ではない — frontal は全部 AppPromoVideo、perspective は全部 Fuseforks、モデルも `claude-opus-5` と `claude-opus-5[1m]` が混在。
+既定 frontal は動画の落ち着き (下の 2026-09-09 決着) で決めたので、測り直しても既定は動かない。`RunStats` は残す (再生成の原因を数えられる)。
 
 **決着 (2026-09-09)**: `PlateMode` の既定は **frontal**。MiniMax i2v の実機観測で「斜めにすると
 動画が動かしすぎる」(ユーザー)。傾ける経路は残す (設定 / `--plate perspective`)。
@@ -242,7 +244,6 @@ backend 由来のログ・エラーの文言は日本語のまま。
 
 **次の候補**: **次の配布物で、Windows の exe を起動してコンソールの窓が出ないことをユーザーが確かめる** (rev56。dev では症状が出ない) /
 Qiita 記事 (`docs/qiita_apppromovideo.md`) のスクショ 11 枚 (ユーザーが撮る。`📸 TODO` の置き場所) /
-backend が実際の snapshot 番号を返す形 (Rust と TS で 2 つある式を 1 つに。promo の型が変わるので後回し — 2026-09-14 ユーザー判断) /
 aider の実機で `ANTHROPIC_API_KEY` が読まれるか (未導入。根拠は公式文書だけ) /
 プロンプトに「最初の文に戻す」を付けるか /
 傾きと可読性の境目 /
