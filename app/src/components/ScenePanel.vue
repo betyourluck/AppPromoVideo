@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 中央ペイン: 要約 / シーン表 / 参照画像。コピーはプロバイダ別 (契約 ExportPackage.clipboard):
- * Veo / Sora はプロンプトのみ、汎用は別行にメタ。`--ar` はどこにも出さない。
+ * MiniMax (画像→動画) は motion_prompt のみ、汎用は別行にメタ。`--ar` はどこにも出さない。
  */
 import { computed, onUnmounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";

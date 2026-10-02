@@ -250,7 +250,7 @@ pub fn plate_snapshot_index(scene: &crate::plan::Scene, plate: Option<&PlateOver
     }
 }
 
-/// `scenes.md`: 構成表 + 各シーンの全文 (Veo / Sora に貼る単位)。
+/// `scenes.md`: 構成表 + 各シーンの全文 (動画生成 AI に貼る単位)。
 pub fn scenes_markdown(promo: &PromoJson) -> String {
     let (summary, plan) = (&promo.summary, &promo.plan);
     let mut s = String::new();

@@ -107,6 +107,9 @@ pub async fn plan_scenes(
         let violations = validate_scene_plan(&plan, snapshots.len(), plate_mode);
         report.violations_per_attempt.push(violations.clone());
         if violations.is_empty() {
+            // rev58: 検査を通った後に 1 度だけ、product カットの画面を固定する 1 文を足す (LLM に書かせない)。
+            let mut plan = plan;
+            promo_core::plan::lock_product_screens(&mut plan);
             return Ok((plan, report));
         }
         if attempt == 1 + MAX_REPAIRS {
@@ -234,6 +237,21 @@ mod tests {
         assert!(prompts[1].contains("mentions the input (`screenshot`)"));
         assert!(prompts[1].contains("Same as the screenshot"), "前回の出力を添えて直させる");
         assert!((r.cost_usd.unwrap() - 0.02).abs() < 1e-9, "コストは試行の合計");
+    }
+
+    /// rev58: 検査を通った plan の product カットには、画面を固定する固定文が付いて返る。
+    #[tokio::test]
+    async fn accepted_plan_locks_the_product_screens() {
+        let mut product = scene(2, "A dark slate wall with soft light");
+        product.cut_kind = promo_core::plan::CutKind::Product;
+        product.snapshot_index = Some(0);
+        let good = plan(vec![scene(1, "A desk"), product, scene(3, "ok")]);
+        let fake = Fake::new(vec![good]);
+        let snaps = vec![SnapshotMeta { path: "a.png".into(), width: 1920, height: 1080 }];
+        let (p, r) = plan_scenes(&fake, &summary(), "concept", 15, Aspect::Landscape, Language::Ja, &snaps, PlateMode::default()).await.unwrap();
+        assert_eq!(r.attempts, 1);
+        assert!(p.scenes[1].motion_prompt.ends_with(promo_core::plan::SCREEN_LOCK), "{}", p.scenes[1].motion_prompt);
+        assert_eq!(p.scenes[0].motion_prompt, "Slow push-in.", "mood は触らない");
     }
 
     /// rev25: 試行ごとに CLI が名乗ったモデルを落とさず運ぶ (再生成の途中で変わっても残る)。

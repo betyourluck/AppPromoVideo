@@ -233,11 +233,14 @@ ScenePlan:                          # タスク 2 の出力 (schemars 派生)
 Scene:                              # rev3 (2026-09-08、ユーザー FB「スクショに全く従わない」+ 参考: 画像ファースト → i2v): 画像が主役、動画は画像を動かすだけ
   cut_kind: "product | mood"        # product = 実スクショの画素を Rust が合成 (モデルは背景だけ描く) / mood = 情景 (モデルが全部描く)。スナップショットがあるなら product が 1 つ以上必須 (validate)
   snapshot_index: Option<u32>       # product が使うスナップショット (0 始まり、scene_prompt が一覧を示す)。範囲外は違反
-  motion_prompt: String             # 英語 1〜2 文。image-to-video 用に**動きとカメラだけ** (絵の内容は画像が持つ)。空・非英語は違反
+  motion_prompt:                    # 空・非英語は違反
+    type: "String。英語 2〜3 文。image-to-video (この静止画が最初の 1 コマ) 用"
+    shape: "rev58 (MiniMax H3 の公式ガイド I2VA): 最初の 1 コマを 1 節で押さえる → **主なカメラの動き 1 つ**を公式の種類 + 振れ幅 + 速さで (`pushes in with small amplitude at slow speed`) → 終わり方。シーン間で動きを散らす。rev3 の「動きとカメラだけ」は公式と逆なので撤去"
+    screen_lock: "product カットは検査通過後に `promo_core::plan::SCREEN_LOCK` を末尾へ 1 度だけ足す (`lock_product_screens`、既に含むなら足さない)。motion_prompt そのものに入るので画面・scenes.md・コピーが一致し、人は消せる。mood には足さない"
   scene_id: u32                     # 1 始まり連番
-  duration_seconds: u32             # 3〜10
+  duration_seconds: u32             # 4〜10 (rev59: MiniMax H3 の最短 4 秒に合わせた。以前は 3)。15 秒の動画は 3 シーン
   shot_type: String                 # Close-up / Medium / Wide / Screen recording 等 (自由文)
-  video_prompt: String              # 英語。動画生成モデル向け。`--ar` を含まない (Midjourney 記法。Veo/Sora の文法ではない — rev2 査読 5)。aspect は ScenePlan が持つ
+  video_prompt: String              # 英語。text-to-video の保険 (rev58: schema の説明文から Veo / Sora を外した)。`--ar` を含まない (Midjourney 記法。Veo/Sora の文法ではない — rev2 査読 5)。aspect は ScenePlan が持つ
                                     # text-to-video の**保険** (rev3 で主役から降格)。Veo / Sora は指示に従わないのでコピー先から外した (ユーザー実測 2026-09-08)
   copy_text: String                 # テロップ / ナレーション (language)
   image_prompt: String              # 静止画 1 枚のプロンプト。**product では背景のみ** (画面・端末・UI・文字の語は validate が弾く = 合成と二重にしない)。mood では絵の全部。参照そのものを指す語 (reference / screenshot / sheet) は書かない (Kataribe failures #85)

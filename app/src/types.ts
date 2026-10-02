@@ -25,7 +25,7 @@ export interface Scene {
   scene_id: number;
   cut_kind: CutKind;
   snapshot_index: number | null;
-  /** image-to-video 用 (動きとカメラだけ)。 */
+  /** image-to-video 用 (rev58: 最初の 1 コマ → カメラ 1 つ → 終わり方。product は画面を固定する 1 文が末尾に付く)。 */
   motion_prompt: string;
   duration_seconds: number;
   shot_type: string;

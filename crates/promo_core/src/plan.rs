@@ -84,15 +84,16 @@ pub struct Scene {
     /// For `product` cuts: 0-based index into the provided snapshot list. Null for `mood`.
     #[serde(default)]
     pub snapshot_index: Option<u32>,
-    /// English, one or two sentences, for image-to-video: describe ONLY camera movement and motion
-    /// (e.g. "slow push-in, soft light flicker, subtle parallax"). The still image supplies the content.
+    /// English, two or three sentences, for image-to-video with this still as the first frame: anchor the
+    /// first frame in one short clause (style, main subject, where it sits), then ONE primary camera move with
+    /// amplitude and speed (e.g. "the camera pushes in with small amplitude at slow speed"), then how the shot settles.
     #[serde(default)]
     pub motion_prompt: String,
-    /// 3 to 10 seconds.
+    /// 4 to 10 seconds (the video model makes clips of at least 4 seconds).
     pub duration_seconds: u32,
     /// Shot type, e.g. "Close-up", "Medium shot", "Wide", "Screen recording".
     pub shot_type: String,
-    /// English prompt for a video generation model (Veo / Sora). Describe camera, subject, light,
+    /// English text-to-video prompt, a fallback when no image is used. Describe camera, subject, light,
     /// motion. Do NOT append aspect flags such as "--ar".
     pub video_prompt: String,
     /// Caption or narration in the requested language.
@@ -262,7 +263,8 @@ impl PlateTilt {
 
 const SCENES_MIN: usize = 3;
 const SCENES_MAX: usize = 8;
-const DURATION_MIN: u32 = 3;
+/// rev59: MiniMax H3 の 1 本は 4〜15 秒 (公式のモデルページ)。以前は 3 で、H3 の最短より短い指定が出ていた。
+const DURATION_MIN: u32 = 4;
 const DURATION_MAX: u32 = 10;
 const TOTALS: [u32; 3] = [15, 30, 60];
 /// image_prompt に混ざると構図の指示として読まれる語 (小文字比較)。
@@ -453,6 +455,25 @@ pub fn clipboard_text(scene: &Scene, aspect: Aspect, target: CopyTarget) -> Stri
 }
 
 
+/// product カットの `motion_prompt` の末尾に Rust が足す 1 文 (rev58、契約 `Scene.motion_prompt.screen_lock`)。
+///
+/// MiniMax H3 の公式スキル `brand-promo-video-generator` は「製品の UI を描き直させない・文字とロゴを読めるまま保つ」を求める。
+/// LLM に書かせると抜ける・言い回しが揺れるので固定文にする。**肯定形** (何が保たれ、何が動くか) で書く —
+/// カメラの寄り引きと矛盾しないよう「位置・大きさを固定」とは書かない (push-in で画面は大きくなる)。
+pub const SCREEN_LOCK: &str = "The app screen keeps its exact interface and text, sharp and legible, lying flat on the backdrop; only the camera, the light and the background move.";
+
+/// 検査を通った plan の product カットに `SCREEN_LOCK` を足す (rev58)。既に含むなら足さない (二重にしない)。
+/// mood には足さない — 人が後から面を足した mood (rev24) は対象外で、必要なら鉛筆で書き足す。
+pub fn lock_product_screens(plan: &mut ScenePlan) {
+    for s in plan.scenes.iter_mut().filter(|s| s.cut_kind == CutKind::Product) {
+        if s.motion_prompt.contains(SCREEN_LOCK) {
+            continue;
+        }
+        let m = s.motion_prompt.trim_end();
+        s.motion_prompt = if m.is_empty() { SCREEN_LOCK.to_string() } else { format!("{m} {SCREEN_LOCK}") };
+    }
+}
+
 /// プロンプトの書き換えで起きうること (契約 `ScenePromptEdit`、rev37)。
 #[derive(Debug, PartialEq, Eq)]
 pub enum PromptEditError {
@@ -600,6 +621,12 @@ A calm desk, slow pan right.
                 .unwrap()
                 .contains("image-to-video")
         );
+        // rev58: H3 の公式ガイドに合わせた。最初の 1 コマを押さえ、カメラは 1 つ。「絵を言い直さない」は公式と逆なので撤去。
+        let motion = scene_def["properties"]["motion_prompt"]["description"].as_str().unwrap();
+        assert!(motion.contains("first frame") && motion.contains("ONE"), "{motion}");
+        assert!(!motion.contains("ONLY camera movement"), "旧規則が残っている: {motion}");
+        let video = scene_def["properties"]["video_prompt"]["description"].as_str().unwrap();
+        assert!(!video.contains("Veo") && !video.contains("Sora"), "rev3 で外したコピー先が残っている: {video}");
         // doc comment が description に写る = LLM への指示が型から出る。
         let desc = scene_def["properties"]["image_prompt"]["description"]
             .as_str()
@@ -608,6 +635,24 @@ A calm desk, slow pan right.
         // aspect は "16:9" 等の文字列 enum。
         let aspect = &s["definitions"]["Aspect"]["enum"];
         assert_eq!(aspect, &serde_json::json!(["16:9", "9:16", "1:1"]));
+    }
+
+    /// rev58: product カットにだけ、画面を固定する固定文を 1 度だけ足す。mood には足さない。
+    #[test]
+    fn product_screens_are_locked_once_and_mood_is_left_alone() {
+        let mut p = plan();
+        p.scenes[0].cut_kind = CutKind::Product;
+        p.scenes[0].snapshot_index = Some(0);
+        p.scenes[0].motion_prompt = "The camera pushes in with small amplitude at slow speed.".into();
+        let mood_before = p.scenes[1].motion_prompt.clone();
+        lock_product_screens(&mut p);
+        assert_eq!(
+            p.scenes[0].motion_prompt,
+            format!("The camera pushes in with small amplitude at slow speed. {SCREEN_LOCK}")
+        );
+        assert_eq!(p.scenes[1].motion_prompt, mood_before, "mood は触らない");
+        lock_product_screens(&mut p);
+        assert_eq!(p.scenes[0].motion_prompt.matches(SCREEN_LOCK).count(), 1, "2 度目は足さない");
     }
 
     #[test]
@@ -729,6 +774,17 @@ A calm desk, slow pan right.
         let v = validate_scene_plan(&p, 0, PlateMode::Perspective);
         assert!(v.contains(&PlanViolation::MotionPromptEmpty { scene_id: 2 }));
         assert!(v.contains(&PlanViolation::MotionPromptNotEnglish { scene_id: 3 }));
+    }
+
+    /// rev59: MiniMax H3 の 1 本は 4〜15 秒 (公式のモデルページ)。3 秒のシーンは H3 の最短より短い指定になる。
+    #[test]
+    fn a_scene_shorter_than_h3_minimum_is_a_violation() {
+        let mut p = plan();
+        p.scenes[0].duration_seconds = 3;
+        p.scenes[1].duration_seconds = 4;
+        let v = validate_scene_plan(&p, 0, PlateMode::Perspective);
+        assert!(v.contains(&PlanViolation::DurationOutOfRange { scene_id: 1, got: 3 }), "{v:?}");
+        assert!(!v.iter().any(|x| matches!(x, PlanViolation::DurationOutOfRange { scene_id: 2, .. })), "4 秒は通る");
     }
 
     #[test]

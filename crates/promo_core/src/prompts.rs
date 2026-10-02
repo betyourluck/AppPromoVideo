@@ -86,7 +86,8 @@ pub fn scene_prompt(
          ## Video concept from the user\n{concept}\n\n\
          ## Available UI snapshots (real screens of the product)\n{snap_list}\n\n\
          ## Rules\n\
-         - 3 to 8 scenes, `scene_id` sequential from 1, each 3 to 10 seconds, durations summing to about {total_seconds}.\n\
+         - 3 to 8 scenes, `scene_id` sequential from 1, each 4 to 10 seconds, durations summing to about {total_seconds}. \
+         The video model makes clips of at least 4 seconds, so a 15-second video has exactly 3 scenes.\n\
          - `cut_kind`: use `product` for cuts that show the real product screen and set `snapshot_index` to one of the \
          indices above. The app composites the actual screenshot pixels onto the backdrop, so for `product` cuts \
          `image_prompt` must describe ONLY the backdrop: surface, environment, lighting, with clear empty space in the \
@@ -94,8 +95,16 @@ pub fn scene_prompt(
          use `mood` only for the opening or a transition, and set `snapshot_index` to null for `mood`.\n\
          {plate_rule}\
          - `image_prompt` is English. Never mention references, screenshots, sheets or attachments.\n\
-         - `motion_prompt` is English, one or two sentences, for image-to-video: ONLY camera movement and motion \
-         (push-in, parallax, light flicker, subtle drift). Do not restate the picture.\n\
+         - `motion_prompt` is English, two or three sentences, for image-to-video with the still as the first frame. \
+         First, one short clause that anchors the first frame: the style, the main subject and where it sits. \
+         Then ONE primary camera move, named with one of: push in, pull out, zoom in, zoom out, pan left, pan right, \
+         truck left, truck right, tilt up, tilt down, pedestal up, pedestal down, arc shot, tracking shot, static shot; \
+         qualify it with amplitude and speed, e.g. `the camera pushes in with small amplitude at slow speed`. \
+         End with how the shot settles. Keep secondary motion (light, haze, particles) subtle. \
+         Vary the camera move across scenes instead of repeating one move everywhere. \
+         For `product` cuts prefer small amplitude at slow speed or a static shot, and put the motion in the light \
+         and the background; do not describe the screen's contents — the app appends a sentence that keeps the \
+         screen unchanged.\n\
          - `video_prompt` is English, a full text-to-video description as a fallback. Never include aspect flags \
          such as `--ar`; the aspect is fixed to {ar} elsewhere.\n\
          - `copy_text` (caption or narration) is in {lang}.\n\
@@ -114,7 +123,7 @@ pub fn describe_violation(v: &PlanViolation) -> String {
             format!("scene at index {index} must have scene_id {}, got {got}", index + 1)
         }
         PlanViolation::DurationOutOfRange { scene_id, got } => {
-            format!("scene {scene_id}: duration_seconds must be 3..=10, got {got}")
+            format!("scene {scene_id}: duration_seconds must be 4..=10, got {got}")
         }
         PlanViolation::EmptyField { scene_id, field } => format!("scene {scene_id}: `{field}` is empty"),
         PlanViolation::VideoPromptNotEnglish { scene_id } => format!("scene {scene_id}: video_prompt must be English"),
@@ -202,6 +211,19 @@ mod tests {
         assert!(!f.contains("can be TILTED"));
         assert!(p.contains("composites the actual screenshot pixels"));
         assert!(p.contains("image-to-video"));
+        // rev58: H3 の公式ガイド (I2VA) — 最初の 1 コマを押さえ、カメラは 1 つを種類 + 振れ幅 + 速さで、シーン間で散らす。
+        assert!(p.contains("anchors the first frame"));
+        assert!(p.contains("ONE primary camera move") && p.contains("with small amplitude at slow speed"));
+        assert!(p.contains("static shot") && p.contains("Vary the camera move"));
+        assert!(!p.contains("Do not restate the picture"), "公式と逆の旧規則");
+        assert!(p.contains("the app appends a sentence"), "画面の固定は app が足すと伝える (LLM に画面の中身を書かせない)");
+        // rev59: H3 の最短は 4 秒。15 秒なら 3 シーンになることまで言う (言わないと 5 シーン × 3 秒を出してくる)。
+        assert!(p.contains("each 4 to 10 seconds") && !p.contains("each 3 to 10 seconds"));
+        assert!(p.contains("a 15-second video has exactly 3 scenes"));
+        assert_eq!(
+            describe_violation(&PlanViolation::DurationOutOfRange { scene_id: 2, got: 3 }),
+            "scene 2: duration_seconds must be 4..=10, got 3"
+        );
         let none = scene_prompt(&summary(), "c", 15, Aspect::Landscape, Language::Ja, &[], PlateMode::Perspective);
         assert!(none.contains("(none — use only `mood` cuts)"));
         assert!(none.contains("in Japanese"));

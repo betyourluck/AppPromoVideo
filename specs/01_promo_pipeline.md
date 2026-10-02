@@ -1682,6 +1682,46 @@ TS 4 本は今の画面と同じ挙動の仮実装で Red → Green。crates 197
 **接地の限界**: 引き伸ばした文字を i2v がどう扱うかは測っていない。
 (→ 2026-10-03 ユーザーが Tauri の実画面で確認)
 
+## rev58 (2026-10-03、motion_prompt を MiniMax H3 の公式の作法に合わせる / product カットの画面を固定する 1 文)
+
+**ユーザー**: PV の品質を上げるプロンプトの調べもの (要約) を持ち込み「さらに調べて取り込めるものを」。→ 使うモデルは **H3**、**公式の推奨を先に**。
+**調査** (一次資料は自分で読んだ): MiniMax の i2v API 文書 (platform.minimax.io — Hailuo 02 / 2.3 は角括弧のカメラ指示 15 種・同時 3 つまで・2000 字) /
+H3 の公式ガイド (huggingface.co/MiniMaxAI/MiniMax-H3 `docs/VIDEO_PROMPT_WRITING_GUIDE_base_en.md`) / 公式スキル (github.com/MiniMax-AI/MiniMax-H3 `skills/`)。
+H3 は角括弧ではなく**文の中で「種類 + 振れ幅 + 速さ」** (`pushes in with small amplitude at slow speed`)。first frame からの動画 (I2VA) は
+**最初の 1 コマの様式・主題・構図を押さえてから**動きを書く (「anchor → onset → development → result」) — rev3 の「絵を言い直さない」は**公式と逆**だった。
+公式スキル `brand-promo-video-generator` は「製品の UI・ロゴを描き直さない / 文字を読めるまま保つ / 1 拍に主な動きは 1 つ」。
+照明・レンズの語が効くと測った資料は無い (雰囲気づけの扱い)。否定形の効き目は資料どうしで割れている (ComfyUI の文書は無効、fal は推奨)。
+**観察** (直近 2 本の run): 10 シーン中 9 シーンが push-in か drift。product カットの `motion_prompt` は画面に一度も触れていない。
+
+210. **`motion_prompt` の規則を H3 の I2VA に合わせる** (`scene_prompt` と schema の説明文) — 最初の 1 コマを 1 節で押さえる → **主なカメラの動きを 1 つ**、
+     公式の種類 (push in / pull out / zoom / pan / truck / tilt / pedestal / arc shot / tracking shot / static shot) に振れ幅と速さを添える → 終わり方。
+     シーン間で動きを散らす。product カットは small amplitude / slow speed か static shot で、動きは光と背景に。「絵を言い直さない」は撤去。
+211. **product カットの画面を固定する 1 文は Rust が足す** — `promo_core::plan::SCREEN_LOCK` を `lock_product_screens` が検査通過後に 1 度だけ
+     `motion_prompt` の末尾へ (既に含むなら足さない)。LLM に書かせると抜ける・揺れる。**`motion_prompt` そのものに入る**ので、画面・scenes.md・コピーが一致し、
+     人は鉛筆で消せる。肯定形で、カメラの寄り引きと矛盾しないよう「位置・大きさを固定」とは書かない。mood には足さない (後から面を足した mood は対象外)。
+212. **`video_prompt` の説明文から「Veo / Sora」を外す** — rev3 でコピー先から外したのに schema (= LLM への指示) に残っていた。
+213. **持ち越し** — (a) 焼き込んだ見出しを二重引用符でそのまま書く (公式ガイドの規則だが、日本語で効くかは未測定) (b) 否定形を肯定形に (資料が割れている)
+     (c) **H3 の尺は 4〜15 秒** (公式のモデルページ) なのに、検査は 1 シーン 3〜10 秒で、直近の run はすべて 3 秒。15 秒の目安は公式スキルで 5〜8 拍 —
+     1 本の中に複数の拍を入れる H3 の作法と、1 シーン = 1 枚 = 1 本の今の構成のどちらに寄せるかは**ユーザー判断**。
+     (→ 2026-10-03 ユーザー「A で」= 今の構成のまま下限を 4 秒に。rev59)
+
+**PoC**: 形の段 (定数と何もしない関数・呼び出し) を緑で通してから Red 4 本 (固定文が付かない ×2 / schema の説明文 / 指示文) → Green。
+crates 201 → 203 / backend 31、clippy clean。固定文は `image_prompt` だけを見る検査に掛からない (検査は構成の段の 1 か所だけ — grep で確認)。
+**接地の限界**: H3 で実際に生成した前後比較はしていない (生成に費用がかかり、ユーザーの手元)。公式ガイドが Hailuo の Web 画面・ホスト版 API にも
+そのまま当てはまるかは書かれていない。既存の run の `motion_prompt` は変わらない (新しく構成した run から)。
+
+## rev59 (2026-10-03、1 シーンの下限を 4 秒に — MiniMax H3 の最短に合わせる)
+
+rev58 の 213 (c) にユーザー判断「A で」= 今の構成 (1 シーン = 1 枚 = 1 本) のまま、下限だけ H3 に合わせる。
+H3 の 1 本は 4〜15 秒 (huggingface.co/MiniMaxAI/MiniMax-H3)。検査の下限 `DURATION_MIN` が 3 で、直近の run はすべて 3 秒だった。
+
+214. **`DURATION_MIN` を 3 → 4** (上限 10 は H3 の範囲内なので据え置き)。schema の説明文・指示文・差し戻しの文を揃える。
+215. **指示文で 15 秒は 3 シーンだと言い切る** — 下限 4 × 最少 3 シーン = 12 秒なので 15 秒に入るのは 3 シーンだけ。言わないと 5 シーン × 3 秒を出してきて再生成になる。
+216. **既存の run は変わらない** — 検査は構成の段でだけ走る。3 秒のシーンを持つ promo.json はそのまま開ける・焼き直せる。
+
+**PoC**: Red 2 本 (3 秒が違反にならない / 指示文と差し戻しの文が 3..=10) → Green。crates 203 → 204 / backend 31、clippy clean。
+**接地の限界**: 公式スキルの「15 秒に 5〜8 拍」とは合わない (1 本に複数の拍を入れる B 案は採らなかった)。
+
 ## 公開とリリース (2026-09-13)
 
 **public にした。** MIT (`LICENSE`)。公開前の洗い出しで、**追跡ファイルに個人情報が入っていた**のを消した —
@@ -1907,6 +1947,8 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [x] rev55 (2026-09-14): 結果ペインの snap 表示を実際に貼った番号に / 人に見せる番号は 1 始まりに統一 (200〜202、契約 `ExportPackage.layout`)。`plateSnapshotIndex` を画面側にも置き、Rust と同じ 8 ケースで固定。crates 195 / backend 30 / vitest 135 / clippy clean、ブラウザで実測。**Tauri でユーザー目視 (2026-09-14)** — `product · snap 1` / `mood`、面を足した mood の `mood · snap 1` / `mood · snap 3`
 - [x] rev56 (2026-09-14): 配布ビルドで子プロセスのコンソールの窓を出さない (203〜205、契約 `CliInvocation.spawn`)。起動を `cli_runner::no_window` に一本化 + 付け忘れの網。crates 197 / backend 30 / clippy clean。**窓が出ないことは次の配布物で確認**
 - [x] rev57 (2026-10-03): はめ込みの大きさ — 等倍に目盛り / 越えた分は拡大と明示して引き伸ばす (206〜209、契約 `PlateOverride.allow_upscale` / `compose.layout`)。crates 201 / backend 31 / vitest 139 / clippy clean、ブラウザで実測。**Tauri でユーザー確認 (2026-10-03)**
+- [x] rev58 (2026-10-03): motion_prompt を MiniMax H3 の公式の作法に (最初の 1 コマ → カメラ 1 つを振れ幅と速さで → 終わり方) / product カットの画面を固定する 1 文を Rust が足す (210〜213、契約 `Scene.motion_prompt`)。crates 203 / backend 31 / clippy clean。**H3 での前後比較は未実施**
+- [x] rev59 (2026-10-03): 1 シーンの下限を 4 秒に (MiniMax H3 の最短。214〜216、契約 `Scene.duration_seconds`)。15 秒は 3 シーン。crates 204 / backend 31 / clippy clean
 - [x] **agy で通しが成功** (2026-09-12 21:13、ユーザー実機): 解析 → 構成 (1 回目で通過) → 参照画像 3 枚 → 合成 → 見出しの焼き込み。
       166 は効いた (`run_command` への逃げは起きなかった)。168 も効いた (**費用の chip が出ていない**)。`runs/20260912-121310`
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度
