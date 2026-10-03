@@ -252,7 +252,7 @@ backend 由来のログ・エラーの文言は日本語のまま。
 
 **次の候補**: **次の配布物で、Windows の exe を起動してコンソールの窓が出ないことをユーザーが確かめる** (rev56。dev では症状が出ない) /
 rev58〜59 の新しい構成 (`motion_prompt` と 4 秒以上のシーン) で H3 の動画が良くなったかの見比べ (ユーザーの手元) /
-rev60 (ドロップが 4 枚) を Tauri で確かめる / `store.listenProgress` の同じ形の競合 (rev60 の 219) /
+`store.listenProgress` の同じ形の競合 (rev60 の 219) /
 Qiita 記事 (`docs/qiita_apppromovideo.md`) のスクショ 11 枚 (ユーザーが撮る。`📸 TODO` の置き場所) /
 aider の実機で `ANTHROPIC_API_KEY` が読まれるか (未導入。根拠は公式文書だけ) /
 プロンプトに「最初の文に戻す」を付けるか /

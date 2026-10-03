@@ -1740,7 +1740,8 @@ H3 の 1 本は 4〜15 秒 (huggingface.co/MiniMaxAI/MiniMax-H3)。検査の下�
 219. **同じ形が 1 つ残っている** — `store.listenProgress` も「登録済みか見てから await」で、同時に 2 回呼ばれると二重になりうる。呼ぶのは App.vue の 1 か所で今回の症状とは別なので、触っていない (候補)。
 
 **PoC**: 今の挙動と同じ仮実装で Red 3 本 (登録前に外すと漏れる / 2 度外すと 2 回 / 同時 4 回で 4 枚) → Green。vitest 139 → 144、build green。
-**接地の限界**: ドロップは Tauri の窓でしか起きないので、実画面での確認はユーザー。②の源が HMR だという仮説は未確定 (配布版で起きるなら別の源がある)。
+**接地の限界**: ②の源が HMR だという仮説は未確定 (配布版で起きるなら別の源がある)。
+(→ 2026-10-03 ユーザーが Tauri の実画面で確認、問題なし)
 
 ## 公開とリリース (2026-09-13)
 
@@ -1969,7 +1970,7 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [x] rev57 (2026-10-03): はめ込みの大きさ — 等倍に目盛り / 越えた分は拡大と明示して引き伸ばす (206〜209、契約 `PlateOverride.allow_upscale` / `compose.layout`)。crates 201 / backend 31 / vitest 139 / clippy clean、ブラウザで実測。**Tauri でユーザー確認 (2026-10-03)**
 - [x] rev58 (2026-10-03): motion_prompt を MiniMax H3 の公式の作法に (最初の 1 コマ → カメラ 1 つを振れ幅と速さで → 終わり方) / product カットの画面を固定する 1 文を Rust が足す (210〜213、契約 `Scene.motion_prompt`)。crates 203 / backend 31 / clippy clean。**H3 での前後比較は未実施**
 - [x] rev59 (2026-10-03): 1 シーンの下限を 4 秒に (MiniMax H3 の最短。214〜216、契約 `Scene.duration_seconds`)。15 秒は 3 シーン。crates 204 / backend 31 / clippy clean
-- [x] rev60 (2026-10-03): 画像を 1 回ドロップすると 4 枚並ぶ — リスナーの登録を部品の寿命に結ぶ (`disposableListener`) / 追加を同時実行に強く (217〜219、契約 `snapshots_ux`)。vitest 144 / build green。**Tauri の実画面は未確認**
+- [x] rev60 (2026-10-03): 画像を 1 回ドロップすると 4 枚並ぶ — リスナーの登録を部品の寿命に結ぶ (`disposableListener`) / 追加を同時実行に強く (217〜219、契約 `snapshots_ux`)。vitest 144 / build green。**Tauri でユーザー確認 (2026-10-03)**
 - [x] **agy で通しが成功** (2026-09-12 21:13、ユーザー実機): 解析 → 構成 (1 回目で通過) → 参照画像 3 枚 → 合成 → 見出しの焼き込み。
       166 は効いた (`run_command` への逃げは起きなかった)。168 も効いた (**費用の chip が出ていない**)。`runs/20260912-121310`
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度
