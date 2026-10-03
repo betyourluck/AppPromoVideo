@@ -101,18 +101,22 @@ export const useStore = defineStore("main", {
     async addSnapshotPaths(paths: string[]) {
       const { next, skipped } = mergePaths(this.project.snapshots, paths);
       for (const s of skipped) this.push("error", t("store.notImageSkipped", { path: s }));
-      const added = next.filter((p) => !this.project.snapshots.includes(p));
-      for (const p of added) {
+      const candidates = next.filter((p) => !this.project.snapshots.includes(p));
+      let added = 0;
+      for (const p of candidates) {
         try {
           await invoke<SnapshotMeta>("validate_snapshot", { path: p });
+          // rev60: 待っている間に同じパスが入っていることがある (同じドロップが同時に届く)。push の直前にもう一度見る。
+          if (this.project.snapshots.includes(p)) continue;
           this.project.snapshots.push(p);
+          added++;
         } catch (e) {
           this.push("error", String(e));
         }
       }
       this.persist();
       await this.loadSnapshotUrls();
-      if (added.length) this.showToast(t("store.snapshotsAdded", { n: added.length }));
+      if (added) this.showToast(t("store.snapshotsAdded", { n: added }));
     },
     async pickSnapshots() {
       const files = await invoke<string[]>("pick_images");

@@ -82,3 +82,30 @@ describe("store.openRun", () => {
     expect(store.result).toBeNull();
   });
 });
+
+describe("store.addSnapshotPaths (rev60)", () => {
+  // ユーザー報告 2026-10-03「画像をドロップすると 4 重になる」。重複の判定を await の前にしていたので、
+  // 同じドロップが同時に届くと、どの呼び出しも「まだ一覧に無い」と判定して push していた (実測: 同時 4 回 → 4 枚 / 順番 → 1 枚)。
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    invoke.mockReset();
+    invoke.mockImplementation(async (cmd: string) => {
+      await new Promise((r) => setTimeout(r, 5)); // validate_snapshot は IPC 往復 = 必ず非同期
+      return cmd === "validate_snapshot" ? { path: "x", width: 1, height: 1 } : {};
+    });
+  });
+
+  it("同じパスで同時に何度呼ばれても 1 枚だけ", async () => {
+    const store = useStore();
+    store.project.snapshots = [];
+    await Promise.all([1, 2, 3, 4].map(() => store.addSnapshotPaths(["D:/shots/a.png"])));
+    expect(store.project.snapshots).toEqual(["D:/shots/a.png"]);
+  });
+
+  it("別のパスは同時でも全部入る", async () => {
+    const store = useStore();
+    store.project.snapshots = [];
+    await Promise.all([store.addSnapshotPaths(["D:/a.png"]), store.addSnapshotPaths(["D:/b.png"])]);
+    expect([...store.project.snapshots].sort()).toEqual(["D:/a.png", "D:/b.png"]);
+  });
+});

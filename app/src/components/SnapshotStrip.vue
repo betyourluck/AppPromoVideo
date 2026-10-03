@@ -7,6 +7,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useStore } from "../store";
 import { baseName, imageFilesFrom, stripDataUrl } from "../snapshots";
+import { disposableListener } from "../asyncListener";
 import { t } from "../i18n";
 import Lightbox from "./Lightbox.vue";
 import Icon from "./Icon.vue";
@@ -14,7 +15,8 @@ import Icon from "./Icon.vue";
 const store = useStore();
 const dragging = ref(false);
 const lightbox = ref<number | null>(null);
-let unlistenDrop: (() => void) | null = null;
+/** ドロップのリスナーを外す関数。登録の途中で外されても漏らさない (rev60、`disposableListener`)。 */
+let stopDrop: (() => void) | null = null;
 
 const items = computed(() =>
   store.project.snapshots.map((p) => ({
@@ -43,32 +45,33 @@ async function onPaste(e: ClipboardEvent) {
   }
 }
 
-onMounted(async () => {
+onMounted(() => {
   window.addEventListener("paste", onPaste);
   store.loadSnapshotUrls();
-  try {
-    const { getCurrentWebview } = await import("@tauri-apps/api/webview");
-    unlistenDrop = await getCurrentWebview().onDragDropEvent((ev) => {
-      if (store.running) {
-        dragging.value = false;
-        return;
-      }
-      const p = ev.payload;
-      if (p.type === "enter" || p.type === "over") dragging.value = true;
-      else if (p.type === "leave") dragging.value = false;
-      else if (p.type === "drop") {
-        dragging.value = false;
-        store.addSnapshotPaths(p.paths);
-      }
-    });
-  } catch (e) {
-    console.warn("[SnapshotStrip] drag-drop unavailable:", e);
-  }
+  stopDrop = disposableListener(
+    async () => {
+      const { getCurrentWebview } = await import("@tauri-apps/api/webview");
+      return getCurrentWebview().onDragDropEvent((ev) => {
+        if (store.running) {
+          dragging.value = false;
+          return;
+        }
+        const p = ev.payload;
+        if (p.type === "enter" || p.type === "over") dragging.value = true;
+        else if (p.type === "leave") dragging.value = false;
+        else if (p.type === "drop") {
+          dragging.value = false;
+          store.addSnapshotPaths(p.paths);
+        }
+      });
+    },
+    (e) => console.warn("[SnapshotStrip] drag-drop unavailable:", e),
+  );
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("paste", onPaste);
-  unlistenDrop?.();
+  stopDrop?.();
 });
 
 function remove(key: string) {

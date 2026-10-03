@@ -653,6 +653,8 @@ DesktopUi:                          # app/ = Tauri 2 + Vue 3 + Pinia。Tailwind 
     guard: "`noBrowserDialogs.test.ts` が src の .vue / .ts を走査して標準ダイアログの呼び出しを落とす (機械の網)。網そのものの検出力もテストする (画面の文言「video prompt (…)」に初版が誤検出した)"
   snapshots_ux:                     # 2026-09-08 ユーザー FB: ドロップ / 貼り付け / 横並び + 拡大
     drop: "tauri.conf dragDropEnabled: true → getCurrentWebview().onDragDropEvent の drop.paths (OS のパスが取れる。HTML5 drop はパスを持たないので使わない)。enter/over で帯を強調"
+    listener_lifetime: "rev60: 登録は非同期 (動的 import + IPC 4 往復) なので `asyncListener.ts::disposableListener` で部品の寿命に結ぶ — 登録の途中で外されたら、終わった時点ですぐ外す。以前は外す関数が null のまま外し損ね、リスナーが残った (1 回のドロップが 4 枚)"
+    idempotent: "rev60: `store.addSnapshotPaths` は validate_snapshot を待った**後**、push の直前にもう一度一覧を見る。同じパスが同時に届いても 1 枚 (以前は await の前だけで判定し、同時 4 回 → 4 枚)"
     paste: "window の paste event → clipboardData.items の image/* File → FileReader.readAsDataURL → base64 を command save_clipboard_image(base64, mime) へ → app_data/snapshots/clip_<ms>.<ext> に保存し snapshot_meta で検証 (壊れていれば消す) → 他のスナップショットと同じパスとして一覧へ"
     strip: "SnapshotStrip.vue: 横スクロールのサムネイル (data URL)、× で外す、クリックで Lightbox (← → Esc、『この画像を外す』)。参照画像も同じ Lightbox で拡大"
     pure: "snapshots.ts (mergePaths 重複と非画像の除外 / stripDataUrl / imageFilesFrom / baseName) は vitest 3 本"
