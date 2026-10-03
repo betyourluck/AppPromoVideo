@@ -50,6 +50,8 @@ export const useStore = defineStore("main", {
     brief: null as BriefPreview | null,
     cliCheck: null as CliCheck | null,
     unlisten: null as UnlistenFn | null,
+    /** 進捗のリスナーを登録している途中 (rev61)。`unlisten` が来る前の二重登録を防ぐ。 */
+    listening: false,
     /** 過去の run (新しい順)。rev7: 実行のたびに前回が消えていたのを直したうえで一覧する。 */
     runs: [] as RunListItem[],
     /** 比較に選んだ run_dir (最大 2 つ)。 */
@@ -73,11 +75,16 @@ export const useStore = defineStore("main", {
       if (this.log.length > LOG_MAX) this.log.splice(0, this.log.length - LOG_MAX);
     },
     async listenProgress() {
-      if (this.unlisten) return;
+      // rev61: 「登録済みか見てから await」だと、終わる前にもう一度呼ばれて 2 つ登録する (進捗の行が二重になる)。
+      // 登録中の印を await の**前**に立てる。失敗したら下ろして、次の呼び出しでやり直せるようにする。
+      if (this.unlisten || this.listening) return;
+      this.listening = true;
       try {
         this.unlisten = await listen<Progress>("promo-progress", (e) => this.push(e.payload.stage, e.payload.text));
       } catch (e) {
         console.warn("[store] event listen unavailable:", e);
+      } finally {
+        this.listening = false;
       }
     },
     showToast(text: string) {

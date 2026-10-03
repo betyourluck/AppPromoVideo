@@ -92,7 +92,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   winget は PR #434054 (0.1.1) のマージ後に `wingetcreate update`。版番号 3 か所 + `Cargo.lock` は**タグの後に**上げた —
   配布物は CI の `Sync app version to tag` が `tauri.conf.json` をタグに揃えるので 0.1.2 で出ている。
   次のタグを打つ時の手順: 版番号 → タグ `vX.Y.Z` → CI (draft、3 OS) → 説明を確認 → publish → tap の `version` / `sha256` (Release API の `digest`) → `wingetcreate update` (マージ後)。
-- **rev54〜60 は main にあるが配布物には乗っていない** (v0.1.2 は rev53 まで)。次のタグで乗る — rev56 (コンソールの窓) はその配布物で確かめる。
+- **rev54〜61 は main にあるが配布物には乗っていない** (v0.1.2 は rev53 まで)。次のタグで乗る — rev56 (コンソールの窓) はその配布物で確かめる。
 - **はめ込みの大きさは等倍で頭打ち、越えるのは人がつまみを動かした時だけ** (rev57、2026-10-03 ユーザー報告「0.70 以上拡大できない」)。
   つまみは実効の大きさを指し、等倍に目盛り、越えた分は「拡大 (ぼやける)」(`PlateOverride.allow_upscale`、等倍は `compose::native_screen_ratio`)。
   フラグの無い以前の run は焼き直しても変わらない。**Tauri の実画面でユーザーが確認済み (2026-10-03)。**
@@ -100,7 +100,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   product カットは Rust が画面を固定する 1 文 (`plan::SCREEN_LOCK`) を足す。根拠と出典は spec 01 rev58。**H3 で生成した前後比較はまだ無い。**
   **1 シーンは 4〜10 秒** (rev59、H3 の最短 4 秒に合わせた。15 秒は 3 シーン)。1 本に複数の拍を入れる H3 の作法には寄せていない (ユーザー判断「A」)。
 - **非同期に登録するリスナーは `asyncListener.ts::disposableListener` で部品の寿命に結ぶ** (rev60、ドロップ 1 回が 4 枚になった)。
-  登録の途中で外された時に外し損ねない。スナップショットの追加は await の後にも重複を見る。
+  登録の途中で外された時に外し損ねない。スナップショットの追加は await の後にも重複を見る。進捗ログのリスナーは登録中の印を await の前に立てる (rev61)。
 - **winget は PR #434054 (0.1.1) がマージ待ち。** マージされたら README 英日に winget を追記する (それまで書かない)。
 
 - **公開した (2026-09-13)。** MIT (`LICENSE`)、`origin` は public。`v0.1.0` のタグで CI が**初回から 3 OS とも green**、
@@ -131,7 +131,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   (書いてあるのに入らない、を避ける)。次の版は `wingetcreate update Outcasts.AppPromoVideo --version <V> --urls <MSI URL>` →
   ローカル生成 → `InstallerLocale` が混ざっていたら消す → `wingetcreate submit --token "$(gh auth token)"`。提出前に
   `gh repo sync betyourluck/winget-pkgs --source microsoft/winget-pkgs --branch master`。
-- **spec 01 は Phase 0〜E 着地、rev60 まで反映済み (rev27〜29 は試行)。** crates 204 green / vitest 144 / backend 31 green・clippy clean。
+- **spec 01 は Phase 0〜E 着地、rev61 まで反映済み (rev27〜29 は試行)。** crates 204 green / vitest 146 / backend 31 green・clippy clean。
 - **配布ビルドの Windows で子プロセスのコンソールの窓を出さない** (rev56、ユーザー報告: v0.1.2 の exe で「claude」の空の窓)。
   起動を `cli_runner::no_window` に一本化し、付け忘れはテストが落とす。**窓が出ないことは次の配布物でユーザーが確認する** (dev では症状が出ない)。
 - **`scenes.md` はいつも `promo.json` と揃えて書く** (rev54、`pipeline::export::write_run_files`)。表の snapshot 番号は合成が実際に貼るもの
@@ -252,7 +252,7 @@ backend 由来のログ・エラーの文言は日本語のまま。
 
 **次の候補**: **次の配布物で、Windows の exe を起動してコンソールの窓が出ないことをユーザーが確かめる** (rev56。dev では症状が出ない) /
 rev58〜59 の新しい構成 (`motion_prompt` と 4 秒以上のシーン) で H3 の動画が良くなったかの見比べ (ユーザーの手元) /
-`store.listenProgress` の同じ形の競合 (rev60 の 219) /
+
 Qiita 記事 (`docs/qiita_apppromovideo.md`) のスクショ 11 枚 (ユーザーが撮る。`📸 TODO` の置き場所) /
 aider の実機で `ANTHROPIC_API_KEY` が読まれるか (未導入。根拠は公式文書だけ) /
 プロンプトに「最初の文に戻す」を付けるか /
@@ -265,7 +265,7 @@ rev14 のコミット `5929f93` に巻き込んだ。実害は無いが粒度が
 
 ## 再開の手順
 
-1. `cargo test --workspace` (204 green) と `cd app && npx vitest run && npm run build` (144 green) で足場を確認。**並べて走らせるなら絶対パス** (cwd が `app/src-tauri` に残る事故を 4 回踏んだ)。
+1. `cargo test --workspace` (204 green) と `cd app && npx vitest run && npm run build` (146 green) で足場を確認。**並べて走らせるなら絶対パス** (cwd が `app/src-tauri` に残る事故を 4 回踏んだ)。
    `cd /abs && …` は**そのコマンド**を守るだけで、ずれた cwd は次のコマンドへ残る — **並べる全部に `cd` を書く** (2026-09-14)。
    同日、この処方を書いた**後にも** `cd` の書き忘れで 3 回空振りした (vitest 2 回・backend の Red 1 回。どれも「0 本選ばれた / 何も出ない」で、落ちたようには見えない)。
    **送る前に、並べた各コマンドの先頭が `cd /abs &&` かを見る。** 出力が空・0 本の時は、結果ではなく cwd を疑う。

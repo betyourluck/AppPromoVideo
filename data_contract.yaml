@@ -602,6 +602,7 @@ DesktopUi:                          # app/ = Tauri 2 + Vue 3 + Pinia。Tailwind 
     get_image_api_keys / set_image_api_key / probe_image: "キーは app_data/.env、画面には有無 (bool) だけ"
     open_folder / copy_package: "export 補助"
   event: "promo-progress {stage: brief|analyze|plan|cli|cli-stderr|images|done|error, text}"
+  event_listener: "rev61: `store.listenProgress` は登録中の印 (`listening`) を await の前に立てる — 終わる前に再び呼ばれても登録は 1 回。失敗したら印を下ろし、次の呼び出しでやり直す"
   typography:                       # rev27 (2026-09-11 ユーザー「文字を少しだけ大きく」)
     tokens: "main.css の :root に --fs-xs / sm / md / base / lg / xl = (11 / 12 / 13 / 14 / 15 / 19 px) × **--fs-scale** (項目、rev29 で 1.25)。**部品は font-size を px で直に書かずトークンを参照する**。例外は Lightbox の矢印 (文字ではなく記号、40px)"
     headings: "rev29: 見出しは --fs-h-md / h-lg / h-xl = (13 / 15 / 19 px) × **--fs-scale-heading** (1.5)。対象 = .panel h2 (入力・結果・進捗) / 結果のアプリ名 .app とキャッチ .hook / メッセージボックス .mb-title / 設定の小見出し .sub の 5 か所 (rev31 で履歴画面の見出し .title を足して 6 か所)。ユーザー「見出しはこれくらい、中の項目はちょっと小さく」で倍率を 2 本に分けた"

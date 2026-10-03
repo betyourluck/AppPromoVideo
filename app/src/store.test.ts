@@ -6,9 +6,9 @@ import { createPinia, setActivePinia } from "pinia";
  * (履歴画面ではログのペインも入力ペインのエラー表示も見えない)。
  * そのために `openRun` は成否を返す。画面の切り替えそのものは DOM の無い vitest では確かめられない。
  */
-const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
+const { invoke, listen } = vi.hoisted(() => ({ invoke: vi.fn(), listen: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
-vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
+vi.mock("@tauri-apps/api/event", () => ({ listen }));
 
 import { useStore } from "./store";
 import type { PromoJson, RunResult } from "./types";
@@ -107,5 +107,34 @@ describe("store.addSnapshotPaths (rev60)", () => {
     store.project.snapshots = [];
     await Promise.all([store.addSnapshotPaths(["D:/a.png"]), store.addSnapshotPaths(["D:/b.png"])]);
     expect([...store.project.snapshots].sort()).toEqual(["D:/a.png", "D:/b.png"]);
+  });
+});
+
+describe("store.listenProgress (rev61)", () => {
+  // rev60 で見つけた同じ形: 「登録済みか見てから await」は、終わる前にもう一度呼ばれると 2 つ登録し、進捗の行が二重になる。
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    listen.mockReset();
+  });
+
+  it("登録が終わる前に何度呼ばれても、登録は 1 回", async () => {
+    listen.mockImplementation(async () => {
+      await new Promise((r) => setTimeout(r, 5)); // IPC 往復
+      return () => {};
+    });
+    const store = useStore();
+    await Promise.all([store.listenProgress(), store.listenProgress(), store.listenProgress()]);
+    expect(listen).toHaveBeenCalledTimes(1);
+    await store.listenProgress();
+    expect(listen).toHaveBeenCalledTimes(1);
+  });
+
+  it("登録に失敗したら、次の呼び出しでやり直せる", async () => {
+    listen.mockRejectedValueOnce(new Error("no tauri")).mockResolvedValueOnce(() => {});
+    const store = useStore();
+    await store.listenProgress();
+    await store.listenProgress();
+    expect(listen).toHaveBeenCalledTimes(2);
+    expect(store.unlisten).not.toBeNull();
   });
 });
