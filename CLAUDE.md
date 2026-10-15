@@ -82,7 +82,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   失敗したジョブだけ再実行 (ユーザー判断) → **3 OS green (run 38714888559 attempt 2)、Release は draft で 7 点**、ログで Signing → Notarizing Accepted → Stapling を確認。名前の修正は rev67 (タグの後のコミット)。
   **ユーザーが publish (10:20 UTC)** → tap の cask を 0.1.4 に (tap `48f9db4`、sha256 = Release API の dmg の digest、URL 200)。verify-cask (run 38719707173) で **`spctl` = `accepted` / `source=Notarized Developer ID`**。
   winget: **0.1.1 の PR #434054 は 2026-10-09 にマージ済み**。0.1.4 を [PR #453254](https://github.com/microsoft/winget-pkgs/pull/453254) で申請 (ProductCode `{E3C61415-A415-4621-B914-8172412284DA}` を MSI の COM で照合、sha256 は digest と一致、`InstallerLocale` 無し)。
-  **`wingetcreate update` は locale に `Documentations: Wiki` を勝手に足す** — このリポジトリの Wiki は中身が無く URL はトップへ転送されるだけなので、消してから submit した (次の版も同じ手順)。**`v0.1.3` (10-03、fe5eb2a = rev54〜61) の Release は draft のまま** — 扱いは未決 (ユーザー)。
+  **`wingetcreate update` は locale に `Documentations: Wiki` を勝手に足す** — このリポジトリの Wiki は中身が無く URL はトップへ転送されるだけなので、消してから submit した (次の版も同じ手順)。**`v0.1.3` (10-03、fe5eb2a = rev54〜61) の Release (draft) は削除した** (2026-10-15 ユーザー。中身は v0.1.4 に含まれる。タグは履歴として残す — v0.1.0 と同じ扱い)。
 - **2026-10-15 の着地 = rev66** (main、配布物には未搭載): **右ペイン (進捗ログ) はタイトルバーのアイコンで出し入れする** (`logPane.ts`、契約 `DesktopUi.log_pane`)。出ている間はアクセント色、隠すと 2 列で結果が広がる。
   保存は `apppromo.logPane`。実行中も押せ、履歴・設定の画面では押せない。**Tauri の実画面でユーザーが確認済み (2026-10-15)**。
 - **2026-10-15 の着地 = rev65** (main、配布物には未搭載): **焼いた見出しの引用 1 文 (`A caption reading "…" sits at the top|bottom …`) は Rust だけが書く** (`promo_core::plan::set_caption_line`、契約 `Scene.motion_prompt.caption_line`)。

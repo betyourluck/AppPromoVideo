@@ -1480,3 +1480,4 @@ v0.1.4 の macOS を再実行 → 3 OS green (attempt 2)、Release draft 7 点�
 ユーザーが v0.1.4 を publish → tap の cask を 0.1.4 (tap 48f9db4)、verify-cask で spctl accepted / Notarized Developer ID。
 winget 0.1.1 (PR #434054) は 10-09 にマージ済みだった (ユーザー)。0.1.4 を wingetcreate update → 足された `Documentations: Wiki` (中身の無い Wiki) を消す → validate → submit (PR #453254)。ProductCode は MSI の COM で照合。
 版番号 3 か所 + Cargo.lock を 0.1.4 に。README 英日に「インストール」の節 (Releases / winget / Homebrew) を足した — それまで README に入れ方が 1 つも無かった。winget show で 0.1.1 がカタログにあることを確認。
+v0.1.3 の draft の Release を削除 (ユーザー)。タグ v0.1.3 は残した。公開されている版は v0.1.1 / v0.1.2 / v0.1.4。
