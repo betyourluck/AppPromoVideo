@@ -44,6 +44,18 @@ pub enum AgyLine {
 /// 殺しかねないので入れてある (live で要確認)。
 pub const AGY_ALLOWED_TOOLS: [&str; 5] = ["view_file", "list_dir", "find_by_name", "grep_search", "finish"];
 
+/// agy の時だけ本文の後ろに足す、使うツールの指示 (rev63、契約 `IsolationGuarantee.prompt_guidance`)。
+///
+/// 2026-10-15 実機: **ツールの失敗が無いのに**、agy はフォルダの一覧に最初の手で `run_command`
+/// (`Get-ChildItem`) を選び、見張りに止められた。rev42 (探索範囲) と rev48 (壊れた hook) は「逃げる理由」を
+/// 消せば済んだが、今回は理由が無く、選び方の問題。agy に許可リストは無いので**予防ではなく誘導**
+/// (止めるのは引き続き見張り)。名指すツールは `AGY_ALLOWED_TOOLS` に含まれること (テストで固定)。
+pub const AGY_TOOL_GUIDANCE: &str = "\n\n## Tools\n\
+Use only these read-only tools: `list_dir` to list a folder, `find_by_name` to find files, \
+`view_file` to read a file or image, `grep_search` to search text. \
+Do not use `run_command` or any shell command (no Get-ChildItem, ls, cat, Get-Content); \
+the run is stopped if a shell command is used. Do not create or modify any file.\n";
+
 /// stdin に流す 1 行 (契約 `AgyStreamLine.input`)。
 ///
 /// **`-p` / `--print` は使わない** — あれは値 (prompt) を取るので本文が argv に載り、契約を破る。

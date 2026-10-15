@@ -1455,3 +1455,19 @@ rev60 で残した同じ形を、ユーザーの指示で直した。登録中�
 Red 2 本 → Green。workspace 205 passed、vitest 146 passed、build green、clippy clean。
 接地の限界: H3 での動画生成はユーザー手元 (費用発生)。
 
+
+## 2026-10-15 (午後) — 再開、claude / agy が同時に出力できない、rev63
+
+Resume Key APPPROMO-H3-PLATE-DROP-20261003 で再開。会話の外で rev62 (9c49541) が入っていた。足場 crates 205 / vitest 146 / clippy clean。
+ユーザー報告「agy でも claude code でも出力できなくなった」→ 生ログと `.invocation.json` を別々に読み、**原因は 2 つで無関係**と分かった (failures.md 末尾)。
+claude はアプリ外 (CLI の refresh token が 10-05 に期限切れ、10-15 の最初の run で資格情報が空になった。ユーザーが `/login`)。
+agy はツールの失敗なしに `run_command Get-ChildItem` を選び見張りが停止 → rev63 (agy にだけ読み取りツールを名指す指示)。Red を観測 → Green、crates 206 / backend 31 / 両 clippy clean。
+副次の観察: claude の起動時に `~/.claude/hooks/toolcall-leak-clean.js` の SessionStart hook が SyntaxError を出している (ユーザーの global 設定。今回の失敗とは無関係で、触っていない)。
+rev63 を試した通しが agy の `invalid model selection` で止まった (rev63 の検証にはならず)。モデル欄が種類をまたいで 1 つで、claude 用の `opus` が agy に渡っていた。
+`agy models` で ID の一覧が取れることを実測 (B 案「開始時に止める」の材料)。ユーザー判断で A 案 → rev64 (種類ごとに覚える)。Red (機能不在の TypeError) → Green、vitest 149 / build green。
+画面はブラウザのペインで DOM を読んで確認 (ペインが描画されずスクリーンショットは取れず)。ユーザーの Tauri dev が 1421 を使っていたので、そのサーバーに接続した。
+モデル欄を空にした agy の通しが成功 (16:54〜17:02、run `20261015-075926`、構成 1 回で通過、参照画像 3 枚)。構成の run で `view_file` が 4 回 ERROR になっても `run_command` へ逃げなかった (rev63 の前向きな観測、1 回)。
+16:23 の run は ERROR の後にシェルへ逃げたが、exe の更新 (16:26) より前で、rev63 入りかは判別できない — `.invocation.json` は本文を残さないので、プロンプトの変更が効いた版かを後から確かめる手段が無い。
+ユーザー報告「見出しが出ない / はめ込みの大きさが変わった / これは正しい修正か」。設定ミラーで焼き込み OFF を確認し、素材との差分ではめ込みの幅を実測 (0.680 → 0.780)。
+rev62 は H3 の公式手引き (huggingface の VIDEO_PROMPT_WRITING_GUIDE_base_en.md) と照合 — 書式は手引きどおり、見出しの引用だけが「見えている文字」の前提を破っていた。
+ユーザー判断で rev65 (焼いた見出しの引用 1 文は Rust が書く)。Red 7 本を観測 → Green、crates 212 / backend 32 / vitest 149 / 両 clippy clean。焼き込みを OFF にしたのが意図かは未確認。

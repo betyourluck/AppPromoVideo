@@ -1771,6 +1771,69 @@ H3 の I2VA は以下の構造を必須とする：
 **PoC**: Red 2 本 (H3 I2VA ヘッダー・multimodal・soundscape・music 補完 / product_screens_are_locked の更新) → Green。workspace 205 green・clippy clean。
 **接地の限界**: H3 での動画生成はユーザー手元 (費用発生)。
 
+## rev63 (2026-10-15、agy にだけ「読み取りはこの 4 つ、`run_command` は使わない」を本文の後ろに足す)
+
+**ユーザー報告**: agy で `CLI が許可されていないツールを使いました (run_command: Get-ChildItem -Path "D:\Github\Fuseforks\apps\gui-tauri\src")`。
+**観察** (生ログ `cli-logs/20261015-055032-7336.jsonl` / `-054956-640.jsonl`): `view_file` 2 回は DONE、**ERROR の tool 行は 1 本も無い**。
+その直後に agy が `run_command Get-ChildItem` を選んだ (構成の run では最初の手から)。どちらのパスも `--add-dir` の中で、`list_dir` は init のツール一覧にある。
+**仮説の棄却**: rev42 (探索範囲の外) — パスは `--add-dir` の中 / rev48 (壊れた hook でツールが失敗) — 失敗行が無い。**逃げる理由が無い逃げ**で、選び方の問題。
+同日、同じ入力の解析 run (`-054743-30864`) は `view_file` だけで成功しており、揺れである。本文はどのツールを使えとも言っていなかった。
+
+224. **agy の時だけ、本文の後ろに `cli_runner::agy::AGY_TOOL_GUIDANCE` を足す** (`build_invocation` の agy 分岐。解析・構成の両方に効く)。
+     `list_dir` / `find_by_name` / `view_file` / `grep_search` を用途ごとに名指し、`run_command` とシェルを使わない・ファイルを作らない、と書く。
+     claude / aider / custom には足さない (agy のツール名は意味を持たない)。
+225. **名指すツールは見張りの許可リスト (`AGY_ALLOWED_TOOLS`) に含まれること** — テストで固定。許可していないツールを勧めると、勧めた通りに動いて止められる。
+226. **見張りは変えない。** 誘導は予防ではない (agy に許可リストは無い — 契約 `IsolationGuarantee.detect_only`)。従わなければ従来どおり止まる。
+
+**PoC**: `invocation::tests::agy_prompt_names_read_tools_and_forbids_run_command` — Red (`list_dir を名指していない: "SECRET PROMPT BODY"`) を観測 → Green。
+既存の `agy_frozen_defaults_have_no_print_flag_and_set_the_timeout` は本文の完全一致を見ていたので、指示が付いた形に更新。crates 206 / backend 31 / 両 clippy clean。
+**接地の限界**: 指示で agy が `run_command` を選ばなくなるかは live で未確認 (確率を下げるだけで、ゼロにする保証は無い)。
+**live (2026-10-15、ユーザー実機、モデル欄は空 = agy の既定)**: 解析 (`cli-logs/20261015-075421-38212`) は `view_file` 11 回で成功。構成 (`-075623-36736`) は存在しないファイルへの `view_file` が 4 回 ERROR になったが
+**`run_command` には行かず**、`finish` の schema 違反を agy 自身が直して SUCCESS → 構成 1 回で通過 → 参照画像 3 枚 → 合成 (run `20261015-075926`)。
+rev48 の引き金 (許可ツールの失敗) と同じ形でも逃げなかったのは前向きな観測だが、**1 回なので効き目の証明ではない**。
+16:23 の run (`-072333-43524`) は `view_file` の ERROR の後に `run_command` へ逃げて止まったが、backend の exe の更新が 16:26 で、この run に rev63 が入っていたかは記録 (`.invocation.json` は本文を残さない) から判別できない。
+
+## rev64 (2026-10-15、CLI のモデル名を種類ごとに覚える)
+
+**ユーザー報告** (rev63 を試す通し): agy が `invalid model selection (--model "opus" …): model opus is not recognized` で 7 秒で終わった (ツールを 1 回も使っていない)。
+**観察**: 設定のモデル欄は種類をまたいで 1 つ (`CliSettings.model`)。15:46 の claude の run は `--model opus`、その後に種類だけ agy に替えたので `opus` が agy に渡った。
+14:47 の agy の run に `--model` が無かったのはその時点で欄が空だったから。モデル名の名前空間は CLI ごとに違い、agy の名前は `agy models` の ID (`claude-opus-5-5-high` など。2026-10-15 実測)。
+**代案**: B「run の開始時に止める」— agy は `agy models` で一覧が取れるので可能だが、毎回ネット経由の取得で開始が遅れ、claude には一覧のコマンドが無い。
+止めなくても agy は 7 秒で副作用なく終わる。ユーザー判断で A (種類ごとに覚える) を採った。
+
+227. **`CliSettings.modelByKind: Record<CliKind, string>`** (旧 `model` を置き換え)。backend へは `toBackendCli` が**今の種類の分だけ**を `model` として送る。backend の型は変えない。
+228. **旧形式の `model` は保存時の種類の分にだけ引き継ぐ** (`migrateCliSettings`、純関数)。他の種類に配ると直したい事故を持ち越す。`modelByKind` があれば旧 `model` は見ない。
+     **既に agy の欄に `opus` が入った状態で保存していた環境は、その値が agy の分として残る** — 1 度だけ手で消す (どの種類のために打った名前かは保存に残っていない)。
+229. **入力例を種類ごとに** (`CLI_MODEL_PLACEHOLDER`)。agy は `agy models` の ID を例に出す。
+
+**PoC**: `settings.test.ts`「CLI のモデル名は種類ごと (rev64)」3 本 — Red を観測 (`TypeError: Cannot read properties of undefined (reading 'trim')` / `migrateCliSettings is not a function`。
+**機能が無いことによる落ち方で、アサーションの不一致ではない**) → Green。既存 2 ファイルのリテラルを新形式に。vitest 149 / build green。
+**画面**: vite の dev サーバーをブラウザのペインで開き、旧形式 (claude / opus) を入れて読み込み → agy に切替で空・agy の入力例 → agy に入力 → claude に戻すと opus → agy に戻すと入力した値、保存も種類ごと (DOM を読んで確認。ペインが描画されずスクリーンショットは取れなかった)。
+**接地の限界**: agy が `--model claude-opus-5-5-high` (ID) を受け付けるかは未確認 (エラー文の一覧は表示名で、`agy models` は ID と表示名の両方を出す)。Tauri の実画面は未目視。
+
+## rev65 (2026-10-15、焼いた見出しの引用 1 文は Rust が書く — rev62 の見出しの規則の修正)
+
+**ユーザー報告**: 「見出しの文章が出てこなくなった / はめ込みの大きさが変わった。原因と、これは正しい修正なのか」。
+**観察**: ①2 つとも設定の「見出しの焼き込み」OFF (`settings.json` の `apppromo.image.caption.enabled = false`) が原因。焼く時は `layout_for` が帯を空けてはめ込みを 0.68 に、
+焼かない時は既定の 0.78 (素材との差分で実測: 10-03 の run 0.680 / 10-15 の 2 本 0.780)。10-03 以降のコミットは見出しの経路に触れていない — 切り替えは設定のスイッチ 1 か所だけ。
+②rev62 の書式 (アライメント行・3 つの欄・`<d>` のナレーション) は H3 の公式手引き (`VIDEO_PROMPT_WRITING_GUIDE_base_en.md` 2.1 / 2.2 / 4.4) どおり。
+ただし手引き 4.5 の引用は「**実際に画面に見えている**文字」なのに、rev62 は見出しを焼くか・どこに焼くかを知らない構成の段の LLM に `caption reading "…"` を書かせた。
+10-15 の 2 本は 6 シーン全部に「下に見出しが表示されている」と入り、実際は焼いていない (焼く設定の位置は top)。見えない文字を描き足す方向に H3 を誘う。
+
+230. **見出しの引用 1 文は Rust だけが書く** — `promo_core::plan::set_caption_line(prompt, Option<(text, CaptionSide)>)`。既存の `caption reading "` を含む文を全部外し
+     (引用の中のピリオドで切らない)、焼いた時だけ `A caption reading "<文>" sits at the <top|bottom> of the frame, crisp and unchanged.` を説明の中 (SCREEN_LOCK の前) に入れる。
+     引用の中の `"` は “ ” に、改行は空白に。素の文 (rev62 より前の run) にもそのまま効く。
+231. **呼ぶのは焼く経路の 2 か所** — `generate_references` (焼けた時だけ。生成・焼き込みに失敗したシーンは外す) と app の `reburn_caption` (コピー文の書き換えもここを通る)。
+     位置は焼く位置と同じ `CaptionSpec::effective_position` から (`caption_side`)。構成の段は `format_h3_motion_prompts` が None で呼び、LLM の書いた文を外す。
+232. **LLM への指示から見出しの文の規則を外す** — `scene_prompt` は「見出し・タイトルを書かない。焼いた時は app が引用の文を足す」と伝える。schema の説明文からも「on-screen text in quotes」を外した。
+     ナレーション (`<d>`) の規則はそのまま (ユーザーの指示の範囲外)。
+
+**PoC**: Red を観測 → Green。promo_core 4 本 (焼いていない時に外れる / 焼いた文と位置で SCREEN_LOCK の前に 1 文・置き換え・冪等 / 素の文と引用符 / 構成の段で外れる)、
+指示文 1 本、pipeline 1 本 (焼かない run で外れる / 焼く run で y_ratio から top / 生成に失敗したシーンは無し)、backend 1 本 (焼き直しで外れる / 書き換えたコピー文と実効位置で入る / scenes.md も一致)。
+fixture は 10-15 の実データの文 (引用の中にピリオド)。crates 212 / backend 32 / vitest 149 / build green / 両 clippy clean。フォントを要る 2 本は arial.ttf で焼く側まで走った (飛ばしていない)。
+**接地の限界**: H3 で見出しの引用がある・無いの生成比較はしていない (費用、ユーザーの手元)。既存の run の `motion_prompt` は、焼き直すか作り直すまで rev62 の文が残る。
+見出しの焼き込みを OFF にしたのが意図かどうかは未確認 (ユーザー)。指摘した他の点 (ナレーションの言い換え / 人物のいないカットの `lips remain closed` / 1 シーン約 1,400 字 / 空行の無いアライメント行で本文が消える) は未対応。
+
 ## 公開とリリース (2026-09-13)
 
 **public にした。** MIT (`LICENSE`)。公開前の洗い出しで、**追跡ファイルに個人情報が入っていた**のを消した —
@@ -2001,6 +2064,9 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [x] rev60 (2026-10-03): 画像を 1 回ドロップすると 4 枚並ぶ — リスナーの登録を部品の寿命に結ぶ (`disposableListener`) / 追加を同時実行に強く (217〜219、契約 `snapshots_ux`)。vitest 144 / build green。**Tauri でユーザー確認 (2026-10-03)**
 - [x] rev61 (2026-10-03): 進捗ログのリスナーも二重に登録しない (220、契約 `DesktopUi.event_listener`)。vitest 146 / build green。症状の観測は無い (予防)
 - [x] rev62 (2026-10-15): motion_prompt を MiniMax H3 オムニモーダル I2VA 完全準拠に (221〜223、契約 `Scene.motion_prompt`)。アライメントヘッダー・3 大フィールド・光のダイナミクス・音響 (overall_soundscape)・音楽 (non_diegetic_music)・ボイスオーバーの指示と自動補完。crates 205 / backend 31 / vitest 146 / clippy clean
+- [x] rev63 (2026-10-15): agy にだけ使う読み取りツールを名指し `run_command` を使わない旨を本文の後ろに足す (224〜226、契約 `IsolationGuarantee.watchdog.prompt_guidance`)。crates 206 / backend 31 / clippy clean。**live で効くかは未確認**
+- [x] rev64 (2026-10-15): CLI のモデル名を種類ごとに覚える (227〜229、契約 `CliSpec.frontend_model_memory`)。vitest 149 / build green。画面は vite + ブラウザのペインで確認、Tauri は未目視
+- [x] rev65 (2026-10-15): 焼いた見出しの引用 1 文は実際に焼いた時だけ Rust が書く (230〜232、契約 `Scene.motion_prompt.caption_line`)。crates 212 / backend 32 / vitest 149 / clippy clean
 - [x] **agy で通しが成功** (2026-09-12 21:13、ユーザー実機): 解析 → 構成 (1 回目で通過) → 参照画像 3 枚 → 合成 → 見出しの焼き込み。
       166 は効いた (`run_command` への逃げは起きなかった)。168 も効いた (**費用の chip が出ていない**)。`runs/20260912-121310`
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度

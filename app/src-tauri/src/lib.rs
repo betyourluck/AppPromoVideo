@@ -813,6 +813,12 @@ fn reburn_caption(
     };
     std::fs::write(dir.join(&name), &out).map_err(|e| format!("書けません {name}: {e}"))?;
 
+    // rev65: 見出しの引用 1 文を焼いた結果に合わせる (焼かないなら外す)。生成と同じ関数 (契約 `Scene.motion_prompt.caption_line`)。
+    if let Some(s) = promo.plan.scenes.iter_mut().find(|s| s.scene_id == scene_id) {
+        let burned = spec.as_ref().filter(|_| !copy_text.trim().is_empty()).map(|sp| (copy_text.as_str(), sp.caption_side()));
+        s.motion_prompt = promo_core::plan::set_caption_line(&s.motion_prompt, burned);
+    }
+
     // はめ込みの上書きも残す (rev11)。空の指定は「既定に戻す」なので行ごと消す。
     match &plate {
         Some(p) if *p != Default::default() => {
@@ -1415,6 +1421,42 @@ mod run_files_tests {
     fn reburn_without_copy_change_still_writes_scenes_md() {
         let dir = run_dir();
         reburn_caption(dir.to_string_lossy().to_string(), 1, None, None, None).unwrap();
+        assert_scenes_md_matches(&dir);
+    }
+
+    /// rev65: 焼き直しも見出しの引用 1 文を**焼いた結果に合わせる** (契約 `Scene.motion_prompt.caption_line`)。
+    /// 焼かない (spec = None) なら外れ、焼くなら今の文 (コピー文の書き換え後) と実効の位置で 1 文。
+    #[test]
+    fn reburn_keeps_the_caption_line_in_step_with_the_burn() {
+        let dir = run_dir();
+        fs::write(dir.join("base").join("scene_01_ref_01.png"), image_gen::solid_backdrop(320, 240, [10, 20, 30])).unwrap();
+        let mut promo: PromoJson = serde_json::from_str(&fs::read_to_string(dir.join("promo.json")).unwrap()).unwrap();
+        promo.plan.scenes[0].motion_prompt = "Slow push-in. A typography caption reading \"Old. Text.\" is displayed at the bottom.".into();
+        fs::write(dir.join("promo.json"), serde_json::to_string_pretty(&promo).unwrap()).unwrap();
+        let d = dir.to_string_lossy().to_string();
+
+        let r = reburn_caption(d.clone(), 1, None, None, None).unwrap();
+        assert_eq!(r.promo.plan.scenes[0].motion_prompt, "Slow push-in.", "焼いていないのに見出しの文が残っている");
+
+        let Some(font) = image_gen::system_font_dirs().into_iter().flat_map(|d| ["arial.ttf", "meiryo.ttc", "DejaVuSans.ttf"].map(|f| d.join(f))).find(|p| p.is_file()) else {
+            eprintln!("システムフォントが見つからないので焼く側は飛ばします");
+            return;
+        };
+        let spec = pipeline::reference::CaptionSpec {
+            font_path: font.to_string_lossy().into(),
+            font_index: 0,
+            size_ratio: 0.05,
+            position: image_gen::CaptionPosition::Top,
+            color: None,
+            y_ratio: Some(0.9),
+        };
+        let r = reburn_caption(d, 1, Some(spec), None, Some("New copy".into())).unwrap();
+        assert_eq!(
+            r.promo.plan.scenes[0].motion_prompt,
+            "Slow push-in. A caption reading \"New copy\" sits at the bottom of the frame, crisp and unchanged.",
+            "書き換え後の文と、y_ratio から決まる実効の位置 (下半分 = bottom)"
+        );
+        // 保存された promo.json と scenes.md も同じ。
         assert_scenes_md_matches(&dir);
     }
 

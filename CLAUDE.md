@@ -76,8 +76,16 @@ cd app && npx vitest run && npm run build    # frontend の単体テストと型
 cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 ```
 
-## 現状 (2026-10-03)
+## 現状 (2026-10-15)
 
+- **2026-10-15 の着地 = rev65** (main、配布物には未搭載): **焼いた見出しの引用 1 文 (`A caption reading "…" sits at the top|bottom …`) は Rust だけが書く** (`promo_core::plan::set_caption_line`、契約 `Scene.motion_prompt.caption_line`)。
+  実際に焼けた時だけ、焼いた文と実効の位置で入れる (生成と焼き直しの 2 か所)。rev62 は LLM に書かせ、焼いていない run の全シーンに「下に見出し」と入っていた。
+  同日の「見出しが出ない・はめ込みが大きい」は設定の見出しの焼き込み OFF が原因 (焼かないと帯を空けず 0.68 → 0.78)。
+- **2026-10-15 の着地 = rev64** (main、配布物には未搭載): **CLI のモデル名は種類ごとに覚える** (`CliSettings.modelByKind`、契約 `CliSpec.frontend_model_memory`)。backend へは今の種類の分だけ送る。
+  以前は 1 つの欄を共有し、claude 用の `opus` が agy に渡って `invalid model selection` で落ちた。旧形式の `model` は保存時の種類の分にだけ引き継ぐ — **既に agy の欄に `opus` が残っている環境は 1 度手で消す**。agy の名前は `agy models` の ID。
+- **2026-10-15 の着地 = rev63** (main、配布物には未搭載): **agy にだけ**本文の後ろに「読み取りは `list_dir` / `find_by_name` / `view_file` / `grep_search`、`run_command` とシェルは使わない」を足す (`cli_runner::agy::AGY_TOOL_GUIDANCE`、契約 `IsolationGuarantee.watchdog.prompt_guidance`)。
+  起点はツールの失敗が無いのに agy が `run_command Get-ChildItem` を選んで見張りに止まった実機。**誘導であって予防ではない** — 見張りは変えない。**live 1 回で通しが成功** (2026-10-15 16:54〜17:02、run `20261015-075926`): 構成の run で `view_file` が 4 回 ERROR になってもシェルへ逃げなかった (rev48 の引き金と同じ形)。1 回なので効き目の証明ではない。
+  同日の claude の `OAuth session expired` は**アプリの外** (CLI の refresh token が 10-05 に期限切れ。端末で `claude` → `/login`)。failures.md 末尾。
 - **2026-10-15 の着地 = rev62** (main、配布物には未搭載): `motion_prompt` を MiniMax H3 オムニモーダル I2VA 完全準拠に。
   公式アライメントヘッダー (`For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.`) +
   3 大フィールド (`integrated_multimodal_description: [Shot 1]` / `overall_soundscape:` / `non_diegetic_music:`) を指示および Rust が自動補完 (`format_h3_motion_prompts`)。
@@ -101,7 +109,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   winget は PR #434054 (0.1.1) のマージ後に `wingetcreate update`。版番号 3 か所 + `Cargo.lock` は**タグの後に**上げた —
   配布物は CI の `Sync app version to tag` が `tauri.conf.json` をタグに揃えるので 0.1.2 で出ている。
   次のタグを打つ時の手順: 版番号 → タグ `vX.Y.Z` → CI (draft、3 OS) → 説明を確認 → publish → tap の `version` / `sha256` (Release API の `digest`) → `wingetcreate update` (マージ後)。
-- **rev54〜61 は main にあるが配布物には乗っていない** (v0.1.2 は rev53 まで)。次のタグで乗る — rev56 (コンソールの窓) はその配布物で確かめる。
+- **rev54〜65 は main にあるが配布物には乗っていない** (v0.1.2 は rev53 まで)。次のタグで乗る — rev56 (コンソールの窓) はその配布物で確かめる。
 - **はめ込みの大きさは等倍で頭打ち、越えるのは人がつまみを動かした時だけ** (rev57、2026-10-03 ユーザー報告「0.70 以上拡大できない」)。
   つまみは実効の大きさを指し、等倍に目盛り、越えた分は「拡大 (ぼやける)」(`PlateOverride.allow_upscale`、等倍は `compose::native_screen_ratio`)。
   フラグの無い以前の run は焼き直しても変わらない。**Tauri の実画面でユーザーが確認済み (2026-10-03)。**
@@ -140,7 +148,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   (書いてあるのに入らない、を避ける)。次の版は `wingetcreate update Outcasts.AppPromoVideo --version <V> --urls <MSI URL>` →
   ローカル生成 → `InstallerLocale` が混ざっていたら消す → `wingetcreate submit --token "$(gh auth token)"`。提出前に
   `gh repo sync betyourluck/winget-pkgs --source microsoft/winget-pkgs --branch master`。
-- **spec 01 は Phase 0〜E 着地、rev61 まで反映済み (rev27〜29 は試行)。** crates 204 green / vitest 146 / backend 31 green・clippy clean。
+- **spec 01 は Phase 0〜E 着地、rev65 まで反映済み (rev27〜29 は試行)。** crates 212 green / vitest 149 / backend 32 green・clippy clean。
 - **配布ビルドの Windows で子プロセスのコンソールの窓を出さない** (rev56、ユーザー報告: v0.1.2 の exe で「claude」の空の窓)。
   起動を `cli_runner::no_window` に一本化し、付け忘れはテストが落とす。**窓が出ないことは次の配布物でユーザーが確認する** (dev では症状が出ない)。
 - **`scenes.md` はいつも `promo.json` と揃えて書く** (rev54、`pipeline::export::write_run_files`)。表の snapshot 番号は合成が実際に貼るもの
@@ -274,7 +282,7 @@ rev14 のコミット `5929f93` に巻き込んだ。実害は無いが粒度が
 
 ## 再開の手順
 
-1. `cargo test --workspace` (204 green) と `cd app && npx vitest run && npm run build` (146 green) で足場を確認。**並べて走らせるなら絶対パス** (cwd が `app/src-tauri` に残る事故を 4 回踏んだ)。
+1. `cargo test --workspace` (212 green) と `cd app && npx vitest run && npm run build` (149 green) で足場を確認。**並べて走らせるなら絶対パス** (cwd が `app/src-tauri` に残る事故を 4 回踏んだ)。
    `cd /abs && …` は**そのコマンド**を守るだけで、ずれた cwd は次のコマンドへ残る — **並べる全部に `cd` を書く** (2026-09-14)。
    同日、この処方を書いた**後にも** `cd` の書き忘れで 3 回空振りした (vitest 2 回・backend の Red 1 回。どれも「0 本選ばれた / 何も出ない」で、落ちたようには見えない)。
    **送る前に、並べた各コマンドの先頭が `cd /abs &&` かを見る。** 出力が空・0 本の時は、結果ではなく cwd を疑う。

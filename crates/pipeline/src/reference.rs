@@ -66,6 +66,14 @@ impl CaptionSpec {
         }
     }
 
+    /// `motion_prompt` に書く見出しの位置 (rev65)。焼く位置と同じ `effective_position` から取る。
+    pub fn caption_side(&self) -> promo_core::plan::CaptionSide {
+        match self.effective_position() {
+            CaptionPosition::Top => promo_core::plan::CaptionSide::Top,
+            CaptionPosition::Bottom => promo_core::plan::CaptionSide::Bottom,
+        }
+    }
+
     /// 焼き込みの指定を `Caption` に組み立てる (rev17)。
     ///
     /// **生成と焼き直しの両方がここを通る。** rev14 で `y_ratio` を足したとき、生成側には入れたが
@@ -354,12 +362,16 @@ pub async fn generate_references(
             }
         };
         // 見出し (opt-in): 生成・合成の後に copy_text を焼く。失敗は焼かずに続行 (画像は残す)。
+        let mut burned: Option<promo_core::plan::CaptionSide> = None;
         let bytes = match (&bytes, &font_data) {
             (Ok(png), Some((font, _))) if !scene.copy_text.trim().is_empty() => {
                 let spec = spec.as_ref().expect("font_data があるなら spec もある");
                 let cap = spec.to_caption(&scene.copy_text, font);
                 match burn_caption(png, &cap) {
-                    Ok(b) => Ok(b),
+                    Ok(b) => {
+                        burned = Some(spec.caption_side());
+                        Ok(b)
+                    }
                     Err(e) => {
                         progress(format!("scene {}: 見出しを焼けません ({e}) → 画像はそのまま", scene.scene_id));
                         bytes
@@ -368,6 +380,9 @@ pub async fn generate_references(
             }
             _ => bytes,
         };
+        // rev65: 見出しの引用 1 文は実際に焼けた時だけ、焼いた位置で (契約 `Scene.motion_prompt.caption_line`)。
+        scene.motion_prompt =
+            promo_core::plan::set_caption_line(&scene.motion_prompt, burned.map(|side| (scene.copy_text.as_str(), side)));
         let result = match bytes {
             Ok(bytes) => {
                 let name = reference_image_name(scene.scene_id, 1);
@@ -533,6 +548,44 @@ mod tests {
 
     fn rand() -> u128 {
         std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+    }
+
+    /// rev65: 見出しの引用 1 文は**実際に焼けた時だけ**、焼いた位置で入る (契約 `Scene.motion_prompt.caption_line`)。
+    /// 2026-10-15 実データ: 焼き込み OFF の run で、LLM の書いた「下に見出し」が 3 シーンとも残っていた。
+    #[tokio::test]
+    async fn the_caption_line_follows_what_was_actually_burned() {
+        let llm = "Slow push-in. A typography caption reading \"Old. Text.\" is displayed at the bottom.";
+        let c = cfg(Provider::Gemini);
+        // 焼かない run: LLM の文は外れる。
+        let fake = Fake { calls: Mutex::new(vec![]), fail_on: None };
+        let mut p = plan();
+        p.scenes.iter_mut().for_each(|s| s.motion_prompt = llm.into());
+        let dir = out_dir();
+        let job = RefJob { cfg: &c, api_key: "k", out_dir: &dir, palette: &[], caption: None, max_scenes: None, seed_base: 0, requested_refs: None, plate_mode: PlateMode::default(), caption_overrides: &Default::default(), plate_overrides: &Default::default() };
+        generate_references(&fake, &job, &mut p, &refs(0), &mut |_| {}).await;
+        for s in &p.scenes {
+            assert_eq!(s.motion_prompt, "Slow push-in.", "焼いていないのに見出しの文が残っている");
+        }
+        // 焼く run: 焼いた文と実効の位置 (y_ratio が上半分なら top) で 1 文。
+        let Some(font) = image_gen::fonts::system_font_dirs()
+            .into_iter()
+            .flat_map(|d| ["arial.ttf", "meiryo.ttc", "DejaVuSans.ttf"].map(|f| d.join(f)))
+            .find(|p| p.is_file())
+        else {
+            eprintln!("システムフォントが見つからないので焼く側は飛ばします");
+            return;
+        };
+        let spec = CaptionSpec { font_path: font.to_string_lossy().into(), font_index: 0, size_ratio: 0.05, position: CaptionPosition::Bottom, color: None, y_ratio: Some(0.1) };
+        let fake = Fake { calls: Mutex::new(vec![]), fail_on: Some(2) };
+        let mut p = plan();
+        p.scenes.iter_mut().for_each(|s| s.motion_prompt = llm.into());
+        let dir = out_dir();
+        let job = RefJob { caption: Some(&spec), out_dir: &dir, ..job };
+        generate_references(&fake, &job, &mut p, &refs(0), &mut |_| {}).await;
+        let line = "Slow push-in. A caption reading \"c\" sits at the top of the frame, crisp and unchanged.";
+        assert_eq!(p.scenes[0].motion_prompt, line);
+        assert_eq!(p.scenes[1].motion_prompt, "Slow push-in.", "生成に失敗したシーンは焼いていない");
+        assert_eq!(p.scenes[2].motion_prompt, line);
     }
 
     #[tokio::test]

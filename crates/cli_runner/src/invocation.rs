@@ -218,8 +218,8 @@ pub fn build_invocation(spec: &CliSpec, task: &TaskSpec<'_>) -> CliInvocation {
             CliInvocation {
                 program: spec.executable.clone(),
                 args,
-                // **本文は argv に載せず stdin の NDJSON で運ぶ。**
-                prompt: crate::agy::user_message_line(task.prompt),
+                // **本文は argv に載せず stdin の NDJSON で運ぶ。** 後ろに使うツールの指示を足す (rev63)。
+                prompt: crate::agy::user_message_line(&format!("{}{}", task.prompt, crate::agy::AGY_TOOL_GUIDANCE)),
                 transport: PromptTransport::Stdin,
                 cwd: task.scratch_dir.to_path_buf(),
                 structured,
@@ -329,6 +329,28 @@ mod tests {
         }
     }
 
+    /// rev63: agy の時だけ、本文の後ろに「読み取りは list_dir / find_by_name / view_file / grep_search、
+    /// run_command は使わない」を足す。2026-10-15 実機: **ツールの失敗が無いのに** agy が最初の手で
+    /// `run_command Get-ChildItem` を選び、見張りに止められた (rev42・rev48 の「逃げる理由」が無い逃げ)。
+    /// 名指すツールは見張りの許可リストと食い違わないこと (許可していないツールを勧めない)。
+    #[test]
+    fn agy_prompt_names_read_tools_and_forbids_run_command() {
+        let inv = build_invocation(&spec(CliKind::Agy), &task(None));
+        let v: Value = serde_json::from_str(inv.prompt.trim_end()).unwrap();
+        let body = v["message"]["content"].as_str().unwrap();
+        assert!(body.starts_with("SECRET PROMPT BODY"), "本文が先頭に残る: {body:?}");
+        for t in ["list_dir", "find_by_name", "view_file", "grep_search"] {
+            assert!(body.contains(t), "{t} を名指していない: {body:?}");
+            assert!(crate::agy::AGY_ALLOWED_TOOLS.contains(&t), "{t} は見張りの許可リストに無い");
+        }
+        assert!(body.contains("run_command"), "run_command を使わない旨が無い: {body:?}");
+        // 他の kind には足さない (agy のツール名は claude / aider / custom に意味が無い)。
+        for kind in [CliKind::Claude, CliKind::Aider, CliKind::Custom] {
+            let inv = build_invocation(&spec(kind), &task(None));
+            assert!(!inv.prompt.contains("run_command") && !inv.prompt.contains("list_dir"), "{kind:?}: {:?}", inv.prompt);
+        }
+    }
+
     /// 全 kind: 本文は argv に載らない (査読 1 で aider の例外を撤去)。
     #[test]
     fn prompt_body_never_appears_in_argv_for_any_kind() {
@@ -399,10 +421,10 @@ mod tests {
         let i = a.iter().position(|x| x == "--add-dir").unwrap();
         assert_eq!(a[i + 1], "D:/proj");
         assert_ne!(inv.cwd, PathBuf::from("D:/proj"));
-        // 本文は stdin の NDJSON。
+        // 本文は stdin の NDJSON。後ろにツールの指示が付く (rev63)。
         let v: Value = serde_json::from_str(inv.prompt.trim_end()).unwrap();
         assert_eq!(v["event"], "user");
-        assert_eq!(v["message"]["content"], "SECRET PROMPT BODY");
+        assert_eq!(v["message"]["content"], format!("SECRET PROMPT BODY{}", crate::agy::AGY_TOOL_GUIDANCE));
     }
 
     #[test]

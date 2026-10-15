@@ -13,7 +13,7 @@ describe("agy の設定", () => {
   });
 
   it("kind がそのまま backend へ渡る", () => {
-    const b = toBackendCli({ kind: "agy", executable: "", extraArgs: "", model: "", timeoutSecs: 600, maxTurns: 12, oauthOnly: false });
+    const b = toBackendCli({ kind: "agy", executable: "", extraArgs: "", modelByKind: { claude: "", aider: "", agy: "", custom: "" }, timeoutSecs: 600, maxTurns: 12, oauthOnly: false });
     expect(b.kind).toBe("agy");
     expect(b.executable).toBe("agy");
   });

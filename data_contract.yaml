@@ -36,6 +36,7 @@ CliSpec:
   extra_args: Vec<String>           # ユーザー追加引数 (例 --dangerously-skip-permissions)。kind 既定引数の後ろに付く
   timeout_secs: u64                 # 既定 600。最小 30 (それ未満は 30 に切り上げ)
   model: Option<String>             # claude: --model へ。aider: --model へ。custom: 無視
+  frontend_model_memory: "rev64 (2026-10-15)。**画面はモデル名を種類ごとに覚える** — localStorage apppromo.cli の `modelByKind: Record<CliKind, string>`。backend へは**今の種類の分だけ**を `model` として送る (`toBackendCli`)。モデル名の名前空間は CLI ごとに違う (claude = opus / sonnet、agy = `agy models` の ID 例 claude-opus-5-5-high) ので、1 つの欄を共有すると種類を替えた時に別の CLI の名前が飛ぶ (2026-10-15 実機: claude 用の `opus` が agy に渡り `invalid model selection`)。旧形式の `model` (文字列 1 つ) は**保存時の種類の分にだけ**引き継ぎ、他の種類は空 (既定のモデル)。画像生成の perProvider スロット (Kataribe spec 26) と同じ考え方"
 
 CliInvocation:                      # build_invocation の戻り。純粋 (プロセスを起動しない) — PoC で固定
   program: String
@@ -99,6 +100,7 @@ IsolationGuarantee:                 # **kind ごとに強さが違う**。2026-0
     escape_visible: "**止めた時、直前のツールの失敗を進捗に出しておく** (rev48)。agy が許可外のツールへ行くのは多くの場合『許可されたツールが失敗したから』で、失敗の理由 (hook の故障・パス不在) は agy の環境側にある。ToolNotAllowed の文言は変えない — 読み取りコマンドでも『書き換えが起きた可能性』と言うのは、見張りがコマンドの中身を判定しない (できない) ため"
     measured: "2026-09-12 初 live で実際に働いた — 構成タスクが `run_command (Get-ChildItem …snapshots)` に手を伸ばした瞬間に停止 (生ログの最終行が `ACTIVE run_command`。何も実行されていない)"
     escape_reason: "**なぜシェルに逃げたか**: スナップショットは app_data にあり `--add-dir` の外。`find_by_name` / `grep_search` は `--add-dir` のフォルダしか探さないので空振りし、シェルに落ちた。**逃げ道を塞ぐのではなく逃げる理由を消す** — rev42 で置き場を `--add-dir` に足した。見張りは厳格なまま (緩めると『確率の保証』に戻る)"
+    prompt_guidance: "rev63 (2026-10-15)。agy の時だけ本文の後ろに `cli_runner::agy::AGY_TOOL_GUIDANCE` を足す — list_dir / find_by_name / view_file / grep_search を名指し、run_command とシェルを使わない・ファイルを作らない。名指すツールは `allowed` に含まれること (テストで固定)。起点は**ツールの失敗が無いのに** agy が `run_command Get-ChildItem` を選んで止まった実機 (rev42・rev48 と違い逃げる理由が無かった)。**誘導であって予防ではない** — 見張りは変えない。claude / aider / custom には足さない"
     read_scope: "**agy の `--add-dir` は読み取りを縛らない** (2026-09-12 実測で確定)。同じ run の解析タスクは `--add-dir` の外にあるスナップショットを `view_file` で問題なく読めた。縛るのは探索ツールの既定の探索範囲だけ"
   ui: "設定で agy を選んでいる間、画面に常時警告を出す (既定は claude のまま)。文言はユーザー起草 (2026-09-12) — 『agy は CLI 側で書き込み系ツールを無効化できません。解析対象のリポジトリが書き換わる可能性があります。信頼できない / 他人のリポジトリには向けないでください。実行は検出後に強制停止しますが、予防ではありません。』"
 
@@ -235,8 +237,9 @@ Scene:                              # rev3 (2026-09-08、ユーザー FB「ス�
   snapshot_index: Option<u32>       # product が使うスナップショット (0 始まり、scene_prompt が一覧を示す)。範囲外は違反
   motion_prompt:                    # 空・非英語は違反
     type: "String。MiniMax H3 の I2VA (画像→動画・音響同時生成) 完全準拠プロンプト"
-    shape: "rev62 (MiniMax H3 オムニモーダル I2VA 完全準拠): I2VA ヘッダー (`For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.`) + 3大フィールド (`integrated_multimodal_description: [Shot 1]`, `overall_soundscape:`, `non_diegetic_music:`)。映像は最初の1コマを押さえ、1つのカメラワーク (種類+振れ幅+速さ) に加え、光の走り (specular gleam / rim light / bokeh) でスライドショー化を防ぐ。画面上の文字は `reading \"...\"` で保護し、ナレーションは `<d>[lang] ...</d>`。音響は操作音 (keyboard / mouse clicks)、音楽は世界観に同期したBGM"
+    shape: "rev62 (MiniMax H3 オムニモーダル I2VA 完全準拠): I2VA ヘッダー (`For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.`) + 3大フィールド (`integrated_multimodal_description: [Shot 1]`, `overall_soundscape:`, `non_diegetic_music:`)。映像は最初の1コマを押さえ、1つのカメラワーク (種類+振れ幅+速さ) に加え、光の走り (specular gleam / rim light / bokeh) でスライドショー化を防ぐ。見出しの引用は焼いた時だけ Rust が書く (下の caption_line、rev65)。ナレーションは `<d>[lang] ...</d>`。音響は操作音 (keyboard / mouse clicks)、音楽は世界観に同期したBGM"
     screen_lock: "product カットは検査通過後に `promo_core::plan::SCREEN_LOCK` を足す (`format_h3_motion_prompts`)。I2VA アライメント行や音響フィールドが漏れていた場合も Rust が構造的に補完する。motion_prompt そのものに入るので画面・scenes.md・コピーが一致し、人は消せる"
+    caption_line: "rev65 (2026-10-15)。**焼いた見出しの引用 1 文は Rust だけが書く** (`promo_core::plan::set_caption_line`)。H3 の手引き 4.5 は『実際に画面に見えている文字』を英語の二重引用符で書くとする。見出しを焼くか・どこに焼くかは**構成の後 (参照画像の段) で決まる**ので、構成の段の LLM には書けない — rev62 は LLM に書かせ、焼いていない run (設定 OFF) の 6 シーン全部に `caption reading \"…\" is displayed … at the bottom` が入った (焼く位置は top)。**実際に焼けた時だけ** `A caption reading \"<焼いた文>\" sits at the <top|bottom> of the frame, crisp and unchanged.` を integrated_multimodal_description の中 (SCREEN_LOCK の前、無ければ説明の末尾) に入れ、焼かなかった時は入れない。入れる前に既存の `caption reading \"` を含む文を全部外す (LLM の書いた文も、前回 Rust が入れた文も)。位置は見出しの実効位置 (`CaptionSpec::effective_position`)。呼ぶのは焼く経路の 2 か所 — `pipeline::reference::generate_references` と app の `reburn_caption` (コピー文の書き換えもここ)。構成の段は `format_h3_motion_prompts` が None で呼ぶ (LLM の文を外す)。LLM への指示から見出しの文を書く規則を外し、書かないよう伝える"
   scene_id: u32                     # 1 始まり連番
   duration_seconds: u32             # 4〜10 (rev59: MiniMax H3 の最短 4 秒に合わせた。以前は 3)。15 秒の動画は 3 シーン
   shot_type: String                 # Close-up / Medium / Wide / Screen recording 等 (自由文)

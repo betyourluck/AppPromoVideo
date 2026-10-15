@@ -4,6 +4,7 @@ import {
   migrateImageGenSettings,
   pickCaptionFont,
   toBackendCaption,
+  migrateCliSettings,
   migrateProjectSettings,
   splitArgs,
   toBackendCli,
@@ -13,7 +14,7 @@ import {
 
 describe("toBackendCli", () => {
   it("引数を空白で分け、空の model は null、timeout は 30 未満を切り上げる", () => {
-    const b = toBackendCli({ kind: "claude", executable: " claude ", extraArgs: "  --dangerously-skip-permissions   --x ", model: "", timeoutSecs: 5, maxTurns: 0, oauthOnly: true });
+    const b = toBackendCli({ kind: "claude", executable: " claude ", extraArgs: "  --dangerously-skip-permissions   --x ", modelByKind: { claude: "", aider: "", agy: "", custom: "" }, timeoutSecs: 5, maxTurns: 0, oauthOnly: true });
     expect(b.oauth_only).toBe(true);
     expect(b.executable).toBe("claude");
     expect(b.extra_args).toEqual(["--dangerously-skip-permissions", "--x"]);
@@ -22,8 +23,38 @@ describe("toBackendCli", () => {
     expect(b.max_turns).toBe(12);
   });
   it("空の executable は kind の既定名に倒す", () => {
-    expect(toBackendCli({ kind: "aider", executable: "", extraArgs: "", model: "m", timeoutSecs: 600, maxTurns: 3, oauthOnly: false }).executable).toBe("aider");
+    expect(toBackendCli({ kind: "aider", executable: "", extraArgs: "", modelByKind: { claude: "", aider: "m", agy: "", custom: "" }, timeoutSecs: 600, maxTurns: 3, oauthOnly: false }).executable).toBe("aider");
     expect(splitArgs("")).toEqual([]);
+  });
+});
+
+/**
+ * rev64: モデル名は種類ごとに覚える。2026-10-15 実機 — claude 用に入れた `opus` が、種類を agy に替えた後も
+ * 1 つの欄に残って agy に渡り、`invalid model selection` で落ちた (名前空間が CLI ごとに違う)。
+ */
+describe("CLI のモデル名は種類ごと (rev64)", () => {
+  const base = { executable: "", extraArgs: "", timeoutSecs: 600, maxTurns: 12, oauthOnly: false };
+  const byKind = { claude: "opus", aider: "", agy: "", custom: "" };
+
+  it("backend へは今の種類の分だけを送る — claude の opus は agy に渡らない", () => {
+    expect(toBackendCli({ ...base, kind: "claude", modelByKind: byKind }).model).toBe("opus");
+    expect(toBackendCli({ ...base, kind: "agy", modelByKind: byKind }).model).toBeNull();
+    expect(toBackendCli({ ...base, kind: "agy", modelByKind: { ...byKind, agy: " claude-opus-5-5-high " } }).model).toBe("claude-opus-5-5-high");
+  });
+
+  it("旧形式の model (1 つの文字列) は保存時の種類の分にだけ引き継ぐ", () => {
+    const m = migrateCliSettings({ kind: "claude", executable: "claude", model: "opus" });
+    expect(m.modelByKind).toEqual({ claude: "opus", aider: "", agy: "", custom: "" });
+    const a = migrateCliSettings({ kind: "agy", executable: "agy", model: "opus" });
+    expect(a.modelByKind).toEqual({ claude: "", aider: "", agy: "opus", custom: "" });
+  });
+
+  it("新形式はそのまま読み、欠けた種類・文字列でない値は空に倒す", () => {
+    const m = migrateCliSettings({ kind: "agy", modelByKind: { claude: "sonnet", agy: "gemini-3.8-flash-high", aider: 3 } });
+    expect(m.modelByKind).toEqual({ claude: "sonnet", aider: "", agy: "gemini-3.8-flash-high", custom: "" });
+    // 新形式があれば旧 model は見ない (二重に持たない)。
+    expect(migrateCliSettings({ kind: "claude", model: "opus", modelByKind: { claude: "" } }).modelByKind.claude).toBe("");
+    expect(migrateCliSettings(null).modelByKind).toEqual({ claude: "", aider: "", agy: "", custom: "" });
   });
 });
 

@@ -85,8 +85,8 @@ pub struct Scene {
     #[serde(default)]
     pub snapshot_index: Option<u32>,
     /// English, structured for MiniMax H3 omni-modal image-to-video (I2VA): includes `integrated_multimodal_description: [Shot 1]`
-    /// (anchor first frame to <Picture 1>, ONE camera move with amplitude/speed, lighting gleam/reflections, on-screen text in quotes,
-    /// voiceover in `<d>[lang] ...</d>`), `overall_soundscape:` (keyboard/mouse clicks), and `non_diegetic_music:`.
+    /// (anchor first frame to <Picture 1>, ONE camera move with amplitude/speed, lighting gleam/reflections,
+    /// voiceover in `<d>[lang] ...</d>`; no caption sentence, the app adds it when it burns one), `overall_soundscape:` (keyboard/mouse clicks), and `non_diegetic_music:`.
     #[serde(default)]
     pub motion_prompt: String,
     /// 4 to 10 seconds (the video model makes clips of at least 4 seconds).
@@ -561,8 +561,98 @@ fn format_h3_scene_prompt(
 /// 検査を通った plan の各シーンの `motion_prompt` を MiniMax H3 オムニモーダル (I2VA) 公式形式に整える (rev62)。
 pub fn format_h3_motion_prompts(plan: &mut ScenePlan, summary: Option<&AnalyzedSummary>) {
     for s in &mut plan.scenes {
-        s.motion_prompt = format_h3_scene_prompt(&s.motion_prompt, s.cut_kind, summary);
+        // rev65: 見出しの文は焼いた時に Rust が入れる (`set_caption_line`)。構成の段では LLM の書いた文を外す。
+        s.motion_prompt = set_caption_line(&format_h3_scene_prompt(&s.motion_prompt, s.cut_kind, summary), None);
     }
+}
+
+/// 焼いた見出しの位置 (rev65)。promo_core は image_gen に依存しないので、ここで持つ。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CaptionSide {
+    Top,
+    Bottom,
+}
+
+/// 見出しの文を見分ける印。LLM の書いた文 (rev62) も、Rust が入れた文もこれを含む。
+const CAPTION_MARK: &str = "caption reading \"";
+
+/// 焼いた見出しの引用 1 文を入れ直す (rev65、契約 `Scene.motion_prompt.caption_line`)。
+///
+/// H3 の手引き (4.5) は「実際に画面に見えている文字」を英語の二重引用符で書くとする。見出しを焼くか・どこに焼くかは
+/// 構成の後で決まるので、LLM には書けない (rev62 は書かせ、焼いていない run の全シーンに「下に見出し」と入った)。
+/// - 既存の見出しの文 (`caption reading "` を含む文) を**全部外してから**、
+/// - `caption` が Some で文が空でなければ、`integrated_multimodal_description` の中 (SCREEN_LOCK の前、無ければ説明の末尾) に 1 文入れる。
+///
+/// 素の文 (rev62 より前の run) にもそのまま効く。
+pub fn set_caption_line(motion_prompt: &str, caption: Option<(&str, CaptionSide)>) -> String {
+    let mut out = strip_caption_lines(motion_prompt);
+    let Some((text, side)) = caption else { return out };
+    let text = caption_quote_text(text);
+    if text.is_empty() {
+        return out;
+    }
+    let side = match side {
+        CaptionSide::Top => "top",
+        CaptionSide::Bottom => "bottom",
+    };
+    let line = format!("A caption reading \"{text}\" sits at the {side} of the frame, crisp and unchanged.");
+    // 説明の範囲 = 音響の欄の手前まで (H3 の形でなければ全体)。
+    let desc_end = out.find("\n\noverall_soundscape:").or_else(|| out.find("\n\nnon_diegetic_music:")).unwrap_or(out.len());
+    match out[..desc_end].find(SCREEN_LOCK) {
+        Some(at) => out.insert_str(at, &format!("{line} ")),
+        None => {
+            let head = out[..desc_end].trim_end().len();
+            let sep = if head == 0 { "" } else { " " };
+            out.replace_range(head..desc_end, &format!("{sep}{line}"));
+        }
+    }
+    out
+}
+
+/// 引用の中身: 改行は空白に、ASCII の二重引用符は “ ” に (引用が途中で閉じないように)。
+fn caption_quote_text(text: &str) -> String {
+    let mut open = true;
+    let mut s = String::new();
+    for c in text.trim().chars() {
+        match c {
+            '"' => {
+                s.push(if open { '“' } else { '”' });
+                open = !open;
+            }
+            '\r' => {}
+            '\n' => s.push(' '),
+            c => s.push(c),
+        }
+    }
+    s
+}
+
+/// `caption reading "` を含む文を外す。文の始まりは直前の「. 」か「] 」か行頭、終わりは引用を閉じた後の最初の「.」
+/// (引用の中のピリオドで切らない)。後ろの空白 1 つも一緒に外す。
+fn strip_caption_lines(s: &str) -> String {
+    let mut out = s.to_string();
+    while let Some(mark) = out.find(CAPTION_MARK) {
+        let before = &out[..mark];
+        let start = [before.rfind(". ").map(|i| i + 2), before.rfind("] ").map(|i| i + 2), before.rfind('\n').map(|i| i + 1)]
+            .into_iter()
+            .flatten()
+            .max()
+            .unwrap_or(0);
+        let quote_open = mark + CAPTION_MARK.len();
+        let quote_close = out[quote_open..].find('"').map(|i| quote_open + i + 1).unwrap_or(out.len());
+        let mut end = out[quote_close..].find('.').map(|i| quote_close + i + 1).unwrap_or(out.len());
+        // 次の文との間の空白 1 つ (改行は残す)。
+        if out[end..].starts_with(' ') {
+            end += 1;
+        }
+        // 前の文との間に残った空白も、文が末尾だった時だけ落とす。
+        let mut start = start;
+        if end >= out.len() || out[end..].starts_with('\n') {
+            start = out[..start].trim_end_matches(' ').len();
+        }
+        out.replace_range(start..end, "");
+    }
+    out
 }
 
 /// 既存の呼び出し元への互換性 (rev58 -> rev62)。
@@ -794,6 +884,71 @@ A calm desk, slow pan right.
         let s0_once = s0.clone();
         format_h3_motion_prompts(&mut p, Some(&summary));
         assert_eq!(&p.scenes[0].motion_prompt, &s0_once, "2 度呼んでも二重にならない");
+    }
+
+    /// rev65: 2026-10-15 実データ (run 20261015-075926 scene 1)。見出しの焼き込みは OFF なのに、構成の段の LLM が
+    /// 「下に見出しが表示されている」と書いた (焼く設定の位置は top)。引用の中にピリオドがある。
+    const LLM_CAPTION_PROMPT: &str = "For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.\n\n\
+integrated_multimodal_description: [Shot 1] The camera pushes in with small amplitude at slow speed. \
+A typography caption reading \"Stop chatting with solo bots. Orchestrate your AI village.\" is displayed in sleek glowing font at the bottom. \
+A professional voice (S1) says in an off-screen voiceover: <d>[English] Stop chatting.</d> while lips remain closed. \
+The app screen keeps its exact interface and text, sharp and legible, lying flat on the backdrop; only the camera, the light and the background move.\n\n\
+overall_soundscape: Soft clicks.\n\nnon_diegetic_music: Synth pulses.";
+
+    fn desc_of(p: &str) -> &str {
+        let start = p.find("integrated_multimodal_description:").unwrap();
+        let end = p.find("\n\noverall_soundscape:").unwrap();
+        &p[start..end]
+    }
+
+    #[test]
+    fn caption_line_is_removed_when_nothing_was_burned() {
+        let out = set_caption_line(LLM_CAPTION_PROMPT, None);
+        assert!(!out.contains("caption reading"), "焼いていないのに見出しの文が残っている: {out}");
+        assert!(!out.contains("Orchestrate your AI village"), "引用の途中のピリオドで切れて残骸が残る");
+        // 前後の文はそのまま残る。
+        assert!(out.contains("The camera pushes in with small amplitude at slow speed. A professional voice (S1)"), "{out}");
+        assert!(out.contains(SCREEN_LOCK) && out.contains("overall_soundscape: Soft clicks."));
+        assert!(out.starts_with(H3_I2VA_HEADER));
+    }
+
+    #[test]
+    fn caption_line_states_the_burned_text_and_side_before_the_screen_lock() {
+        let out = set_caption_line(LLM_CAPTION_PROMPT, Some(("Stop chatting with solo bots.", CaptionSide::Top)));
+        let d = desc_of(&out);
+        let line = "A caption reading \"Stop chatting with solo bots.\" sits at the top of the frame, crisp and unchanged.";
+        assert_eq!(out.matches("caption reading").count(), 1, "LLM の文は外して Rust の 1 文だけ: {out}");
+        assert!(d.contains(line), "{d}");
+        assert!(d.find(line).unwrap() < d.find(SCREEN_LOCK).unwrap(), "SCREEN_LOCK の前に入る: {d}");
+        assert!(!out.contains("at the bottom"), "LLM の書いた位置が残っている");
+        // 書き直し (文と位置が変わる) で置き換わり、2 度目で増えない。
+        let again = set_caption_line(&out, Some(("New copy", CaptionSide::Bottom)));
+        assert_eq!(again.matches("caption reading").count(), 1, "{again}");
+        assert!(again.contains("A caption reading \"New copy\" sits at the bottom of the frame"));
+        assert_eq!(set_caption_line(&again, Some(("New copy", CaptionSide::Bottom))), again, "同じ指定なら変わらない");
+        // 焼かなくなったら外れる。
+        assert!(!set_caption_line(&again, None).contains("caption reading"));
+    }
+
+    #[test]
+    fn caption_line_works_on_plain_prompts_and_sanitizes_the_quote() {
+        // rev62 より前の run (H3 の形でない素の文) にも入る。
+        let out = set_caption_line("Slow push-in.", Some(("言う \"二重\"\n改行", CaptionSide::Bottom)));
+        assert_eq!(out, "Slow push-in. A caption reading \"言う “二重” 改行\" sits at the bottom of the frame, crisp and unchanged.");
+        // 空の文は焼かれないので入れない。
+        assert_eq!(set_caption_line("Slow push-in.", Some(("  ", CaptionSide::Top))), "Slow push-in.");
+    }
+
+    /// 構成の段 (見出しを焼くかまだ決まっていない) は LLM の書いた見出しの文を外す。
+    #[test]
+    fn h3_formatting_drops_the_llm_caption_line() {
+        let mut p = plan();
+        p.scenes[0].cut_kind = CutKind::Product;
+        p.scenes[0].snapshot_index = Some(0);
+        p.scenes[0].motion_prompt = LLM_CAPTION_PROMPT.into();
+        format_h3_motion_prompts(&mut p, None);
+        assert!(!p.scenes[0].motion_prompt.contains("caption reading"), "{}", p.scenes[0].motion_prompt);
+        assert!(p.scenes[0].motion_prompt.contains("A professional voice (S1)"));
     }
 
     #[test]

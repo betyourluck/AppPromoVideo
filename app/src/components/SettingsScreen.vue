@@ -18,6 +18,7 @@ import Icon from "./Icon.vue";
 import Rich from "./Rich.vue";
 import Switch from "./Switch.vue";
 import {
+  CLI_MODEL_PLACEHOLDER,
   DEFAULT_BASE_URL,
   DEFAULT_CLI_EXE,
   DEFAULT_MODEL,
@@ -213,7 +214,8 @@ function close() {
         </label>
         <label class="field">
           <span>{{ t('settings.cliModel') }}</span>
-          <input v-model="store.cli.model" placeholder="sonnet / haiku / opus" @change="store.persist()" />
+          <!-- 種類ごとに覚える (rev64)。種類を替えると、その種類で前に使った名前に戻る。 -->
+          <input v-model="store.cli.modelByKind[store.cli.kind]" :placeholder="CLI_MODEL_PLACEHOLDER[store.cli.kind]" @change="store.persist()" />
         </label>
         <div class="grid-row">
           <label class="field">

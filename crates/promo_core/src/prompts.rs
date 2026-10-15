@@ -105,8 +105,8 @@ pub fn scene_prompt(
               - ONE primary camera move (push in, pull out, zoom in, zoom out, pan left, pan right, truck left, truck right, \
               tilt up, tilt down, pedestal up, pedestal down, arc shot, tracking shot, static shot) qualified with amplitude and speed \
               (e.g. `the camera pushes in with small amplitude at slow speed`). Vary camera moves across scenes.\n\
-              - For `copy_text`, protect visible on-screen text with verbatim quotes (e.g. `A typography caption reading \"...\" is displayed`) \
-              and add off-screen narration (e.g. `A professional voice (S1) says in an off-screen voiceover: <d>[{lang}] ...</d> while lips remain closed`).\n\
+              - Do not describe captions or titles on the frame; the app adds a sentence quoting the caption only when it burns one into the still. \
+              Add off-screen narration of `copy_text` (e.g. `A professional voice (S1) says in an off-screen voiceover: <d>[{lang}] ...</d> while lips remain closed`).\n\
               - For `product` cuts, the app automatically appends a screen lock sentence to keep interface pixels exact; \
               put visual motion in the lighting gleam, reflections, and camera move.\n\
            2) `overall_soundscape: ...`\n\
@@ -203,6 +203,15 @@ mod tests {
         assert!(p.contains("Do not modify any file"));
         // 2026-09-08 live: mood / ui_traits が日本語で返り、そのまま画像モデルへ渡った → 英語に固定。
         assert!(p.contains("`visual_identity` (`mood`, `ui_traits`, `palette`) in English"));
+    }
+
+    /// rev65: 見出しの引用 1 文は焼いた時に Rust が入れる。LLM に書かせると、焼かない run・違う位置でも
+    /// 「見出しが表示されている」と書く (2026-10-15 実データ: 6 シーン全部に `caption reading … at the bottom`、実際は焼いていない)。
+    #[test]
+    fn scene_prompt_leaves_the_caption_line_to_the_app() {
+        let p = scene_prompt(&summary(), "cinematic", 15, Aspect::Landscape, Language::En, &[], PlateMode::Frontal);
+        assert!(!p.contains("typography caption reading"), "見出しの文を書けと指示している");
+        assert!(p.contains("Do not describe captions or titles"), "書かないよう伝えていない");
     }
 
     #[test]

@@ -18,7 +18,12 @@ export interface CliSettings {
   executable: string;
   /** 空白区切りの追加引数 (例 --dangerously-skip-permissions)。 */
   extraArgs: string;
-  model: string;
+  /**
+   * モデル名は**種類ごとに**覚える (rev64、契約 `CliSpec.frontend_model_memory`)。名前空間が CLI ごとに違う —
+   * claude は opus / sonnet、agy は `agy models` の ID (claude-opus-5-5-high など)。1 つの欄を共有していた時は、
+   * 種類を替えると別の CLI の名前が飛んだ (2026-10-15 実機: claude 用の opus が agy に渡り `invalid model selection`)。
+   */
+  modelByKind: Record<CliKind, string>;
   timeoutSecs: number;
   maxTurns: number;
   /** 子 CLI に環境変数の鍵を渡さず、claude auth login の OAuth を使わせる。 */
@@ -26,6 +31,20 @@ export interface CliSettings {
 }
 
 export const DEFAULT_CLI_EXE: Record<CliKind, string> = { claude: "claude", aider: "aider", agy: "agy", custom: "" };
+
+/** モデル欄の入力例 (種類ごと)。agy は `agy models` の ID (2026-10-15 実測)。 */
+export const CLI_MODEL_PLACEHOLDER: Record<CliKind, string> = {
+  claude: "opus / sonnet / haiku",
+  aider: "sonnet / gpt-4o",
+  agy: "claude-opus-5-5-high / gemini-3.8-flash-high",
+  custom: "",
+};
+
+export const CLI_KINDS: readonly CliKind[] = ["claude", "aider", "agy", "custom"];
+
+function emptyModelByKind(): Record<CliKind, string> {
+  return { claude: "", aider: "", agy: "", custom: "" };
+}
 
 /**
  * Anthropic の鍵と「OAuth ログインを使う」を画面に出す種類か (rev52〜53)。**claude だけ**。
@@ -37,7 +56,7 @@ export function usesAnthropicAuth(kind: CliKind): boolean {
 }
 
 export function defaultCliSettings(): CliSettings {
-  return { kind: "claude", executable: "claude", extraArgs: "", model: "", timeoutSecs: 600, maxTurns: 12, oauthOnly: false };
+  return { kind: "claude", executable: "claude", extraArgs: "", modelByKind: emptyModelByKind(), timeoutSecs: 600, maxTurns: 12, oauthOnly: false };
 }
 
 /** backend `CliSettings` (snake_case)。 */
@@ -56,11 +75,13 @@ export function splitArgs(s: string): string[] {
 }
 
 export function toBackendCli(s: CliSettings): BackendCliSettings {
+  // 送るのは今の種類の分だけ (rev64)。
+  const model = (s.modelByKind?.[s.kind] ?? "").trim();
   return {
     kind: s.kind,
     executable: s.executable.trim() || DEFAULT_CLI_EXE[s.kind] || "claude",
     extra_args: splitArgs(s.extraArgs),
-    model: s.model.trim() ? s.model.trim() : null,
+    model: model ? model : null,
     timeout_secs: Math.max(30, Math.floor(s.timeoutSecs) || 600),
     max_turns: Math.max(1, Math.floor(s.maxTurns) || 12),
     oauth_only: s.oauthOnly === true,
@@ -329,15 +350,33 @@ function loadJson(key: string): unknown {
 }
 
 export function loadCliSettings(): CliSettings {
-  const r = loadJson(KEYS.cli) as Partial<CliSettings> | null;
+  return migrateCliSettings(loadJson(KEYS.cli));
+}
+
+/**
+ * 保存データの読み込み (欠損は既定で埋める。純関数)。
+ *
+ * rev64: 旧形式の `model` (文字列 1 つ) は**保存時の種類の分にだけ**引き継ぐ — 他の種類に配ると、
+ * 直したい事故 (claude の opus が agy に渡る) をそのまま持ち越す。新形式 `modelByKind` があれば旧 `model` は見ない。
+ */
+export function migrateCliSettings(raw: unknown): CliSettings {
   const d = defaultCliSettings();
-  if (!r) return d;
+  if (!raw || typeof raw !== "object") return d;
+  const r = raw as Partial<CliSettings> & { model?: unknown; modelByKind?: unknown };
+  // 既定は claude のまま (agy は明示的に選んだ時だけ)。
+  const kind: CliKind = r.kind === "aider" || r.kind === "agy" || r.kind === "custom" ? r.kind : "claude";
+  const modelByKind = emptyModelByKind();
+  if (r.modelByKind && typeof r.modelByKind === "object") {
+    const m = r.modelByKind as Record<string, unknown>;
+    for (const k of CLI_KINDS) if (typeof m[k] === "string") modelByKind[k] = m[k] as string;
+  } else if (typeof r.model === "string") {
+    modelByKind[kind] = r.model;
+  }
   return {
-    // 既定は claude のまま (agy は明示的に選んだ時だけ)。
-    kind: r.kind === "aider" || r.kind === "agy" || r.kind === "custom" ? r.kind : "claude",
+    kind,
     executable: typeof r.executable === "string" ? r.executable : d.executable,
     extraArgs: typeof r.extraArgs === "string" ? r.extraArgs : "",
-    model: typeof r.model === "string" ? r.model : "",
+    modelByKind,
     timeoutSecs: typeof r.timeoutSecs === "number" ? r.timeoutSecs : d.timeoutSecs,
     maxTurns: typeof r.maxTurns === "number" ? r.maxTurns : d.maxTurns,
     oauthOnly: r.oauthOnly === true,
