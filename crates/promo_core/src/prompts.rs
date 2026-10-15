@@ -95,16 +95,26 @@ pub fn scene_prompt(
          use `mood` only for the opening or a transition, and set `snapshot_index` to null for `mood`.\n\
          {plate_rule}\
          - `image_prompt` is English. Never mention references, screenshots, sheets or attachments.\n\
-         - `motion_prompt` is English, two or three sentences, for image-to-video with the still as the first frame. \
-         First, one short clause that anchors the first frame: the style, the main subject and where it sits. \
-         Then ONE primary camera move, named with one of: push in, pull out, zoom in, zoom out, pan left, pan right, \
-         truck left, truck right, tilt up, tilt down, pedestal up, pedestal down, arc shot, tracking shot, static shot; \
-         qualify it with amplitude and speed, e.g. `the camera pushes in with small amplitude at slow speed`. \
-         End with how the shot settles. Keep secondary motion (light, haze, particles) subtle. \
-         Vary the camera move across scenes instead of repeating one move everywhere. \
-         For `product` cuts prefer small amplitude at slow speed or a static shot, and put the motion in the light \
-         and the background; do not describe the screen's contents — the app appends a sentence that keeps the \
-         screen unchanged.\n\
+         - `motion_prompt` is English, formatted for MiniMax H3 omni-modal image-to-video (I2VA). \
+         It must contain three core sections in one string:\n\
+           1) `integrated_multimodal_description: [Shot 1] ...`\n\
+              - Anchor the first frame to <Picture 1> (style, main subject, positioning).\n\
+              - Add cinematic lighting dynamics to make the video engaging without warping the interface: \
+              a subtle specular light streak or gleam sweeping across the sleek glass screen, soft rim lighting tracing \
+              the window borders, and shallow depth of field softly blurring the ambient background into smooth bokeh.\n\
+              - ONE primary camera move (push in, pull out, zoom in, zoom out, pan left, pan right, truck left, truck right, \
+              tilt up, tilt down, pedestal up, pedestal down, arc shot, tracking shot, static shot) qualified with amplitude and speed \
+              (e.g. `the camera pushes in with small amplitude at slow speed`). Vary camera moves across scenes.\n\
+              - For `copy_text`, protect visible on-screen text with verbatim quotes (e.g. `A typography caption reading \"...\" is displayed`) \
+              and add off-screen narration (e.g. `A professional voice (S1) says in an off-screen voiceover: <d>[{lang}] ...</d> while lips remain closed`).\n\
+              - For `product` cuts, the app automatically appends a screen lock sentence to keep interface pixels exact; \
+              put visual motion in the lighting gleam, reflections, and camera move.\n\
+           2) `overall_soundscape: ...`\n\
+              - 1 to 2 English sentences of tactile, satisfying audio: crisp mechanical keyboard typing, subtle clean mouse clicks, \
+              and quiet ambient room tone.\n\
+           3) `non_diegetic_music: ...`\n\
+              - 1 to 2 English sentences of background score matching the product vibe (tempo, rhythm, specific instruments, \
+              e.g. modern upbeat ambient electronic synth pulses, lo-fi groove).\n\
          - `video_prompt` is English, a full text-to-video description as a fallback. Never include aspect flags \
          such as `--ar`; the aspect is fixed to {ar} elsewhere.\n\
          - `copy_text` (caption or narration) is in {lang}.\n\
@@ -211,12 +221,13 @@ mod tests {
         assert!(!f.contains("can be TILTED"));
         assert!(p.contains("composites the actual screenshot pixels"));
         assert!(p.contains("image-to-video"));
-        // rev58: H3 の公式ガイド (I2VA) — 最初の 1 コマを押さえ、カメラは 1 つを種類 + 振れ幅 + 速さで、シーン間で散らす。
-        assert!(p.contains("anchors the first frame"));
+        // rev62: H3 の公式ガイド (I2VA) — 最初の 1 コマを押さえ、カメラは 1 つを種類 + 振れ幅 + 速さで、光のダイナミクス、音響、音楽。
+        assert!(p.contains("Anchor the first frame"));
         assert!(p.contains("ONE primary camera move") && p.contains("with small amplitude at slow speed"));
-        assert!(p.contains("static shot") && p.contains("Vary the camera move"));
-        assert!(!p.contains("Do not restate the picture"), "公式と逆の旧規則");
-        assert!(p.contains("the app appends a sentence"), "画面の固定は app が足すと伝える (LLM に画面の中身を書かせない)");
+        assert!(p.contains("static shot") && p.contains("Vary camera moves"));
+        assert!(p.contains("overall_soundscape:"));
+        assert!(p.contains("non_diegetic_music:"));
+        assert!(p.contains("app automatically appends a screen lock sentence"));
         // rev59: H3 の最短は 4 秒。15 秒なら 3 シーンになることまで言う (言わないと 5 シーン × 3 秒を出してくる)。
         assert!(p.contains("each 4 to 10 seconds") && !p.contains("each 3 to 10 seconds"));
         assert!(p.contains("a 15-second video has exactly 3 scenes"));

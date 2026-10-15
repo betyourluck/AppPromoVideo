@@ -107,9 +107,9 @@ pub async fn plan_scenes(
         let violations = validate_scene_plan(&plan, snapshots.len(), plate_mode);
         report.violations_per_attempt.push(violations.clone());
         if violations.is_empty() {
-            // rev58: 検査を通った後に 1 度だけ、product カットの画面を固定する 1 文を足す (LLM に書かせない)。
+            // rev62: 検査を通った後に 1 度だけ、MiniMax H3 オムニモーダル公式形式 (I2VA) に整える。
             let mut plan = plan;
-            promo_core::plan::lock_product_screens(&mut plan);
+            promo_core::plan::format_h3_motion_prompts(&mut plan, Some(summary));
             return Ok((plan, report));
         }
         if attempt == 1 + MAX_REPAIRS {
@@ -250,8 +250,10 @@ mod tests {
         let snaps = vec![SnapshotMeta { path: "a.png".into(), width: 1920, height: 1080 }];
         let (p, r) = plan_scenes(&fake, &summary(), "concept", 15, Aspect::Landscape, Language::Ja, &snaps, PlateMode::default()).await.unwrap();
         assert_eq!(r.attempts, 1);
-        assert!(p.scenes[1].motion_prompt.ends_with(promo_core::plan::SCREEN_LOCK), "{}", p.scenes[1].motion_prompt);
-        assert_eq!(p.scenes[0].motion_prompt, "Slow push-in.", "mood は触らない");
+        assert!(p.scenes[1].motion_prompt.contains(promo_core::plan::SCREEN_LOCK), "{}", p.scenes[1].motion_prompt);
+        assert!(!p.scenes[0].motion_prompt.contains(promo_core::plan::SCREEN_LOCK), "mood には SCREEN_LOCK は足さない");
+        assert!(p.scenes[0].motion_prompt.starts_with(promo_core::plan::H3_I2VA_HEADER));
+        assert!(p.scenes[1].motion_prompt.starts_with(promo_core::plan::H3_I2VA_HEADER));
     }
 
     /// rev25: 試行ごとに CLI が名乗ったモデルを落とさず運ぶ (再生成の途中で変わっても残る)。

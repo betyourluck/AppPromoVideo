@@ -76,8 +76,17 @@ cd app && npx vitest run && npm run build    # frontend の単体テストと型
 cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 ```
 
-## 現状 (2026-10-02)
+## 現状 (2026-10-03)
 
+- **2026-10-15 の着地 = rev62** (main、配布物には未搭載): `motion_prompt` を MiniMax H3 オムニモーダル I2VA 完全準拠に。
+  公式アライメントヘッダー (`For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.`) +
+  3 大フィールド (`integrated_multimodal_description: [Shot 1]` / `overall_soundscape:` / `non_diegetic_music:`) を指示および Rust が自動補完 (`format_h3_motion_prompts`)。
+  画面固定 (`SCREEN_LOCK`) は維持しつつ、光の走り (gleam/specular highlight)・リムライト・被写界深度 (bokeh) を指示してスライドショー化を脱却。
+  画面上の文字保護 (`reading "..."`) とオフスクリーン・ナレーション (`says in an off-screen voiceover: <d>[lang] ...</d> while lips remain closed`) を指示。
+  詳細は下の各行と spec 01 rev62。
+- **2026-10-03 の着地 = rev57〜61** (どれも main、配布物には未搭載): はめ込みの等倍の目盛りと拡大 (rev57、Tauri 確認済み) /
+  `motion_prompt` を MiniMax H3 の公式の作法に + 画面を固定する 1 文 (rev58) / 1 シーン 4 秒以上 (rev59) /
+  ドロップで 4 枚並ぶ不具合 (rev60、Tauri 確認済み) / 進捗リスナーの競合 (rev61、予防)。詳細は下の各行と spec 01。
 - **2026-10-02、後回しの 2 件を閉じた (ユーザー判断、コードは注釈のみ)**: ①snapshot 番号の式は Rust と TS の 2 つのまま (下の rev55 の行)
   ②開いていた判断 1 (frontal の費用) は前提が観測で支持されず (下の「閉じた」)。winget PR #434054 はまだ OPEN (検証は通過済み)。
 - **`v0.1.2` (2026-09-14、ユーザーがタグ) = rev48〜53 が乗った版。** タグは `1535af0`。CI 3 OS green (run 34808086566)、

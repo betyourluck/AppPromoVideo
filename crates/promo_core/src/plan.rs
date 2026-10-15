@@ -84,9 +84,9 @@ pub struct Scene {
     /// For `product` cuts: 0-based index into the provided snapshot list. Null for `mood`.
     #[serde(default)]
     pub snapshot_index: Option<u32>,
-    /// English, two or three sentences, for image-to-video with this still as the first frame: anchor the
-    /// first frame in one short clause (style, main subject, where it sits), then ONE primary camera move with
-    /// amplitude and speed (e.g. "the camera pushes in with small amplitude at slow speed"), then how the shot settles.
+    /// English, structured for MiniMax H3 omni-modal image-to-video (I2VA): includes `integrated_multimodal_description: [Shot 1]`
+    /// (anchor first frame to <Picture 1>, ONE camera move with amplitude/speed, lighting gleam/reflections, on-screen text in quotes,
+    /// voiceover in `<d>[lang] ...</d>`), `overall_soundscape:` (keyboard/mouse clicks), and `non_diegetic_music:`.
     #[serde(default)]
     pub motion_prompt: String,
     /// 4 to 10 seconds (the video model makes clips of at least 4 seconds).
@@ -455,23 +455,119 @@ pub fn clipboard_text(scene: &Scene, aspect: Aspect, target: CopyTarget) -> Stri
 }
 
 
-/// product カットの `motion_prompt` の末尾に Rust が足す 1 文 (rev58、契約 `Scene.motion_prompt.screen_lock`)。
+/// MiniMax H3 I2VA 公式アライメント宣言 (rev62)。
+pub const H3_I2VA_HEADER: &str = "For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.";
+
+/// product カットの `integrated_multimodal_description` に Rust が足す画面固定文 (rev58、契約 `Scene.motion_prompt.screen_lock`)。
 ///
 /// MiniMax H3 の公式スキル `brand-promo-video-generator` は「製品の UI を描き直させない・文字とロゴを読めるまま保つ」を求める。
 /// LLM に書かせると抜ける・言い回しが揺れるので固定文にする。**肯定形** (何が保たれ、何が動くか) で書く —
 /// カメラの寄り引きと矛盾しないよう「位置・大きさを固定」とは書かない (push-in で画面は大きくなる)。
 pub const SCREEN_LOCK: &str = "The app screen keeps its exact interface and text, sharp and legible, lying flat on the backdrop; only the camera, the light and the background move.";
 
-/// 検査を通った plan の product カットに `SCREEN_LOCK` を足す (rev58)。既に含むなら足さない (二重にしない)。
-/// mood には足さない — 人が後から面を足した mood (rev24) は対象外で、必要なら鉛筆で書き足す。
-pub fn lock_product_screens(plan: &mut ScenePlan) {
-    for s in plan.scenes.iter_mut().filter(|s| s.cut_kind == CutKind::Product) {
-        if s.motion_prompt.contains(SCREEN_LOCK) {
-            continue;
+/// 単一シーンの `motion_prompt` を MiniMax H3 オムニモーダル (I2VA) 公式形式に整える (rev62)。
+fn format_h3_scene_prompt(
+    raw_prompt: &str,
+    cut_kind: CutKind,
+    summary: Option<&AnalyzedSummary>,
+) -> String {
+    let raw = raw_prompt.trim();
+
+    // 1. ヘッダーの分離
+    let body_without_header = if raw.starts_with("For the target video") {
+        if let Some(pos) = raw.find("\n\n") {
+            raw[pos + 2..].trim()
+        } else {
+            ""
         }
-        let m = s.motion_prompt.trim_end();
-        s.motion_prompt = if m.is_empty() { SCREEN_LOCK.to_string() } else { format!("{m} {SCREEN_LOCK}") };
+    } else {
+        raw
+    };
+
+    // 2. セクションの抽出 (integrated_multimodal_description, overall_soundscape, non_diegetic_music)
+    let soundscape_tag = "overall_soundscape:";
+    let music_tag = "non_diegetic_music:";
+    let desc_tag = "integrated_multimodal_description:";
+
+    let soundscape_pos = body_without_header.find(soundscape_tag);
+    let music_pos = body_without_header.find(music_tag);
+
+    // description 部分の特定
+    let desc_content = match (soundscape_pos, music_pos) {
+        (Some(sp), Some(mp)) => body_without_header[..sp.min(mp)].trim(),
+        (Some(sp), None) => body_without_header[..sp].trim(),
+        (None, Some(mp)) => body_without_header[..mp].trim(),
+        (None, None) => body_without_header,
+    };
+
+    // desc_content から "integrated_multimodal_description: [Shot 1]" プレフィックスを正規化
+    let pure_desc = if let Some(stripped) = desc_content.strip_prefix(desc_tag) {
+        let after_tag = stripped.trim();
+        if let Some(shot_stripped) = after_tag.strip_prefix("[Shot 1]") {
+            shot_stripped.trim()
+        } else {
+            after_tag
+        }
+    } else {
+        desc_content
+    };
+
+    // product カットの場合、SCREEN_LOCK を付加 (既に含むなら二重にしない)
+    let final_desc = if cut_kind == CutKind::Product {
+        if pure_desc.contains(SCREEN_LOCK) {
+            pure_desc.to_string()
+        } else if pure_desc.is_empty() {
+            SCREEN_LOCK.to_string()
+        } else {
+            format!("{pure_desc} {SCREEN_LOCK}")
+        }
+    } else {
+        pure_desc.to_string()
+    };
+
+    // soundscape 部分の特定・補完
+    let final_soundscape = if let Some(sp_idx) = soundscape_pos {
+        let after_sp = body_without_header[sp_idx + soundscape_tag.len()..].trim();
+        let sp_val = if let Some(m_idx) = music_pos {
+            if m_idx > sp_idx {
+                body_without_header[sp_idx + soundscape_tag.len()..m_idx].trim()
+            } else {
+                after_sp
+            }
+        } else {
+            after_sp
+        };
+        sp_val.to_string()
+    } else {
+        "Crisp mechanical keyboard typing and subtle, clean mouse clicks in a quiet, modern ambient workspace.".to_string()
+    };
+
+    // music 部分の特定・補完
+    let final_music = if let Some(m_idx) = music_pos {
+        let after_m = body_without_header[m_idx + music_tag.len()..].trim();
+        after_m.to_string()
+    } else {
+        match summary.map(|s| s.visual_identity.mood.trim()).filter(|m| !m.is_empty()) {
+            Some(mood) => format!("A modern ambient track at a moderate tempo ({mood}), featuring gentle rhythmic pulses and a clean finish."),
+            None => "Modern ambient synth pads at a moderate tempo with gentle rhythmic pulses and a clean finish.".to_string(),
+        }
+    };
+
+    format!(
+        "{H3_I2VA_HEADER}\n\nintegrated_multimodal_description: [Shot 1] {final_desc}\n\noverall_soundscape: {final_soundscape}\n\nnon_diegetic_music: {final_music}"
+    )
+}
+
+/// 検査を通った plan の各シーンの `motion_prompt` を MiniMax H3 オムニモーダル (I2VA) 公式形式に整える (rev62)。
+pub fn format_h3_motion_prompts(plan: &mut ScenePlan, summary: Option<&AnalyzedSummary>) {
+    for s in &mut plan.scenes {
+        s.motion_prompt = format_h3_scene_prompt(&s.motion_prompt, s.cut_kind, summary);
     }
+}
+
+/// 既存の呼び出し元への互換性 (rev58 -> rev62)。
+pub fn lock_product_screens(plan: &mut ScenePlan) {
+    format_h3_motion_prompts(plan, None);
 }
 
 /// プロンプトの書き換えで起きうること (契約 `ScenePromptEdit`、rev37)。
@@ -644,15 +740,60 @@ A calm desk, slow pan right.
         p.scenes[0].cut_kind = CutKind::Product;
         p.scenes[0].snapshot_index = Some(0);
         p.scenes[0].motion_prompt = "The camera pushes in with small amplitude at slow speed.".into();
-        let mood_before = p.scenes[1].motion_prompt.clone();
+        p.scenes[1].cut_kind = CutKind::Mood;
+        p.scenes[1].motion_prompt = "Atmospheric mist drifts.".into();
         lock_product_screens(&mut p);
-        assert_eq!(
-            p.scenes[0].motion_prompt,
-            format!("The camera pushes in with small amplitude at slow speed. {SCREEN_LOCK}")
-        );
-        assert_eq!(p.scenes[1].motion_prompt, mood_before, "mood は触らない");
+        assert!(p.scenes[0].motion_prompt.contains(SCREEN_LOCK), "product には SCREEN_LOCK が付く");
+        assert!(!p.scenes[1].motion_prompt.contains(SCREEN_LOCK), "mood には SCREEN_LOCK は足さない");
         lock_product_screens(&mut p);
         assert_eq!(p.scenes[0].motion_prompt.matches(SCREEN_LOCK).count(), 1, "2 度目は足さない");
+    }
+
+    /// rev62: MiniMax H3 オムニモーダル (I2VA) 公式形式への整形と補完。
+    #[test]
+    fn h3_i2va_formatting_supplies_header_and_soundscape_and_music() {
+        let mut p = plan();
+        p.scenes[0].cut_kind = CutKind::Product;
+        p.scenes[0].snapshot_index = Some(0);
+        p.scenes[0].motion_prompt = "The camera pushes in with small amplitude at slow speed.".into();
+        p.scenes[1].cut_kind = CutKind::Mood;
+        p.scenes[1].motion_prompt = "Atmospheric mist drifts over wet neon pavement.".into();
+
+        let summary = AnalyzedSummary {
+            app_name: "App".into(),
+            one_liner: "One".into(),
+            core_value: "Core".into(),
+            target_audience: "Target".into(),
+            differentiators: vec![],
+            hook_copy: "Hook".into(),
+            visual_identity: VisualIdentity {
+                palette: vec![],
+                mood: "cyberpunk, vibrant neon lights".into(),
+                ui_traits: vec![],
+            },
+        };
+
+        format_h3_motion_prompts(&mut p, Some(&summary));
+
+        let s0 = &p.scenes[0].motion_prompt;
+        assert!(s0.starts_with(H3_I2VA_HEADER), "先頭に I2VA アライメントヘッダーが付く");
+        assert!(s0.contains("integrated_multimodal_description: [Shot 1]"), "multimodal_description が付く");
+        assert!(s0.contains(SCREEN_LOCK), "product カットには SCREEN_LOCK が付く");
+        assert!(s0.contains("overall_soundscape:"), "soundscape が付く");
+        assert!(s0.contains("non_diegetic_music:"), "music が付く");
+        assert!(s0.contains("cyberpunk, vibrant neon lights"), "mood が音楽に反映される");
+
+        let s1 = &p.scenes[1].motion_prompt;
+        assert!(s1.starts_with(H3_I2VA_HEADER), "mood にも I2VA ヘッダーが付く");
+        assert!(s1.contains("integrated_multimodal_description: [Shot 1]"));
+        assert!(!s1.contains(SCREEN_LOCK), "mood には SCREEN_LOCK は付かない");
+        assert!(s1.contains("overall_soundscape:"));
+        assert!(s1.contains("non_diegetic_music:"));
+
+        // 冪等性: 2度通しても二重にヘッダーやセクションが付かない
+        let s0_once = s0.clone();
+        format_h3_motion_prompts(&mut p, Some(&summary));
+        assert_eq!(&p.scenes[0].motion_prompt, &s0_once, "2 度呼んでも二重にならない");
     }
 
     #[test]

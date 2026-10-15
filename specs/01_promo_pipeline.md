@@ -1752,8 +1752,24 @@ rev60 の 219 にユーザー「listenProgress の競合も直して」。`store
 220. **登録中の印を await の前に立てる** — store の `listening`。`unlisten` か `listening` があれば戻る。失敗したら `finally` で下ろし、次の呼び出しでやり直せる (以前の挙動を保つ)。
 
 **PoC**: Red 1 本 (同時 3 回で `listen` が 3 回) → Green。「失敗後にやり直せる」は今の実装でも通る見張りとして同時に置いた (Red は観測していない — 壊さないための網)。
-store.test.ts の event モックを外から数えられる形 (`vi.hoisted` の `listen`) にした。vitest 144 → 146、build green。
-**接地の限界**: 呼ぶのは App.vue の 1 か所なので、実画面で二重になった観測は無い (形の予防)。
+## rev62 (2026-10-15、motion_prompt を MiniMax H3 オムニモーダル I2VA 完全準拠に / 光のダイナミクスと音響・音楽・ナレーションの自動補完)
+
+**ユーザー**: 「AppPromoVideoのつくる動画はあまりイケてない。もっと最新のMiniMax h3のプロンプトの作り方などを調査して、AppPromoVideoのプロンプト生成部分を強化できないだろうか？」。
+**調査** (一次資料): MiniMax-AI/MiniMax-H3 公式プロンプトガイド (`VIDEO_PROMPT_WRITING_GUIDE_base_en.md`) および公式スキル (`h3-prompt-writing`, `minimalist-product-ad-generator`, `brand-promo-video-generator`) を精査。
+H3 の I2VA は以下の構造を必須とする：
+1) 1 行目の公式アライメント宣言: `For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.`
+2) 3 大コアフィールド: `integrated_multimodal_description: [Shot 1]`, `overall_soundscape:`, `non_diegetic_music:`
+3) 画面固定 (SCREEN_LOCK) によるスライドショー化の脱却: 画面の文字・UI は固定しつつ、ガラス面を走る光の筋 (specular light streak / gleam)、リムライト、被写界深度 (bokeh) を指示してダイナミクスを付与。
+4) 画面上の見出しテキスト保護 (`reading "..."`) とオフスクリーン・ナレーション (`says in an off-screen voiceover: <d>[lang] ...</d> while lips remain closed`)。
+5) 触覚的な音響 (`overall_soundscape:` キーボード打鍵音、マウスクリック音、部屋のアンビエント音) とアプリ世界観に同期した音楽 (`non_diegetic_music:` シンセパルス、ローファイグルーヴ等)。
+
+221. **`promo_core::plan::format_h3_motion_prompts` を新設** (旧 `lock_product_screens` を拡張)。
+     検査通過後に各シーンの `motion_prompt` を H3 I2VA 公式形式に整形。アライメント行・3 大フィールドの不足があれば構造的に補完。product カットには SCREEN_LOCK を付与。
+222. **`scene_prompt` のルールを H3 オムニモーダル公式作法に刷新**。光のダイナミクス、オンスクリーンテキスト保護、ボイスオーバー、音響・音楽を LLM に指示。
+223. **`stages::plan_scenes` から `format_h3_motion_prompts(&mut plan, Some(summary))` を呼ぶ**。世界観 (mood) を音楽補完に反映。
+
+**PoC**: Red 2 本 (H3 I2VA ヘッダー・multimodal・soundscape・music 補完 / product_screens_are_locked の更新) → Green。workspace 205 green・clippy clean。
+**接地の限界**: H3 での動画生成はユーザー手元 (費用発生)。
 
 ## 公開とリリース (2026-09-13)
 
@@ -1984,6 +2000,7 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [x] rev59 (2026-10-03): 1 シーンの下限を 4 秒に (MiniMax H3 の最短。214〜216、契約 `Scene.duration_seconds`)。15 秒は 3 シーン。crates 204 / backend 31 / clippy clean
 - [x] rev60 (2026-10-03): 画像を 1 回ドロップすると 4 枚並ぶ — リスナーの登録を部品の寿命に結ぶ (`disposableListener`) / 追加を同時実行に強く (217〜219、契約 `snapshots_ux`)。vitest 144 / build green。**Tauri でユーザー確認 (2026-10-03)**
 - [x] rev61 (2026-10-03): 進捗ログのリスナーも二重に登録しない (220、契約 `DesktopUi.event_listener`)。vitest 146 / build green。症状の観測は無い (予防)
+- [x] rev62 (2026-10-15): motion_prompt を MiniMax H3 オムニモーダル I2VA 完全準拠に (221〜223、契約 `Scene.motion_prompt`)。アライメントヘッダー・3 大フィールド・光のダイナミクス・音響 (overall_soundscape)・音楽 (non_diegetic_music)・ボイスオーバーの指示と自動補完。crates 205 / backend 31 / vitest 146 / clippy clean
 - [x] **agy で通しが成功** (2026-09-12 21:13、ユーザー実機): 解析 → 構成 (1 回目で通過) → 参照画像 3 枚 → 合成 → 見出しの焼き込み。
       166 は効いた (`run_command` への逃げは起きなかった)。168 も効いた (**費用の chip が出ていない**)。`runs/20260912-121310`
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度

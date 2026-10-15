@@ -1438,3 +1438,20 @@ H3 の尺 (4〜15 秒) と検査の下限 (3 秒) の食い違いに、ユーザ
 
 rev60 で残した同じ形を、ユーザーの指示で直した。登録中の印 (`listening`) を await の前に立て、失敗したら下ろす。Red 1 → Green、vitest 146。
 実画面で二重になった観測は無い (呼ぶのは App.vue の 1 か所) — 形の予防。
+
+## 2026-10-15 — rev62: motion_prompt を MiniMax H3 オムニモーダル I2VA 完全準拠に
+
+ユーザー「AppPromoVideoのつくる動画はあまりイケてない。もっと最新のMiniMax h3のプロンプトの作り方などを調査して、AppPromoVideoのプロンプト生成部分を強化できないだろうか？」「推奨で任せます。とりあえず今は壊滅的にイケてないのでいろいろ試したいです。進めてください。」。
+一次資料（Hugging Face / GitHub の `MiniMax-AI/MiniMax-H3`、公式スキル `h3-prompt-writing`, `minimalist-product-ad-generator`, `brand-promo-video-generator`）を調査。
+「イケてない」真因は 2 つ：①画面崩れ防止の `SCREEN_LOCK` により動画が静止画スライドショー化していた ②H3 の最大の強みであるオムニモーダル（動画＋音声・音楽・SE・ナレーション同時生成）を一切活用しておらず無音/ノイズになっていた。
+
+処方：
+1. `promo_core::plan::format_h3_motion_prompts` を新設 (旧 `lock_product_screens` を拡張)。
+   I2VA 公式アライメント宣言 (`For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.`)、
+   3 大フィールド (`integrated_multimodal_description: [Shot 1]`, `overall_soundscape:`, `non_diegetic_music:`) を不足時に自動補完。product カットには SCREEN_LOCK を付与。
+2. `scene_prompt` のルールを刷新。画面を崩さず光の筋（gleam/specular highlight）・リムライト・被写界深度（bokeh）でシネマティックに演出し、見出し文字保護（`reading "..."`）とナレーション（`<d>[lang] ...</d>`）、キータッチ・クリック音、アプリ世界観に同期したBGMの出力を指示。
+3. `stages::plan_scenes` から `format_h3_motion_prompts(&mut plan, Some(summary))` を結線。
+
+Red 2 本 → Green。workspace 205 passed、vitest 146 passed、build green、clippy clean。
+接地の限界: H3 での動画生成はユーザー手元 (費用発生)。
+

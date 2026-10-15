@@ -234,9 +234,9 @@ Scene:                              # rev3 (2026-09-08、ユーザー FB「ス�
   cut_kind: "product | mood"        # product = 実スクショの画素を Rust が合成 (モデルは背景だけ描く) / mood = 情景 (モデルが全部描く)。スナップショットがあるなら product が 1 つ以上必須 (validate)
   snapshot_index: Option<u32>       # product が使うスナップショット (0 始まり、scene_prompt が一覧を示す)。範囲外は違反
   motion_prompt:                    # 空・非英語は違反
-    type: "String。英語 2〜3 文。image-to-video (この静止画が最初の 1 コマ) 用"
-    shape: "rev58 (MiniMax H3 の公式ガイド I2VA): 最初の 1 コマを 1 節で押さえる → **主なカメラの動き 1 つ**を公式の種類 + 振れ幅 + 速さで (`pushes in with small amplitude at slow speed`) → 終わり方。シーン間で動きを散らす。rev3 の「動きとカメラだけ」は公式と逆なので撤去"
-    screen_lock: "product カットは検査通過後に `promo_core::plan::SCREEN_LOCK` を末尾へ 1 度だけ足す (`lock_product_screens`、既に含むなら足さない)。motion_prompt そのものに入るので画面・scenes.md・コピーが一致し、人は消せる。mood には足さない"
+    type: "String。MiniMax H3 の I2VA (画像→動画・音響同時生成) 完全準拠プロンプト"
+    shape: "rev62 (MiniMax H3 オムニモーダル I2VA 完全準拠): I2VA ヘッダー (`For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.`) + 3大フィールド (`integrated_multimodal_description: [Shot 1]`, `overall_soundscape:`, `non_diegetic_music:`)。映像は最初の1コマを押さえ、1つのカメラワーク (種類+振れ幅+速さ) に加え、光の走り (specular gleam / rim light / bokeh) でスライドショー化を防ぐ。画面上の文字は `reading \"...\"` で保護し、ナレーションは `<d>[lang] ...</d>`。音響は操作音 (keyboard / mouse clicks)、音楽は世界観に同期したBGM"
+    screen_lock: "product カットは検査通過後に `promo_core::plan::SCREEN_LOCK` を足す (`format_h3_motion_prompts`)。I2VA アライメント行や音響フィールドが漏れていた場合も Rust が構造的に補完する。motion_prompt そのものに入るので画面・scenes.md・コピーが一致し、人は消せる"
   scene_id: u32                     # 1 始まり連番
   duration_seconds: u32             # 4〜10 (rev59: MiniMax H3 の最短 4 秒に合わせた。以前は 3)。15 秒の動画は 3 シーン
   shot_type: String                 # Close-up / Medium / Wide / Screen recording 等 (自由文)
