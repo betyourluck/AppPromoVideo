@@ -8,9 +8,12 @@ import { theme, toggleTheme } from "../theme";
 import { currentLang, setLang, t, UI_LANGUAGES, type UiLang } from "../i18n";
 import Icon from "./Icon.vue";
 
-/** `view` は今の画面。開いている画面のアイコンをアクセント色にして、押せば戻ることを見せる (rev36)。 */
-defineProps<{ busy?: boolean; view?: "main" | "runs" | "settings" }>();
-const emit = defineEmits<{ (e: "open-settings"): void; (e: "open-runs"): void }>();
+/**
+ * `view` は今の画面。開いている画面のアイコンをアクセント色にして、押せば戻ることを見せる (rev36)。
+ * `logVisible` は右ペイン (進捗ログ) が出ているか (rev66)。出ている間はアクセント色。
+ */
+defineProps<{ busy?: boolean; view?: "main" | "runs" | "settings"; logVisible?: boolean }>();
+const emit = defineEmits<{ (e: "open-settings"): void; (e: "open-runs"): void; (e: "toggle-log"): void }>();
 
 const langMenuOpen = ref(false);
 
@@ -46,6 +49,21 @@ async function win(method: "minimize" | "toggleMaximize" | "close") {
       <span v-if="busy" class="chip accent" style="margin-left: 8px">{{ t('titleBar.running') }}</span>
     </div>
     <div data-tauri-drag-region class="spacer"></div>
+    <!-- rev66: 右ペイン (進捗ログ) の出し入れ。実行中も押せる (run の状態を変えない)。メインが見えない画面では押せない。 -->
+    <button
+      class="tb-btn"
+      :class="{ on: logVisible }"
+      :disabled="view !== undefined && view !== 'main'"
+      :title="logVisible ? t('titleBar.hideLog') : t('titleBar.showLog')"
+      :aria-pressed="logVisible"
+      @click="emit('toggle-log')"
+    >
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M15 4v16" />
+        <path v-if="logVisible" d="M17.5 9h1M17.5 12h1M17.5 15h1" stroke-linecap="round" />
+      </svg>
+    </button>
     <button class="tb-btn" :disabled="busy" :title="theme === 'dark' ? t('titleBar.toLight') : t('titleBar.toDark')" @click="toggleTheme">
       <svg v-if="theme === 'dark'" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
         <circle cx="12" cy="12" r="4" />

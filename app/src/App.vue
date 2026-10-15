@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 3 ペイン: 左 = 入力 / 中 = 結果 (要約・シーン表・参照画像) / 右 = 進捗ログ。
+ * 3 ペイン: 左 = 入力 / 中 = 結果 (要約・シーン表・参照画像) / 右 = 進捗ログ (タイトルバーで出し入れ、rev66)。
  * 状態は store、backend との往復も store。ここはレイアウト、画面の切り替え (メイン / 履歴 / 設定)、ダイアログの開閉だけ。
  */
 import { defineAsyncComponent, onMounted, ref } from "vue";
@@ -15,6 +15,7 @@ import Icon from "./components/Icon.vue";
 import { useStore } from "./store";
 import { nextView } from "./views";
 import { TOUR_DONE_KEY, shouldShowTour } from "./tour";
+import { bodyColumns, logPaneVisible, toggleLogPane } from "./logPane";
 
 // 初回起動のナビゲーション (rev44)。初回にしか読まれないので動的 import (chunk 境界)。
 const FirstRunTour = defineAsyncComponent(() => import("./components/FirstRunTour.vue"));
@@ -79,15 +80,23 @@ onMounted(() => {
 
 <template>
   <div class="shell">
-    <TitleBar :busy="store.running || store.imaging" :view="view" @open-settings="go('settings')" @open-runs="go('runs')" />
-    <div v-show="view === 'main'" class="body">
+    <TitleBar
+      :busy="store.running || store.imaging"
+      :view="view"
+      :log-visible="logPaneVisible"
+      @open-settings="go('settings')"
+      @open-runs="go('runs')"
+      @toggle-log="toggleLogPane"
+    />
+    <!-- rev66: 右ペインは出し入れできる。v-show で部品を残す (ログの自動スクロールの状態とリスナーを保つ)。 -->
+    <div v-show="view === 'main'" class="body" :style="{ gridTemplateColumns: bodyColumns(logPaneVisible) }">
       <aside class="left">
         <InputPane @open-settings="view = 'settings'" />
       </aside>
       <main class="center">
         <ScenePanel />
       </main>
-      <aside class="right">
+      <aside v-show="logPaneVisible" class="right">
         <LogPanel />
       </aside>
     </div>
@@ -115,7 +124,7 @@ onMounted(() => {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 390px 1fr 320px;
+  /* 列は logPane.ts の bodyColumns (右ペインの出し入れ、rev66) — style 属性で渡す。 */
   gap: 16px;
   padding: 12px 16px;
 }

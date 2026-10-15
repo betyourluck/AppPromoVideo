@@ -1471,3 +1471,6 @@ rev63 を試した通しが agy の `invalid model selection` で止まった (r
 ユーザー報告「見出しが出ない / はめ込みの大きさが変わった / これは正しい修正か」。設定ミラーで焼き込み OFF を確認し、素材との差分ではめ込みの幅を実測 (0.680 → 0.780)。
 rev62 は H3 の公式手引き (huggingface の VIDEO_PROMPT_WRITING_GUIDE_base_en.md) と照合 — 書式は手引きどおり、見出しの引用だけが「見えている文字」の前提を破っていた。
 ユーザー判断で rev65 (焼いた見出しの引用 1 文は Rust が書く)。Red 7 本を観測 → Green、crates 212 / backend 32 / vitest 149 / 両 clippy clean。焼き込みを OFF にしたのが意図かは未確認。
+ユーザー依頼「右ペインの進捗を非表示にできるように、タイトルバーにトグルのアイコンを」→ rev66。Red 6 本 → Green、vitest 155 / build green。
+画面は自分で vite を立ててブラウザのペインを 1600x900 にし、DOM の寸法で測った (結果 826 → 1162px)。測った後に vite を止めた (ユーザーの Tauri dev が 1421 を使うため)。
+rev66 は Tauri の実画面でユーザーが確認。

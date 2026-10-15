@@ -623,6 +623,10 @@ DesktopUi:                          # app/ = Tauri 2 + Vue 3 + Pinia。Tailwind 
   screens:                          # rev36 (2026-09-12 ユーザー「開いているときにもう一度クリックすると戻ると同じ動きに」)
     toggle: "タイトルバーの履歴 / 設定のアイコンは**トグル** (views.ts の nextView)。開いている画面のアイコンをもう一度押すとメインへ戻り、別の画面を開いている時はメインを経由せず切り替える。設定から離れる時は store.persist()"
     active: "開いている画面のアイコンはアクセント色 (.tb-btn.on)。押せば戻ることを見せる"
+  log_pane:                         # rev66 (2026-10-15 ユーザー「右ペインの進捗は非表示にできるように。タイトルバーにトグルのアイコンを」)
+    toggle: "タイトルバーのアイコンで右ペイン (進捗ログ) を出し入れする。出ている間はアクセント色 (.tb-btn.on、画面のトグルと同じ見せ方)。隠すと列は 2 つ (入力 / 結果) になり、結果が広がる (logPane.ts の bodyColumns)。履歴・設定の画面ではメインが見えないので押せない (disabled)。**実行中も押せる** (履歴・設定と違い、走っている run の状態を変えない)"
+    persist: "localStorage `apppromo.logPane` = `hidden` の時だけ隠す。既定は表示 (無い・壊れた・読めない値は表示)。接頭辞 apppromo. なので設定ミラーの射程に入る"
+    no_loss: "隠しても失うものは無い — エラーは入力ペイン (store.error)、実行中の最新 1 行は結果ペインの実行中ブロック (rev49) に出る。ログはリスナーが受け続けるので、出し直せば溜まった分が見える (v-show で部品を残す)"
   result_header:                    # rev36
     source: "結果ペインの見出しの数値は**正本 (promo.json の run_stats)** から出す (runs.ts の runHeaderStats)。履歴から開いた run は実行時の stage を持たないので、そこを描くと存在しない記録 (0 回目で通過 / 0.000 USD) になる"
     no_record: "記録が無い run (rev14 以前) は 0 ではなく「—」で、費用と回数の chip は**出さない**。経過時間の tooltip は stage がある時だけ"
