@@ -1477,3 +1477,6 @@ rev66 は Tauri の実画面でユーザーが確認。
 ユーザーが `v0.1.4` を 9fcfa09 にタグ (v0.1.3 も 10-03 に fe5eb2a でタグ済み・draft、台帳に記録が無かった)。v0.1.4 の CI で macOS だけがテスト 1 本で落ちた →
 一時フォルダの名前の衝突 (macOS の SystemTime はマイクロ秒) と特定。ユーザー判断で失敗したジョブだけ再実行し、名前の修正は rev67 (Red 2 本 → Green、crates 213 / backend 33)。
 v0.1.4 の macOS を再実行 → 3 OS green (attempt 2)、Release draft 7 点、署名 → 公証 Accepted → staple。
+ユーザーが v0.1.4 を publish → tap の cask を 0.1.4 (tap 48f9db4)、verify-cask で spctl accepted / Notarized Developer ID。
+winget 0.1.1 (PR #434054) は 10-09 にマージ済みだった (ユーザー)。0.1.4 を wingetcreate update → 足された `Documentations: Wiki` (中身の無い Wiki) を消す → validate → submit (PR #453254)。ProductCode は MSI の COM で照合。
+版番号 3 か所 + Cargo.lock を 0.1.4 に。README 英日に「インストール」の節 (Releases / winget / Homebrew) を足した — それまで README に入れ方が 1 つも無かった。winget show で 0.1.1 がカタログにあることを確認。

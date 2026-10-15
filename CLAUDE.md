@@ -79,7 +79,10 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
 ## 現状 (2026-10-15)
 
 - **`v0.1.4` (2026-10-15、ユーザーがタグ、9fcfa09 = rev54〜66)**: CI の macOS が backend のテスト 1 本で落ちた — テストの一時フォルダを時刻だけで名付けていて、macOS (SystemTime はマイクロ秒単位) で並べたテストが同じフォルダを共有した。
-  失敗したジョブだけ再実行 (ユーザー判断) → **3 OS green (run 38714888559 attempt 2)、Release は draft で 7 点**、ログで Signing → Notarizing Accepted → Stapling を確認。名前の修正は rev67 (タグの後のコミット)。**`v0.1.3` (10-03、fe5eb2a = rev54〜61) の Release は draft のまま** — 扱いは未決 (ユーザー)。
+  失敗したジョブだけ再実行 (ユーザー判断) → **3 OS green (run 38714888559 attempt 2)、Release は draft で 7 点**、ログで Signing → Notarizing Accepted → Stapling を確認。名前の修正は rev67 (タグの後のコミット)。
+  **ユーザーが publish (10:20 UTC)** → tap の cask を 0.1.4 に (tap `48f9db4`、sha256 = Release API の dmg の digest、URL 200)。verify-cask (run 38719707173) で **`spctl` = `accepted` / `source=Notarized Developer ID`**。
+  winget: **0.1.1 の PR #434054 は 2026-10-09 にマージ済み**。0.1.4 を [PR #453254](https://github.com/microsoft/winget-pkgs/pull/453254) で申請 (ProductCode `{E3C61415-A415-4621-B914-8172412284DA}` を MSI の COM で照合、sha256 は digest と一致、`InstallerLocale` 無し)。
+  **`wingetcreate update` は locale に `Documentations: Wiki` を勝手に足す** — このリポジトリの Wiki は中身が無く URL はトップへ転送されるだけなので、消してから submit した (次の版も同じ手順)。**`v0.1.3` (10-03、fe5eb2a = rev54〜61) の Release は draft のまま** — 扱いは未決 (ユーザー)。
 - **2026-10-15 の着地 = rev66** (main、配布物には未搭載): **右ペイン (進捗ログ) はタイトルバーのアイコンで出し入れする** (`logPane.ts`、契約 `DesktopUi.log_pane`)。出ている間はアクセント色、隠すと 2 列で結果が広がる。
   保存は `apppromo.logPane`。実行中も押せ、履歴・設定の画面では押せない。**Tauri の実画面でユーザーが確認済み (2026-10-15)**。
 - **2026-10-15 の着地 = rev65** (main、配布物には未搭載): **焼いた見出しの引用 1 文 (`A caption reading "…" sits at the top|bottom …`) は Rust だけが書く** (`promo_core::plan::set_caption_line`、契約 `Scene.motion_prompt.caption_line`)。
@@ -113,7 +116,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   winget は PR #434054 (0.1.1) のマージ後に `wingetcreate update`。版番号 3 か所 + `Cargo.lock` は**タグの後に**上げた —
   配布物は CI の `Sync app version to tag` が `tauri.conf.json` をタグに揃えるので 0.1.2 で出ている。
   次のタグを打つ時の手順: 版番号 → タグ `vX.Y.Z` → CI (draft、3 OS) → 説明を確認 → publish → tap の `version` / `sha256` (Release API の `digest`) → `wingetcreate update` (マージ後)。
-- **rev54〜66 は v0.1.4 (draft、未 publish)、rev67 (テストのみ) は main にあるが配布物には乗っていない** (v0.1.2 は rev53 まで)。次のタグで乗る — rev56 (コンソールの窓) はその配布物で確かめる。
+- **rev54〜66 は v0.1.4 (publish 済み)、rev67 (テストのみ) は main にあるが配布物には乗っていない** (v0.1.2 は rev53 まで)。次のタグで乗る — rev56 (コンソールの窓) はその配布物で確かめる。
 - **はめ込みの大きさは等倍で頭打ち、越えるのは人がつまみを動かした時だけ** (rev57、2026-10-03 ユーザー報告「0.70 以上拡大できない」)。
   つまみは実効の大きさを指し、等倍に目盛り、越えた分は「拡大 (ぼやける)」(`PlateOverride.allow_upscale`、等倍は `compose::native_screen_ratio`)。
   フラグの無い以前の run は焼き直しても変わらない。**Tauri の実画面でユーザーが確認済み (2026-10-03)。**
@@ -122,7 +125,7 @@ cd app/src-tauri && cargo test && cargo clippy   # backend (独立 workspace)
   **1 シーンは 4〜10 秒** (rev59、H3 の最短 4 秒に合わせた。15 秒は 3 シーン)。1 本に複数の拍を入れる H3 の作法には寄せていない (ユーザー判断「A」)。
 - **非同期に登録するリスナーは `asyncListener.ts::disposableListener` で部品の寿命に結ぶ** (rev60、ドロップ 1 回が 4 枚になった)。
   登録の途中で外された時に外し損ねない。スナップショットの追加は await の後にも重複を見る。進捗ログのリスナーは登録中の印を await の前に立てる (rev61)。
-- **winget は PR #434054 (0.1.1) がマージ待ち。** マージされたら README 英日に winget を追記する (それまで書かない)。
+- **winget は 0.1.1 が入った (PR #434054、2026-10-09 マージ)。0.1.4 は PR #453254 で申請中。** README 英日の「インストール」の節に winget と Homebrew を書いた (2026-10-15。winget は審査で最新より遅れることがある、と添えた)。版番号 3 か所 + `Cargo.lock` は 0.1.4 (`app/package-lock.json` は以前から 0.1.0 のまま — 前回も触っていない)。
 
 - **公開した (2026-09-13)。** MIT (`LICENSE`)、`origin` は public。`v0.1.0` のタグで CI が**初回から 3 OS とも green**、
   Release に installer 7 点 (exe / msi / deb / rpm / AppImage / dmg / app.tar.gz)。

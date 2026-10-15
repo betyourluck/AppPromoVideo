@@ -104,6 +104,26 @@ flowchart LR
 
 ## 🚀 Quick Start
 
+### Install
+
+Download the installer for your OS from [Releases](https://github.com/betyourluck/AppPromoVideo/releases), or use a package manager.
+
+Windows ([winget](https://learn.microsoft.com/windows/package-manager/winget/)):
+
+```bash
+winget install Outcasts.AppPromoVideo
+```
+
+macOS ([Homebrew](https://brew.sh/), Apple Silicon only):
+
+```bash
+brew install --cask betyourluck/tap/apppromovideo
+```
+
+* The macOS build is Apple Silicon (aarch64) only. It is signed and notarized.
+* winget can lag behind the latest release while each update is reviewed.
+* The installed app still needs an authenticated LLM CLI on PATH (see Requirements below). Rust and Node.js are needed only to build from source.
+
 ### Requirements
 
 * **OS**: Windows / macOS / Linux (cross-platform)
