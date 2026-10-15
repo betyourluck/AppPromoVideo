@@ -1851,6 +1851,20 @@ vitest 155 / build green。**画面**: vite + ブラウザのペインを 1600x9
 出し直すと戻る。保存 (`hidden` / `shown`) と再読み込み後の状態、設定画面で押せない・戻ると押せる、を確認。ペインが描画されずスクリーンショットは取れなかった。
 **Tauri の実画面でユーザーが確認済み (2026-10-15)**。案内 (rev44) の対象に右ペインは無いので影響しない (`data-tour` は入力・設定・実行・結果)。
 
+## rev67 (2026-10-15、テストの一時フォルダを時刻だけで名付けない — v0.1.4 の macOS の CI が落ちた)
+
+**観察**: タグ `v0.1.4` (ユーザーが 9fcfa09 に打った) の CI (run 38714888559) で macOS だけが backend のテスト
+`stale_snapshot_tests::a_reshoot_of_the_same_length_is_still_stale` で落ちた (撮り直し 1 件のはずが 0 件)。Windows / Linux は通過、v0.1.3 の macOS も同じテストで通過。
+一時フォルダの名前は pid + 時刻 (ナノ秒) だけで、ログに出た名前の末尾は `000` — **macOS の SystemTime はマイクロ秒単位**。並べて走るテストが同じ瞬間に作ると同じフォルダを共有し、
+相手のテストが置いた同じ中身の写しを読んで「撮り直し無し」になった。時刻次第の揺れ。
+
+236. **名前に通し番号を足す** — backend は `test_dirs::unique_temp_dir(prefix)` (名前は `temp_name(prefix, pid, nanos, seq)`、純粋) に 5 か所を寄せた。
+     pipeline の `reference` テストの `out_dir` も同じ形 (`out_dir_name`)。pid だけで名付けている他の箇所は 1 本のテストからしか呼ばれていない (今回は触らない)。
+237. **v0.1.4 は失敗した macOS のジョブだけ再実行** (ユーザー判断、`gh run rerun --failed`)。落ちたのはテストで配布物の中身に関係しない。この修正はタグの後のコミット。
+
+**PoC**: 同じ時刻で別の番号なら別の名前 — backend 1 本・pipeline 1 本。形の段 (番号を無視する関数) で Red (`left != right` 失敗、同じ名前) を観測 → Green。
+crates 213 / backend 33 / 両 clippy clean。**接地の限界**: macOS の CI で衝突が消えたことは、この修正を含む次のタグで確かめる (時刻次第なので 1 回の緑は証明にならない)。
+
 ## 公開とリリース (2026-09-13)
 
 **public にした。** MIT (`LICENSE`)。公開前の洗い出しで、**追跡ファイルに個人情報が入っていた**のを消した —
@@ -2085,6 +2099,7 @@ React で動画をプログラム的に作る枠組み ([remotion-dev/remotion](
 - [x] rev64 (2026-10-15): CLI のモデル名を種類ごとに覚える (227〜229、契約 `CliSpec.frontend_model_memory`)。vitest 149 / build green。画面は vite + ブラウザのペインで確認、Tauri は未目視
 - [x] rev65 (2026-10-15): 焼いた見出しの引用 1 文は実際に焼いた時だけ Rust が書く (230〜232、契約 `Scene.motion_prompt.caption_line`)。crates 212 / backend 32 / vitest 149 / clippy clean
 - [x] rev66 (2026-10-15): 右ペイン (進捗ログ) をタイトルバーのトグルで出し入れ (233〜235、契約 `DesktopUi.log_pane`)。vitest 155 / build green。画面は vite + ブラウザのペインで測定、**Tauri でユーザー確認 (2026-10-15)**
+- [x] rev67 (2026-10-15): テストの一時フォルダに通し番号 (236〜237)。macOS の SystemTime はマイクロ秒で、並べたテストが同じフォルダを共有していた。crates 213 / backend 33
 - [x] **agy で通しが成功** (2026-09-12 21:13、ユーザー実機): 解析 → 構成 (1 回目で通過) → 参照画像 3 枚 → 合成 → 見出しの焼き込み。
       166 は効いた (`run_command` への逃げは起きなかった)。168 も効いた (**費用の chip が出ていない**)。`runs/20260912-121310`
 - [ ] Phase F 候補: 傾きと可読性の境目 / mood カットのモチーフ一貫性 / motion の粒度

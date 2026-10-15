@@ -1275,6 +1275,36 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
+/// テストの一時フォルダ (rev67)。
+#[cfg(test)]
+mod test_dirs {
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static SEQ: AtomicUsize = AtomicUsize::new(0);
+
+    /// フォルダ名 (純粋)。**時刻だけで一意にしない** — macOS の SystemTime はマイクロ秒単位で、並べて走るテストが
+    /// 同じ瞬間に作ると名前がぶつかる。プロセス内の通し番号を足す (プロセスを跨ぐ分は pid が分ける)。
+    pub fn temp_name(prefix: &str, pid: u32, nanos: u128, seq: usize) -> String {
+        format!("{prefix}_{pid}_{nanos}_{seq}")
+    }
+
+    /// 呼ぶたびに別のフォルダを返す (作るのは呼び出し側)。
+    pub fn unique_temp_dir(prefix: &str) -> PathBuf {
+        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        std::env::temp_dir().join(temp_name(prefix, std::process::id(), nanos, SEQ.fetch_add(1, Ordering::Relaxed)))
+    }
+
+    /// 2026-10-15 CI (v0.1.4 の macOS): 時刻だけで名付けていたので、同じマイクロ秒に作った 2 本のテストが
+    /// 同じフォルダを共有し、`a_reshoot_of_the_same_length_is_still_stale` が他のテストの写しを読んで落ちた
+    /// (macOS の SystemTime はマイクロ秒単位 — ログのフォルダ名の末尾が `000`)。
+    #[test]
+    fn the_same_instant_still_gives_distinct_names() {
+        assert_ne!(temp_name("apppromo_x", 1, 1_792_057_509_706_493_000, 0), temp_name("apppromo_x", 1, 1_792_057_509_706_493_000, 1));
+        assert_ne!(unique_temp_dir("apppromo_x"), unique_temp_dir("apppromo_x"));
+    }
+}
+
 #[cfg(test)]
 mod copy_name_tests {
     use super::copy_target_name;
@@ -1364,8 +1394,7 @@ mod run_files_tests {
 
     /// mood 1 シーンの run。素材 (base/) だけ本物の PNG を置き、scenes.md はまだ無い。
     fn run_dir() -> PathBuf {
-        let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-        let d = std::env::temp_dir().join(format!("apppromo_run_files_{}_{}", std::process::id(), n));
+        let d = crate::test_dirs::unique_temp_dir("apppromo_run_files");
         fs::create_dir_all(d.join("base")).unwrap();
         let promo = PromoJson {
             project_path: "D:/proj".into(),
@@ -1496,8 +1525,7 @@ mod prompt_edit_tests {
 
     /// promo.json だけを置いた run (scenes.md はまだ無い)。
     fn run_dir() -> PathBuf {
-        let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-        let d = std::env::temp_dir().join(format!("apppromo_prompt_{}_{}", std::process::id(), n));
+        let d = crate::test_dirs::unique_temp_dir("apppromo_prompt");
         fs::create_dir_all(&d).unwrap();
         let promo = PromoJson {
             project_path: "D:/proj".into(),
@@ -1557,8 +1585,7 @@ mod plate_preview_tests {
 
     /// canvas 1000x500 の素材と 200x100 のスクショを置いた product 1 シーンの run。
     fn run_dir() -> PathBuf {
-        let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-        let d = std::env::temp_dir().join(format!("apppromo_plate_{}_{}", std::process::id(), n));
+        let d = crate::test_dirs::unique_temp_dir("apppromo_plate");
         fs::create_dir_all(d.join("base")).unwrap();
         fs::create_dir_all(d.join("snapshots")).unwrap();
         let png = |w, h| image_gen::compose::solid_backdrop(w, h, [10, 10, 10]);
@@ -1659,8 +1686,7 @@ mod stale_snapshot_tests {
     use std::path::{Path, PathBuf};
 
     fn tmp() -> PathBuf {
-        let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-        let d = std::env::temp_dir().join(format!("apppromo_stale_{}_{}", std::process::id(), n));
+        let d = crate::test_dirs::unique_temp_dir("apppromo_stale");
         fs::create_dir_all(d.join("snapshots")).unwrap();
         d
     }
@@ -1795,8 +1821,7 @@ mod scene_edit_io_tests {
     use std::path::{Path, PathBuf};
 
     fn tmp() -> PathBuf {
-        let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-        let d = std::env::temp_dir().join(format!("apppromo_scene_edit_{}_{}", std::process::id(), n));
+        let d = crate::test_dirs::unique_temp_dir("apppromo_scene_edit");
         fs::create_dir_all(d.join("base")).unwrap();
         d
     }

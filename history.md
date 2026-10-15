@@ -1474,3 +1474,6 @@ rev62 は H3 の公式手引き (huggingface の VIDEO_PROMPT_WRITING_GUIDE_base
 ユーザー依頼「右ペインの進捗を非表示にできるように、タイトルバーにトグルのアイコンを」→ rev66。Red 6 本 → Green、vitest 155 / build green。
 画面は自分で vite を立ててブラウザのペインを 1600x900 にし、DOM の寸法で測った (結果 826 → 1162px)。測った後に vite を止めた (ユーザーの Tauri dev が 1421 を使うため)。
 rev66 は Tauri の実画面でユーザーが確認。
+ユーザーが `v0.1.4` を 9fcfa09 にタグ (v0.1.3 も 10-03 に fe5eb2a でタグ済み・draft、台帳に記録が無かった)。v0.1.4 の CI で macOS だけがテスト 1 本で落ちた →
+一時フォルダの名前の衝突 (macOS の SystemTime はマイクロ秒) と特定。ユーザー判断で失敗したジョブだけ再実行し、名前の修正は rev67 (Red 2 本 → Green、crates 213 / backend 33)。
+v0.1.4 の macOS を再実行 → 3 OS green (attempt 2)、Release draft 7 点、署名 → 公証 Accepted → staple。

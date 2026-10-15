@@ -541,9 +541,22 @@ mod tests {
     }
 
     fn out_dir() -> PathBuf {
-        let d = std::env::temp_dir().join(format!("pipeline_ref_{}_{}", std::process::id(), rand()));
+        static SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let d = std::env::temp_dir().join(out_dir_name(std::process::id(), rand(), seq));
         fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    fn out_dir_name(pid: u32, nanos: u128, seq: usize) -> String {
+        format!("pipeline_ref_{pid}_{nanos}_{seq}")
+    }
+
+    /// rev67: 時刻だけで名付けると、macOS (SystemTime はマイクロ秒単位) で並べて走るテストが同じフォルダを共有する
+    /// (2026-10-15 v0.1.4 の CI で backend の同じ作りのテストが落ちた)。通し番号で分ける。
+    #[test]
+    fn out_dirs_made_at_the_same_instant_are_distinct() {
+        assert_ne!(out_dir_name(1, 1_792_057_509_706_493_000, 0), out_dir_name(1, 1_792_057_509_706_493_000, 1));
     }
 
     fn rand() -> u128 {
